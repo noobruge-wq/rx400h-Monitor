@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   build-debug-apk:
-    name: Build debug APK
+    name: Build signed debug APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -28,30 +28,43 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # This source package does not include Gradle Wrapper binaries.
-      # Install the exact Gradle version required by AGP 8.7.3.
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.9'
 
-      - name: Build debug APK
+      - name: Build signed debug APK
         run: gradle --no-daemon --stacktrace :app:assembleDebug
 
-      - name: Collect APK
+      - name: Locate Android apksigner
+        id: apksigner
         shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+          echo "path=$APKSIGNER" >> "$GITHUB_OUTPUT"
+
+      - name: Verify signature and collect APK
+        shell: bash
+        env:
+          APKSIGNER: ${{ steps.apksigner.outputs.path }}
         run: |
           set -euo pipefail
           mkdir -p dist
           APK_PATH="$(find app/build/outputs/apk/debug -type f -name '*.apk' | head -n 1)"
           test -n "$APK_PATH"
-          cp "$APK_PATH" "dist/RX400hProtocolProbe-v0.1.6-debug.apk"
-          sha256sum "dist/RX400hProtocolProbe-v0.1.6-debug.apk" > "dist/SHA256SUMS.txt"
 
-      - name: Upload APK
+          "$APKSIGNER" verify --verbose --print-certs "$APK_PATH" | tee dist/APK_SIGNATURE.txt
+          "$APKSIGNER" verify "$APK_PATH"
+
+          cp "$APK_PATH" "dist/RX400hProtocolProbe-v0.1.6-debug-signed.apk"
+          sha256sum "dist/RX400hProtocolProbe-v0.1.6-debug-signed.apk" > dist/SHA256SUMS.txt
+
+      - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: RX400hProtocolProbe-v0.1.6-debug
+          name: RX400hProtocolProbe-v0.1.6-debug-signed
           path: dist/
           if-no-files-found: error
           retention-days: 30

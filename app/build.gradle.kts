@@ -15,6 +15,15 @@ android {
         versionName = "0.1.6"
     }
 
+    signingConfigs {
+        create("githubDebug") {
+            storeFile = rootProject.file(".github/signing/rx400h-debug.keystore")
+            storePassword = "android"
+            keyAlias = "rx400hdebug"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -23,6 +32,7 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            signingConfig = signingConfigs.getByName("githubDebug")
         }
     }
 
