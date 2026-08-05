@@ -1,29 +1,155 @@
 package com.guanyu.rx400hprobe
 
+import kotlin.math.round
+
 object ObdParsers {
-    private fun bytesAfterPrefix(hex: String, prefix: String): List<Int>? {
-        val clean = hex.uppercase()
-        val index = clean.indexOf(prefix)
-        if (index < 0) return null
-        val tail = clean.substring(index + prefix.length)
-        if (tail.length < 2) return emptyList()
-        return tail.chunked(2).filter { it.length == 2 }.mapNotNull { it.toIntOrNull(16) }
+    const val DECODER_VERSION = "rx400h-ha-static-20260805-001"
+
+    private val canLine = Regex("^([0-9A-F]{3})([0-9A-F]{2,})$")
+
+    fun parseCanFrames(lines: List<String>): List<CanFrame> = lines.mapNotNull { line ->
+        val compact = line.replace(Regex("\\s+"), "").uppercase()
+        val match = canLine.matchEntire(compact) ?: return@mapNotNull null
+        val body = match.groupValues[2]
+        if (body.length % 2 != 0) return@mapNotNull null
+        val bytes = body.chunked(2).mapNotNull { it.toIntOrNull(16) }
+        if (bytes.size * 2 != body.length) null else CanFrame(match.groupValues[1], bytes)
     }
 
-    fun rpm(hex: String): Double? {
-        val b = bytesAfterPrefix(hex, "410C") ?: return null
-        if (b.size < 2) return null
-        return ((b[0] * 256) + b[1]) / 4.0
+    fun isoTpMessage(lines: List<String>, expectedCanId: String? = null, allowPartial: Boolean = false): IsoTpMessage? {
+        val frames = parseCanFrames(lines)
+        val ids = if (expectedCanId == null) frames.map { it.canId }.distinct() else listOf(expectedCanId.uppercase())
+        for (id in ids) {
+            val sameId = frames.filter { it.canId == id && it.bytes.isNotEmpty() }
+            if (sameId.isEmpty()) continue
+            val first = sameId.first().bytes
+            when (first[0] ushr 4) {
+                0 -> {
+                    val length = first[0] and 0x0F
+                    if (first.size >= 1 + length) return IsoTpMessage(id, first.subList(1, 1 + length), length, true)
+                }
+                1 -> {
+                    if (first.size < 2) continue
+                    val length = ((first[0] and 0x0F) shl 8) or first[1]
+                    val data = first.drop(2).toMutableList()
+                    var expectedSequence = 1
+                    for (frame in sameId.drop(1)) {
+                        val bytes = frame.bytes
+                        if (bytes.isEmpty() || bytes[0] ushr 4 != 2) continue
+                        if ((bytes[0] and 0x0F) != (expectedSequence and 0x0F)) return null
+                        expectedSequence++
+                        data += bytes.drop(1)
+                        if (data.size >= length) break
+                    }
+                    if (data.size >= length) return IsoTpMessage(id, data.take(length), length, true)
+                    if (allowPartial && data.isNotEmpty()) return IsoTpMessage(id, data.toList(), length, false)
+                }
+            }
+        }
+        return null
     }
 
-    fun speed(hex: String): Double? {
-        val b = bytesAfterPrefix(hex, "410D") ?: return null
-        return b.firstOrNull()?.toDouble()
+    fun decodeStandard(lines: List<String>, expectedCanId: String = "7E8"): StandardDecoded? {
+        val payload = isoTpMessage(lines, expectedCanId)?.payload ?: return null
+        if (payload.firstOrNull() != 0x41) return null
+        var i = 1
+        var engineLoad: Double? = null
+        var coolant: Double? = null
+        var rpm: Double? = null
+        var speed: Double? = null
+        var timing: Double? = null
+        var maf: Double? = null
+        var runTime: Double? = null
+        var ambient: Double? = null
+        val sizes = mapOf(0x04 to 1, 0x05 to 1, 0x06 to 1, 0x07 to 1, 0x0C to 2, 0x0D to 1, 0x0E to 1, 0x10 to 2, 0x31 to 2, 0x46 to 1)
+        while (i < payload.size) {
+            val pid = payload[i++]
+            val size = sizes[pid] ?: break
+            if (i + size > payload.size) break
+            val values = payload.subList(i, i + size)
+            i += size
+            when (pid) {
+                0x04 -> engineLoad = values[0] * 100.0 / 255.0
+                0x05 -> coolant = values[0] - 40.0
+                0x0C -> rpm = u16(values, 0) / 4.0
+                0x0D -> speed = values[0].toDouble()
+                0x0E -> timing = values[0] / 2.0 - 64.0
+                0x10 -> maf = u16(values, 0) / 100.0
+                0x31 -> runTime = u16(values, 0).toDouble()
+                0x46 -> ambient = values[0] - 40.0
+            }
+        }
+        return StandardDecoded(engineLoad, coolant, rpm, speed, timing, maf, runTime, ambient)
     }
 
-    fun coolant(hex: String): Double? {
-        val b = bytesAfterPrefix(hex, "4105") ?: return null
-        return b.firstOrNull()?.minus(40)?.toDouble()
+    fun decode21C3(lines: List<String>): ToyotaC3Decoded? {
+        val payload = isoTpMessage(lines, "7EA")?.payload ?: return null
+        if (payload.size < 39 || payload[0] != 0x61 || payload[1] != 0xC3) return null
+        val d = payload.drop(2)
+        if (d.size < 33) return null
+        val voltage = d[24] * 2.0
+        val current = d[26] * 2.0 - 256.0
+        return ToyotaC3Decoded(
+            mg2Rpm = (u16(d, 0) - 16383).toDouble(),
+            mg2TorqueNm = (u16(d, 2) - 4000) / 8.0,
+            mg1Rpm = (u16(d, 4) - 16383).toDouble(),
+            mg1TorqueNm = (u16(d, 6) - 4000) / 8.0,
+            icePowerKw = u16(d, 8) / 100.0,
+            socPct = d[14] / 2.55,
+            auxiliaryTempsC = d.subList(20, 24).map { it - 50.0 },
+            hvVoltageV = voltage,
+            hvCurrentA = current,
+            hvPowerKw = voltage * current / 1000.0,
+            brakeRegenTorqueRaw = d[30] * 4.0,
+            brakeMasterTorqueRaw = (d[32] - 255) * 8.0,
+            rawDataHex = hex(d)
+        )
+    }
+
+    fun decode21C4(lines: List<String>): ToyotaC4Decoded? {
+        val payload = isoTpMessage(lines, "7EA")?.payload ?: return null
+        if (payload.size < 29 || payload[0] != 0x61 || payload[1] != 0xC4) return null
+        val d = payload.drop(2)
+        if (d.size < 25) return null
+        return ToyotaC4Decoded(
+            rearMgRpm = (u16(d, 2) - 16383).toDouble(),
+            rearMgTorqueNm = (u16(d, 4) - 4000) / 8.0,
+            secondaryRatioPct = d[10] / 2.55,
+            brakeRegenAccumRaw = d[24] * 4.0,
+            rawDataHex = hex(d)
+        )
+    }
+
+    fun decode21CF(lines: List<String>): ToyotaCfDecoded? {
+        val payload = isoTpMessage(lines, "7EA", allowPartial = true)?.payload ?: return null
+        if (payload.size < 27 || payload[0] != 0x61 || payload[1] != 0xCF) return null
+        val d = payload.drop(2)
+        if (d.size < 24) return null
+        val temps = listOf(8, 10, 12, 14, 16, 18, 20, 22).map { index ->
+            (u16(d, index) - 32768) / 100.0
+        }
+        return ToyotaCfDecoded(
+            batteryTempsC = temps,
+            batteryTempMinC = temps.minOrNull() ?: return null,
+            batteryTempMaxC = temps.maxOrNull() ?: return null,
+            batteryTempAvgC = temps.average(),
+            scalarTemp3C = d[2] / 2.0 - 64.0,
+            scalarTemp4C = d[3] / 2.0 - 64.0,
+            statusByte = d[6],
+            rawDataHex = hex(d)
+        )
+    }
+
+    fun decode21CdF3(lines: List<String>): ToyotaCdF3Decoded? {
+        val payload = isoTpMessage(lines, "7E8")?.payload ?: return null
+        if (payload.size < 19 || payload[0] != 0x61 || payload[1] != 0xCD) return null
+        val d = payload.drop(2)
+        if (d.size < 14 || d[11] != 0xF3) return null
+        return ToyotaCdF3Decoded(
+            iceTorqueRaw = ((d[3] - 128) * 2).toDouble(),
+            injectionUl = u16(d, 12) / 32.0,
+            rawDataHex = hex(d)
+        )
     }
 
     fun adapterVoltage(lines: List<String>): Double? {
@@ -32,10 +158,11 @@ object ObdParsers {
             .find(text)?.groupValues?.getOrNull(1)?.toDoubleOrNull()
     }
 
-    fun f302Temps(hex: String): TempCandidate? {
-        val b = bytesAfterPrefix(hex, "62F302") ?: return null
-        if (b.size < 7) return null
-        val values = b.take(6).map { it - 40.0 }
-        return TempCandidate(values, b[6] - 40.0)
+    fun rounded(value: Double, digits: Int = 2): Double {
+        val factor = Math.pow(10.0, digits.toDouble())
+        return round(value * factor) / factor
     }
+
+    private fun u16(data: List<Int>, index: Int): Int = (data[index] shl 8) or data[index + 1]
+    private fun hex(data: List<Int>): String = data.joinToString("") { "%02X".format(it) }
 }

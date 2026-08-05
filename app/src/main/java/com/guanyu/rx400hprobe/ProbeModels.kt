@@ -27,8 +27,15 @@ data class CommandResult(
 )
 
 enum class SignalStatus {
-    IDLE, SEARCHING_PROTOCOL, WAITING_RESPONSE, VALID, NO_DATA,
-    INTERRUPTED, TIMEOUT, DECODE_ERROR, STALE
+    IDLE,
+    SEARCHING_PROTOCOL,
+    WAITING_RESPONSE,
+    VALID,
+    NO_DATA,
+    INTERRUPTED,
+    TIMEOUT,
+    DECODE_ERROR,
+    STALE
 }
 
 data class SignalValue<T>(
@@ -46,13 +53,88 @@ data class BaselineData(
     val adapterVoltageV: SignalValue<Double> = SignalValue()
 )
 
-data class TempCandidate(val values: List<Double>, val room: Double?) {
-    val max: Double? get() = values.maxOrNull()
-    val min: Double? get() = values.minOrNull()
-    val average: Double? get() = values.takeIf { it.isNotEmpty() }?.average()
-    val hottestThreeAverage: Double? get() = values.sortedDescending().take(3).takeIf { it.isNotEmpty() }?.average()
-    val delta: Double? get() = if (max != null && min != null) max!! - min!! else null
+data class HybridData(
+    val socPct: SignalValue<Double> = SignalValue(),
+    val hvVoltageV: SignalValue<Double> = SignalValue(),
+    val hvCurrentA: SignalValue<Double> = SignalValue(),
+    val hvPowerKw: SignalValue<Double> = SignalValue(),
+    val batteryTempsC: SignalValue<List<Double>> = SignalValue(),
+    val batteryTempMinC: SignalValue<Double> = SignalValue(),
+    val batteryTempMaxC: SignalValue<Double> = SignalValue(),
+    val batteryTempAvgC: SignalValue<Double> = SignalValue(),
+    val mg1Rpm: SignalValue<Double> = SignalValue(),
+    val mg2Rpm: SignalValue<Double> = SignalValue(),
+    val mg1TorqueNm: SignalValue<Double> = SignalValue(),
+    val mg2TorqueNm: SignalValue<Double> = SignalValue(),
+    val rearMgRpm: SignalValue<Double> = SignalValue(),
+    val rearMgTorqueNm: SignalValue<Double> = SignalValue(),
+    val injectionUl: SignalValue<Double> = SignalValue(),
+    val iceTorqueRaw: SignalValue<Double> = SignalValue()
+)
+
+data class CanFrame(val canId: String, val bytes: List<Int>)
+
+data class IsoTpMessage(
+    val canId: String,
+    val payload: List<Int>,
+    val declaredLength: Int = payload.size,
+    val complete: Boolean = true
+) {
+    val payloadHex: String
+        get() = payload.joinToString("") { "%02X".format(it) }
 }
+
+data class StandardDecoded(
+    val engineLoadPct: Double? = null,
+    val coolantC: Double? = null,
+    val rpm: Double? = null,
+    val speedKph: Double? = null,
+    val timingDeg: Double? = null,
+    val mafGps: Double? = null,
+    val runTimeS: Double? = null,
+    val ambientC: Double? = null
+)
+
+data class ToyotaC3Decoded(
+    val mg2Rpm: Double,
+    val mg2TorqueNm: Double,
+    val mg1Rpm: Double,
+    val mg1TorqueNm: Double,
+    val icePowerKw: Double,
+    val socPct: Double,
+    val auxiliaryTempsC: List<Double>,
+    val hvVoltageV: Double,
+    val hvCurrentA: Double,
+    val hvPowerKw: Double,
+    val brakeRegenTorqueRaw: Double,
+    val brakeMasterTorqueRaw: Double,
+    val rawDataHex: String
+)
+
+data class ToyotaC4Decoded(
+    val rearMgRpm: Double,
+    val rearMgTorqueNm: Double,
+    val secondaryRatioPct: Double,
+    val brakeRegenAccumRaw: Double,
+    val rawDataHex: String
+)
+
+data class ToyotaCfDecoded(
+    val batteryTempsC: List<Double>,
+    val batteryTempMinC: Double,
+    val batteryTempMaxC: Double,
+    val batteryTempAvgC: Double,
+    val scalarTemp3C: Double,
+    val scalarTemp4C: Double,
+    val statusByte: Int,
+    val rawDataHex: String
+)
+
+data class ToyotaCdF3Decoded(
+    val iceTorqueRaw: Double,
+    val injectionUl: Double,
+    val rawDataHex: String
+)
 
 data class ProtocolAttempt(
     val requestedCode: String,
@@ -74,8 +156,9 @@ data class ProtocolAttempt(
     var totalLatencyMs: Long = 0,
     var transactions: Int = 0
 ) {
-    val score: Int get() =
-        valid0100 * 30 + valid010C * 10 + valid0105 * 10 + valid010D * 10 +
+    val score: Int
+        get() = valid0100 * 30 + valid010C * 10 + valid0105 * 10 + valid010D * 10 +
             ecuIds.size * 5 - noData * 3 - busErrors * 30
-    val averageLatencyMs: Double get() = if (transactions == 0) 0.0 else totalLatencyMs.toDouble() / transactions
+    val averageLatencyMs: Double
+        get() = if (transactions == 0) 0.0 else totalLatencyMs.toDouble() / transactions
 }

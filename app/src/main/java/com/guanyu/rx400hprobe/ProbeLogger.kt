@@ -1,9 +1,9 @@
 package com.guanyu.rx400hprobe
 
 import android.content.Context
+import android.content.res.Configuration
 import android.os.Build
 import android.os.SystemClock
-import android.content.res.Configuration
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedWriter
@@ -15,13 +15,22 @@ import java.security.MessageDigest
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.ArrayDeque
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
+enum class SessionState { IDLE, ACTIVE, FINALIZING, FINALIZED, FINALIZE_FAILED }
+
 class ProbeLogger(private val context: Context) {
-    private val root = File(context.getExternalFilesDir(null), "probe_sessions")
+    companion object {
+        const val APP_VERSION = "0.1.8"
+        const val PROFILE_VERSION = "rx400h_ha_hci_20260805_002"
+    }
+
+    private val root: File = (context.getExternalFilesDir(null) ?: context.filesDir).resolve("probe_sessions")
     private var sessionDir: File? = null
+    private var finalZip: File? = null
     private var rawWriter: BufferedWriter? = null
     private var eventWriter: BufferedWriter? = null
     private var frameWriter: BufferedWriter? = null
@@ -34,6 +43,12 @@ class ProbeLogger(private val context: Context) {
     private var frameCount: Long = 0L
     private var eventCount: Long = 0L
     private var errorCount: Long = 0L
+    private var loggerDegraded = false
+    private val pendingErrors = ArrayDeque<String>(100)
+
+    @Volatile
+    var state: SessionState = SessionState.IDLE
+        private set
 
     private data class Stat(var count: Long = 0, var ok: Long = 0, var totalLatency: Long = 0, var maxLatency: Long = 0)
     private val requestStats = ConcurrentHashMap<String, Stat>()
@@ -43,20 +58,25 @@ class ProbeLogger(private val context: Context) {
 
     @Synchronized
     fun start(adapterName: String, adapterAddress: String): File {
-        stop()
-        root.mkdirs()
-        val stamp = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
-            .withZone(ZoneOffset.UTC).format(Instant.now())
+        closeWriters()
+        if (!root.exists() && !root.mkdirs()) error("Cannot create log root: ${root.absolutePath}")
+        val stamp = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss").withZone(ZoneOffset.UTC).format(Instant.now())
         val id = "RX400h_$stamp"
-        val dir = File(root, id).apply { mkdirs() }
+        val dir = File(root, id)
+        if (!dir.exists() && !dir.mkdirs()) error("Cannot create session directory: ${dir.absolutePath}")
+
         sessionId = id
         sessionDir = dir
+        finalZip = null
         sessionStartedAtMs = System.currentTimeMillis()
         transactionCount = 0
         frameCount = 0
         eventCount = 0
         errorCount = 0
+        loggerDegraded = false
+        pendingErrors.clear()
         requestStats.clear()
+        state = SessionState.ACTIVE
 
         rawWriter = writer(dir, "raw_io.jsonl")
         decodedWriter = writer(dir, "decoded.jsonl")
@@ -65,11 +85,14 @@ class ProbeLogger(private val context: Context) {
         }
         connectionWriter = writer(dir, "connection.log")
         errorWriter = writer(dir, "errors.log")
-        eventWriter = writer(dir, "events.csv").also {
-            it.write("timestamp_ms,event_type,note\n")
-        }
+        eventWriter = writer(dir, "events.csv").also { it.write("timestamp_ms,event_type,note\n") }
         frameWriter = writer(dir, "frames.csv").also {
-            it.write("timestamp_ms,rpm_std,speed_kph_std,coolant_c_std,adapter_12v_v,temp1_c,temp2_c,temp3_c,temp4_c,temp5_c,temp6_c,room_candidate_c,temp_max_c,temp_min_c,temp_avg_c,temp_hot3_avg_c,temp_delta_c\n")
+            it.write(
+                "timestamp_ms,rpm,speed_kph,coolant_c,adapter_12v_v,soc_pct,hv_voltage_v,hv_current_a,hv_power_kw," +
+                    "battery_temp_min_c,battery_temp_max_c,battery_temp_avg_c," +
+                    "battery_temp_1_c,battery_temp_2_c,battery_temp_3_c,battery_temp_4_c,battery_temp_5_c,battery_temp_6_c,battery_temp_7_c,battery_temp_8_c," +
+                    "mg1_rpm,mg2_rpm,mg1_torque_nm,mg2_torque_nm,rear_mg_rpm,rear_mg_torque_nm,injection_ul,ice_torque_raw\n"
+            )
         }
 
         File(dir, "device.json").writeText(
@@ -87,15 +110,17 @@ class ProbeLogger(private val context: Context) {
                 .put("orientation", if (context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait")
                 .toString(2)
         )
-        writeSessionJson(status = "active", endedAt = null)
-        logConnection("SESSION_START id=$id adapter=$adapterName address=$adapterAddress")
+        writeSessionJson("active", null)
+        logConnection("SESSION_START id=$id adapter=$adapterName address=$adapterAddress profile=$PROFILE_VERSION")
         return dir
     }
 
     private fun writer(dir: File, name: String): BufferedWriter = BufferedWriter(FileWriter(File(dir, name), true))
+    private fun isWritable(): Boolean = state == SessionState.ACTIVE
 
     @Synchronized
     fun logTransaction(header: String?, result: CommandResult, retryIndex: Int = 0) {
+        if (!isWritable()) return
         transactionCount++
         val obj = JSONObject()
             .put("session_id", sessionId)
@@ -113,7 +138,7 @@ class ProbeLogger(private val context: Context) {
             .put("response_pending_seen", result.responsePendingSeen)
             .put("status", result.status.name)
             .put("retry_index", retryIndex)
-        rawWriter?.apply { write(obj.toString()); newLine() }
+        safeWrite("raw_io.jsonl") { rawWriter?.apply { write(obj.toString()); newLine() } }
 
         val key = "${header ?: "NONE"}:${result.command}"
         val stat = requestStats.getOrPut(key) { Stat() }
@@ -124,101 +149,120 @@ class ProbeLogger(private val context: Context) {
         flushLightweight()
     }
 
-
     @Synchronized
     fun logProtocolAttempt(a: ProtocolAttempt) {
-        protocolWriter?.apply {
-            write(listOf(
-                a.requestedCode, a.label, a.resolvedCode ?: "", a.description ?: "",
-                a.valid0100, a.total0100, a.valid010C, a.total010C,
-                a.valid0105, a.total0105, a.valid010D, a.total010D,
-                a.ecuIds.joinToString(";"), a.validFrames, a.noData, a.busErrors,
-                a.averageLatencyMs, a.score
-            ).joinToString(",") { csv(it.toString()) })
-            write("\n"); flush()
+        if (!isWritable()) return
+        safeWrite("protocol_matrix.csv") {
+            protocolWriter?.apply {
+                write(
+                    listOf(
+                        a.requestedCode, a.label, a.resolvedCode ?: "", a.description ?: "",
+                        a.valid0100, a.total0100, a.valid010C, a.total010C,
+                        a.valid0105, a.total0105, a.valid010D, a.total010D,
+                        a.ecuIds.joinToString(";"), a.validFrames, a.noData, a.busErrors,
+                        a.averageLatencyMs, a.score
+                    ).joinToString(",") { csv(it.toString()) }
+                )
+                write("\n")
+                flush()
+            }
         }
     }
 
     @Synchronized
     fun logProtocolSummary(attempts: List<ProtocolAttempt>, best: ProtocolAttempt?) {
+        if (!isWritable()) return
         val dir = sessionDir ?: return
         val arr = JSONArray()
         attempts.forEach { a ->
-            arr.put(JSONObject()
-                .put("requested_code", a.requestedCode)
-                .put("label", a.label)
-                .put("resolved_code", a.resolvedCode ?: JSONObject.NULL)
-                .put("description", a.description ?: JSONObject.NULL)
-                .put("valid_0100", a.valid0100)
-                .put("total_0100", a.total0100)
-                .put("valid_010c", a.valid010C)
-                .put("valid_0105", a.valid0105)
-                .put("valid_010d", a.valid010D)
-                .put("ecu_ids", JSONArray(a.ecuIds.toList()))
-                .put("valid_frames", a.validFrames)
-                .put("no_data", a.noData)
-                .put("bus_errors", a.busErrors)
-                .put("avg_latency_ms", a.averageLatencyMs)
-                .put("score", a.score))
+            arr.put(
+                JSONObject()
+                    .put("requested_code", a.requestedCode)
+                    .put("label", a.label)
+                    .put("resolved_code", a.resolvedCode ?: JSONObject.NULL)
+                    .put("description", a.description ?: JSONObject.NULL)
+                    .put("valid_0100", a.valid0100)
+                    .put("total_0100", a.total0100)
+                    .put("valid_010c", a.valid010C)
+                    .put("valid_0105", a.valid0105)
+                    .put("valid_010d", a.valid010D)
+                    .put("ecu_ids", JSONArray(a.ecuIds.toList()))
+                    .put("valid_frames", a.validFrames)
+                    .put("no_data", a.noData)
+                    .put("bus_errors", a.busErrors)
+                    .put("avg_latency_ms", a.averageLatencyMs)
+                    .put("score", a.score)
+            )
         }
-        File(dir, "protocol_summary.json").writeText(JSONObject()
-            .put("best_requested_code", best?.requestedCode ?: JSONObject.NULL)
-            .put("best_label", best?.label ?: JSONObject.NULL)
-            .put("best_resolved_code", best?.resolvedCode ?: JSONObject.NULL)
-            .put("attempts", arr).toString(2))
+        safeFileWrite("protocol_summary.json") {
+            File(dir, "protocol_summary.json").writeText(
+                JSONObject()
+                    .put("best_requested_code", best?.requestedCode ?: JSONObject.NULL)
+                    .put("best_label", best?.label ?: JSONObject.NULL)
+                    .put("best_resolved_code", best?.resolvedCode ?: JSONObject.NULL)
+                    .put("attempts", arr)
+                    .toString(2)
+            )
+        }
     }
 
     @Synchronized
     fun logDecoded(signal: String, value: Any?, unit: String?, sourceCommand: String, rawBytes: String, formulaVersion: String) {
+        if (!isWritable()) return
         val obj = JSONObject()
             .put("wall_time_iso", Instant.now().toString())
             .put("signal", signal)
-            .put("value", value ?: JSONObject.NULL)
+            .put("value", when (value) {
+                null -> JSONObject.NULL
+                is Iterable<*> -> JSONArray(value.toList())
+                else -> value
+            })
             .put("unit", unit ?: JSONObject.NULL)
             .put("source_command", sourceCommand)
             .put("raw_bytes", rawBytes)
             .put("formula_version", formulaVersion)
-        decodedWriter?.apply { write(obj.toString()); newLine() }
+        safeWrite("decoded.jsonl") { decodedWriter?.apply { write(obj.toString()); newLine() } }
     }
 
     @Synchronized
     fun logConnection(message: String) {
-        connectionWriter?.apply {
-            write("${Instant.now()} $message\n")
-            flush()
-        }
+        if (!isWritable()) return
+        safeWrite("connection.log") { connectionWriter?.apply { write("${Instant.now()} $message\n"); flush() } }
     }
 
     @Synchronized
     fun logError(message: String, throwable: Throwable? = null) {
+        if (!isWritable()) return
         errorCount++
-        errorWriter?.apply {
-            write("${Instant.now()} $message")
-            throwable?.let { write(" | ${it::class.java.simpleName}: ${it.message}") }
-            write("\n")
-            flush()
+        val line = buildString {
+            append(Instant.now()).append(' ').append(message)
+            throwable?.let { append(" | ").append(it::class.java.simpleName).append(": ").append(it.message) }
         }
+        safeWrite("errors.log") { errorWriter?.apply { write(line); write("\n"); flush() } }
     }
 
     @Synchronized
     fun logEvent(type: String, note: String = "") {
+        if (!isWritable()) return
         eventCount++
-        eventWriter?.apply {
-            write("${System.currentTimeMillis()},${csv(type)},${csv(note)}\n")
-            flush()
-        }
+        safeWrite("events.csv") { eventWriter?.apply { write("${System.currentTimeMillis()},${csv(type)},${csv(note)}\n"); flush() } }
     }
 
     @Synchronized
-    fun logFrame(data: BaselineData, temp: TempCandidate?) {
+    fun logFrame(data: BaselineData, hybrid: HybridData) {
+        if (!isWritable()) return
         frameCount++
-        val t = temp?.values ?: emptyList()
+        val temps = hybrid.batteryTempsC.value ?: emptyList()
         val row = listOf(
             System.currentTimeMillis(), data.rpm.value, data.speedKph.value, data.coolantC.value, data.adapterVoltageV.value,
-            t.getOrNull(0), t.getOrNull(1), t.getOrNull(2), t.getOrNull(3), t.getOrNull(4), t.getOrNull(5), temp?.room,
-            temp?.max, temp?.min, temp?.average, temp?.hottestThreeAverage, temp?.delta
+            hybrid.socPct.value, hybrid.hvVoltageV.value, hybrid.hvCurrentA.value, hybrid.hvPowerKw.value,
+            hybrid.batteryTempMinC.value, hybrid.batteryTempMaxC.value, hybrid.batteryTempAvgC.value,
+            temps.getOrNull(0), temps.getOrNull(1), temps.getOrNull(2), temps.getOrNull(3),
+            temps.getOrNull(4), temps.getOrNull(5), temps.getOrNull(6), temps.getOrNull(7),
+            hybrid.mg1Rpm.value, hybrid.mg2Rpm.value, hybrid.mg1TorqueNm.value, hybrid.mg2TorqueNm.value,
+            hybrid.rearMgRpm.value, hybrid.rearMgTorqueNm.value, hybrid.injectionUl.value, hybrid.iceTorqueRaw.value
         ).joinToString(",") { it?.toString() ?: "" }
-        frameWriter?.apply { write(row); newLine() }
+        safeWrite("frames.csv") { frameWriter?.apply { write(row); newLine() } }
         flushLightweight()
     }
 
@@ -226,32 +270,51 @@ class ProbeLogger(private val context: Context) {
 
     @Synchronized
     fun finalizeAndZip(): File {
+        finalZip?.takeIf { state == SessionState.FINALIZED && it.isFile }?.let { return it }
+        if (state != SessionState.ACTIVE) error("Session cannot be finalized from state $state")
         val dir = sessionDir ?: error("No active session")
-        logConnection("SESSION_FINALIZE_REQUEST")
+        safeWrite("connection.log") { connectionWriter?.apply { write("${Instant.now()} SESSION_FINALIZE_REQUEST\n"); flush() } }
+        state = SessionState.FINALIZING
         closeWriters()
-        writeRequestStats(dir)
-        writeSessionJson(status = "completed", endedAt = Instant.now().toString())
-        writeManifest(dir)
 
         val zip = File(root, "${dir.name}.zip")
-        if (zip.exists()) zip.delete()
-        ZipOutputStream(FileOutputStream(zip)).use { zos ->
-            dir.walkTopDown()
-                .filter { it.isFile }
-                .sortedBy { it.relativeTo(dir).path }
-                .forEach { file ->
+        val tmp = File(root, "${dir.name}.zip.tmp")
+        try {
+            writePendingErrors(dir)
+            writeRequestStats(dir)
+            writeSessionJson("completed", Instant.now().toString())
+            writeManifest(dir)
+            if (tmp.exists()) tmp.delete()
+            ZipOutputStream(FileOutputStream(tmp)).use { zos ->
+                dir.walkTopDown().filter { it.isFile }.sortedBy { it.relativeTo(dir).path }.forEach { file ->
                     val relative = file.relativeTo(dir).path.replace(File.separatorChar, '/')
                     zos.putNextEntry(ZipEntry(relative))
                     FileInputStream(file).use { it.copyTo(zos) }
                     zos.closeEntry()
                 }
+            }
+            if (tmp.length() <= 0L) error("Generated ZIP is empty")
+            if (zip.exists() && !zip.delete()) error("Cannot replace old ZIP: ${zip.absolutePath}")
+            if (!tmp.renameTo(zip)) {
+                FileInputStream(tmp).use { input -> FileOutputStream(zip).use { output -> input.copyTo(output) } }
+                if (!tmp.delete()) tmp.deleteOnExit()
+            }
+            finalZip = zip
+            state = SessionState.FINALIZED
+            return zip
+        } catch (e: Exception) {
+            state = SessionState.FINALIZE_FAILED
+            val failure = "${Instant.now()} FINALIZE_FAILED ${e::class.java.simpleName}: ${e.message}\n"
+            try { File(dir, "finalize_failure.txt").appendText(failure) } catch (_: Exception) {}
+            try { File(context.filesDir, "rx400h_probe_fallback_error.log").appendText(failure) } catch (_: Exception) {}
+            throw e
         }
-        return zip
     }
 
     @Synchronized
     fun stop() {
         closeWriters()
+        if (state == SessionState.ACTIVE) state = SessionState.IDLE
     }
 
     private fun closeWriters() {
@@ -267,11 +330,40 @@ class ProbeLogger(private val context: Context) {
         protocolWriter = null
     }
 
+    private fun safeWrite(target: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Exception) {
+            markDegraded("write failed target=$target ${e::class.java.simpleName}: ${e.message}")
+        }
+    }
+
+    private fun safeFileWrite(target: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Exception) {
+            markDegraded("file write failed target=$target ${e::class.java.simpleName}: ${e.message}")
+        }
+    }
+
+    private fun markDegraded(message: String) {
+        loggerDegraded = true
+        if (pendingErrors.size >= 100) pendingErrors.removeFirst()
+        val line = "${Instant.now()} $message"
+        pendingErrors.addLast(line)
+        try { File(context.filesDir, "rx400h_probe_fallback_error.log").appendText("$line\n") } catch (_: Exception) {}
+    }
+
+    private fun writePendingErrors(dir: File) {
+        if (pendingErrors.isEmpty()) return
+        try { File(dir, "errors.log").appendText(pendingErrors.joinToString("\n", postfix = "\n")) } catch (_: Exception) {}
+    }
+
     private fun flushLightweight() {
         if (transactionCount % 10L == 0L || frameCount % 10L == 0L) {
-            try { rawWriter?.flush() } catch (_: Exception) {}
-            try { frameWriter?.flush() } catch (_: Exception) {}
-            try { decodedWriter?.flush() } catch (_: Exception) {}
+            try { rawWriter?.flush() } catch (e: Exception) { markDegraded("raw flush failed: ${e.message}") }
+            try { frameWriter?.flush() } catch (e: Exception) { markDegraded("frame flush failed: ${e.message}") }
+            try { decodedWriter?.flush() } catch (e: Exception) { markDegraded("decoded flush failed: ${e.message}") }
         }
     }
 
@@ -293,29 +385,29 @@ class ProbeLogger(private val context: Context) {
             .put("created_at", Instant.ofEpochMilli(sessionStartedAtMs).toString())
             .put("ended_at", endedAt ?: JSONObject.NULL)
             .put("status", status)
-            .put("app_version", "0.1.7")
-            .put("protocol_profile_version", "0.1.7")
-            .put("decoder_version", "0.1.7")
+            .put("app_version", APP_VERSION)
+            .put("protocol_profile_version", PROFILE_VERSION)
+            .put("decoder_version", ObdParsers.DECODER_VERSION)
             .put("transaction_count", transactionCount)
             .put("frame_count", frameCount)
             .put("event_count", eventCount)
             .put("error_count", errorCount)
+            .put("logger_degraded", loggerDegraded)
+            .put("evidence_complete", !loggerDegraded)
         File(dir, "session.json").writeText(obj.toString(2))
     }
 
     private fun writeManifest(dir: File) {
         val files = JSONArray()
         dir.listFiles()?.filter { it.isFile && it.name != "manifest.json" }?.sortedBy { it.name }?.forEach { file ->
-            files.put(
-                JSONObject()
-                    .put("name", file.name)
-                    .put("size_bytes", file.length())
-                    .put("sha256", sha256(file))
-            )
+            files.put(JSONObject().put("name", file.name).put("size_bytes", file.length()).put("sha256", sha256(file)))
         }
         File(dir, "manifest.json").writeText(
             JSONObject()
                 .put("generated_at", Instant.now().toString())
+                .put("profile_version", PROFILE_VERSION)
+                .put("decoder_version", ObdParsers.DECODER_VERSION)
+                .put("evidence_complete", !loggerDegraded)
                 .put("files", files)
                 .toString(2)
         )
@@ -331,7 +423,7 @@ class ProbeLogger(private val context: Context) {
                 digest.update(buffer, 0, read)
             }
         }
-        return digest.digest().joinToString("") { "%02x".format(it) }
+        return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }
     }
 
     private fun csv(text: String): String = "\"${text.replace("\"", "\"\"")}\""

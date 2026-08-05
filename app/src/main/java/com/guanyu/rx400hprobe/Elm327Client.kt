@@ -95,7 +95,7 @@ class Elm327Client {
 
     private fun classify(joined: String, hex: String, prompt: Boolean, pending: Boolean): TransactionStatus = when {
         // Valid payload always outranks intermediate text such as SEARCHING...
-        hex.contains(Regex("(?:41|42|43|44|49|62|6C)[0-9A-F]{2,}")) -> TransactionStatus.OK
+        hex.contains(Regex("(?:41|42|43|44|49|61|62|6C)[0-9A-F]{2,}")) -> TransactionStatus.OK
         hex.contains(Regex("7F[0-9A-F]{2}78")) && pending -> TransactionStatus.RESPONSE_PENDING
         hex.contains(Regex("7F[0-9A-F]{4}")) -> TransactionStatus.NEGATIVE_RESPONSE
         !prompt -> TransactionStatus.TIMEOUT
@@ -110,11 +110,13 @@ class Elm327Client {
 
     fun initialize(): List<CommandResult> = listOf(
         command("ATZ", 10_000, 500),
-        command("ATE0", 3000, 350),
-        command("ATL0", 3000, 350),
-        command("ATS0", 3000, 350),
-        command("ATH1", 3000, 350),
-        command("ATAL", 3000, 350)
+        command("ATE0", 3000, 300),
+        command("ATL0", 3000, 250),
+        command("ATS0", 3000, 250),
+        command("ATH1", 3000, 250),
+        command("ATCAF1", 3000, 250),
+        command("ATAT1", 3000, 250),
+        command("ATAL", 3000, 250)
     )
 
     private fun drainInput(durationMs: Long) {

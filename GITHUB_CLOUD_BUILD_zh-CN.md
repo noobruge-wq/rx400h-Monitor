@@ -1,32 +1,14 @@
-# GitHub 云编译说明
+# GitHub 云端自动编译说明（v0.1.8）
 
-项目已配置 `.github/workflows/build-apk.yml`。
+推送到 `main` 或 `master` 后，GitHub Actions 会自动：
 
-触发方式：
+1. 使用 JDK 17 与 Gradle 8.9 编译 Debug APK；
+2. 使用项目内固定测试证书签名；
+3. 用 `apksigner` 验证最终 APK；
+4. 输出 APK、签名报告及 SHA-256 校验文件。
 
-- 向 `main` 或 `master` 分支推送代码时自动编译；
-- 在 GitHub 仓库的 **Actions → Build Android APK → Run workflow** 手动编译。
+Artifact 名称：
 
-构建环境：
+`RX400hProtocolProbe-v0.1.8-debug-signed`
 
-- JDK 17
-- Gradle 8.9
-- Android Gradle Plugin 8.7.3
-
-## 签名与安装
-
-项目包含专用于内部测试的固定 Debug Keystore：
-
-`.github/signing/rx400h-debug.keystore`
-
-Debug 构建会始终使用同一密钥签名，因此后续 GitHub Actions 生成的 APK 可以覆盖安装并保留应用数据。工作流会在上传前通过 Android SDK `apksigner` 验证签名；验证失败时任务会直接失败。
-
-构建成功后，在运行详情底部下载 Artifact：
-
-`RX400hProtocolProbe-v0.1.7-debug-signed`
-
-解压后安装：
-
-`RX400hProtocolProbe-v0.1.7-debug-signed.apk`
-
-该密钥仅适合内部 Debug 测试，不应用于正式发布版本。
+此版本沿用 v0.1.6/v0.1.7 的固定测试签名，可覆盖安装此前同签名的 Debug 版本。

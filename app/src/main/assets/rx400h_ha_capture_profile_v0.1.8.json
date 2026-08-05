@@ -1,0 +1,161 @@
+{
+  "profile_version": "rx400h_ha_hci_20260805_002",
+  "status": "HCI_RUNTIME_CONFIRMED_AND_APK_DECODERS_TRACED",
+  "vehicle": "Lexus RX400h",
+  "evidence": {
+    "dumpstate_zip_sha256": "1d657dc06b631a94aca0aad0012140c03045a66982fa03307065ea9940dc4f3d",
+    "btsnoop_last_sha256": "c9c080e84b7d4db88c9b6e57cd99e875e66a848a11806fb13623ebe9bf4f9770",
+    "btsnoop_current_sha256": "205d6dd0efbc625551d65bc8ce423ca2ab7637c460ef16d7c3a0de0faf180875",
+    "hybrid_assistant_apk_sha256": "563a8b0847e13533b7c2a6b602a649bd3303495b7e8b4259c52277f9289fae80",
+    "capture_window_utc": "2026-08-05T23:10:52.124348Z/2026-08-05T23:15:00.458186Z",
+    "captured_transactions": 8611
+  },
+  "adapter": {
+    "elm_identity": "ELM327 v1.4b",
+    "stn_identity": "STN2256 v5.6.24",
+    "vendor": "OBD SOLUTIONS LLC"
+  },
+  "safe_initialization": [
+    "ATZ",
+    "ATE0",
+    "ATL0",
+    "ATS0",
+    "ATH1",
+    "ATCAF1",
+    "ATAT1",
+    "ATAL",
+    "ATSP6"
+  ],
+  "ecu_paths": {
+    "ECU_PATH_7E0_7E8": {
+      "request_header": "7E0",
+      "response_can_id": "7E8"
+    },
+    "ECU_PATH_7E2_7EA": {
+      "request_header": "7E2",
+      "response_can_id": "7EA"
+    }
+  },
+  "enabled_commands": [
+    {
+      "header": "7E0",
+      "elm_command": "01040C0D0E10 2",
+      "response": "41",
+      "purpose": "RPM, speed and standard engine block",
+      "initial_period_ms": 800
+    },
+    {
+      "header": "7E0",
+      "elm_command": "01050607 1",
+      "response": "41",
+      "purpose": "coolant block",
+      "initial_period_ms": 3000
+    },
+    {
+      "header": "7E0",
+      "elm_command": "21CDF3 3",
+      "response": "61CD",
+      "purpose": "engine torque/injection block",
+      "initial_period_ms": 1000
+    },
+    {
+      "header": null,
+      "elm_command": "ATRV",
+      "response": "adapter voltage text",
+      "purpose": "12V at adapter",
+      "initial_period_ms": 3000
+    },
+    {
+      "header": "7E2",
+      "elm_command": "21C3 6",
+      "response": "61C3",
+      "purpose": "SOC, HV V/I/power, MG data",
+      "initial_period_ms": 800
+    },
+    {
+      "header": "7E2",
+      "elm_command": "21C4 5",
+      "response": "61C4",
+      "purpose": "rear MG data",
+      "initial_period_ms": 1500
+    },
+    {
+      "header": "7E2",
+      "elm_command": "21CF 4",
+      "response": "61CF",
+      "purpose": "eight battery temperatures",
+      "initial_period_ms": 5000,
+      "note": "ELM line limit intentionally returns a partial ISO-TP payload; first 27 payload bytes contain all decoded fields used by HA"
+    }
+  ],
+  "decoders": {
+    "61C3": {
+      "index_basis": "d starts immediately after 61 C3",
+      "minimum_d_length": 33,
+      "fields": {
+        "mg2_rpm": "u16be(d[0:2]) - 16383",
+        "mg2_torque_nm": "(u16be(d[2:4]) - 4000) / 8",
+        "mg1_rpm": "u16be(d[4:6]) - 16383",
+        "mg1_torque_nm": "(u16be(d[6:8]) - 4000) / 8",
+        "ice_power_kw": "u16be(d[8:10]) / 100",
+        "soc_pct": "d[14] / 2.55",
+        "auxiliary_temp_1_4_c": "d[20..23] - 50; identities not assigned",
+        "hv_voltage_v": "d[24] * 2",
+        "hv_current_a": "d[26] * 2 - 256",
+        "hv_power_kw": "hv_voltage_v * hv_current_a / 1000",
+        "brake_regen_torque_raw": "d[30] * 4",
+        "brake_master_torque_raw": "(d[32] - 255) * 8"
+      },
+      "captured_validation": {
+        "soc_pct": "56.47..61.57",
+        "hv_voltage_v": "298..376",
+        "hv_current_a": "-58..84",
+        "hv_power_kw": "-21.692..26.712",
+        "power_sign": "positive=discharge/traction; negative=charge/regen"
+      }
+    },
+    "61CF": {
+      "index_basis": "d starts immediately after 61 CF",
+      "fields": {
+        "scalar_temp_3_c": "d[2] / 2 - 64; identity unresolved",
+        "scalar_temp_4_c": "d[3] / 2 - 64; identity unresolved",
+        "status_byte": "d[6]",
+        "battery_temp_1_8_c": "for i in [8,10,12,14,16,18,20,22]: (u16be(d[i:i+2]) - 32768) / 100"
+      },
+      "sensor_count": 8,
+      "sensor_count_evidence": "RX400h cartype initialization assigns 8 battery temperature sensors",
+      "captured_range_c": "14.38..19.37"
+    },
+    "61CD": {
+      "command": "21CDF3 3",
+      "index_basis": "d starts immediately after 61 CD",
+      "fields": {
+        "ice_torque_raw": "(d[3] - 128) * 2",
+        "injection_ul": "u16be(d[12:14]) / 32"
+      }
+    },
+    "61C4": {
+      "index_basis": "d starts immediately after 61 C4",
+      "fields": {
+        "rear_mg_rpm": "u16be(d[2:4]) - 16383",
+        "rear_mg_torque_nm": "(u16be(d[4:6]) - 4000) / 8",
+        "secondary_ratio_pct": "d[10] / 2.55; do not label SOC",
+        "brake_regen_accum_raw": "d[24] * 4"
+      }
+    }
+  },
+  "safety": {
+    "strict_serial_transactions": true,
+    "arbitrary_commands": false,
+    "failed_700_10_2c_22_branch_enabled": false,
+    "header_or_did_scanning_enabled": false,
+    "programming_session_10_02_enabled": false,
+    "initial_runtime_slower_than_hybrid_assistant": true
+  },
+  "open_questions": [
+    "Identity of the four d[20..23]-50 temperatures in 61C3",
+    "Identity of scalar temperatures d[2] and d[3] in 61CF",
+    "Long-duration stability and stale/reconnect behavior",
+    "Final energy-flow state rules and UI"
+  ]
+}
