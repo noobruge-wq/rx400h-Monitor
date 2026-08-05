@@ -1,4 +1,4 @@
-# RX400h Protocol Probe V0.1.6
+# RX400h Protocol Probe V0.1.7
 
 本版把 V0.1.5 已验证的 CAN 11/500 链路改造成可持续显示的基础实时仪表，同时加入独立、低频的 Toyota ECU 白名单探测。
 
@@ -46,3 +46,14 @@
 - 通信仍由 Activity 内的单线程运行；已支持横竖屏切换，但尚未迁移为 Android 前台服务。系统强制结束应用时，实时读取仍会停止。
 - Toyota 专用数据尚未解码；SOC、HV 功率、HV 温度显示为 `NOT MAPPED`。
 - 本版本的 Toyota 探测目标只是获取第一条合法 `62xxxx` 或 `7F22xx` 响应。
+
+## V0.1.7 重点
+
+- 保留 V0.1.6 的长期实时基础仪表。
+- Toyota 探测按 Hybrid Assistant APK 中的 ECU 地址线索调整为：`7E3 → 7E1 → 7E4 → 7E2 → 7E0`。
+- 每个 Header 首先只测试白名单：`221001 / 221002 / 221814`。
+- 只有 Header 确实返回正响应或合法负响应时，才追加测试 APK 中另外两个已知请求：`220103 / 221F07`。
+- 完整解码 UDS Negative Response Code；`7F 22 xx` 会标记为“ECU 已到达”，不再等同于 NO DATA。
+- 所有请求保持严格串行，并显著增加 Header 切换、请求及 ECU 响应等待时间。
+- 探测完成后恢复 `ATSP6` 和标准实时仪表链路。
+- 本版仍不发送 `2C` Dynamic DID 定义；先确认正确 ECU 拓扑，再进入 F301/F302。

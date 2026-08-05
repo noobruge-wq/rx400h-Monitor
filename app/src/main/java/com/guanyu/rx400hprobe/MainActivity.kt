@@ -86,7 +86,7 @@ class MainActivity : Activity() {
             setPadding(14, 10, 14, 10)
         }
         root.addView(TextView(this).apply {
-            text = "RX400h PROTOCOL PROBE  V0.1.6"
+            text = "RX400h PROTOCOL PROBE  V0.1.7"
             textSize = 21f
             setTextColor(Color.rgb(110, 255, 180))
         })
@@ -426,29 +426,89 @@ class MainActivity : Activity() {
             try {
                 val best = bestProtocol ?: ProtocolAttempt("6", "CAN 11/500")
                 restoreAndLockBest(best)
-                updateStatus("TOYOTA PROBE")
-                val headers = listOf("7E0", "7E2")
-                val requests = listOf("221001", "221002", "221814")
+                updateStatus("TOYOTA ECU TOPOLOGY PROBE")
+                updateProgress("HA-informed headers: 7E3 → 7E1 → 7E4 → 7E2 → 7E0")
+
+                // Hybrid Assistant APK contains strong header clues for 7E3, plus
+                // response-ID clues compatible with request headers 7E1 and 7E4.
+                // Known standard OBD responders 7E0 and 7E2 are kept as controls.
+                val headers = listOf("7E3", "7E1", "7E4", "7E2", "7E0")
+                val baseRequests = listOf("221001", "221002", "221814")
+                val extendedKnownRequests = listOf("220103", "221F07")
+
+                var reachedEcuCount = 0
+                var positiveCount = 0
+                var negativeCount = 0
+
                 for (header in headers) {
                     currentHeader = header
                     lastHeader = header
-                    record(header, elm.command("ATSH$header", 6000, 700))
-                    Thread.sleep(600)
+                    record(header, elm.command("ATSH$header", 6000, 900))
+                    Thread.sleep(1000)
+
+                    var headerReached = false
+                    var service22Supported = false
+                    val requests = ArrayList(baseRequests)
+
                     for (req in requests) {
-                        val result = elm.command(req, 12_000, 800, 250)
+                        val result = elm.command(req, 15_000, 1200, 350)
                         record(header, result)
-                        if (isToyotaResponse(req, result)) {
-                            logger.logConnection("TOYOTA_RESPONSE header=$header request=$req status=${result.status}")
-                            updateProgress("TOYOTA RESPONSE $header / $req / ${result.status}")
+                        val assessment = assessToyotaResponse(req, result)
+                        logger.logConnection(
+                            "TOYOTA_ASSESS header=$header request=$req kind=${assessment.kind} " +
+                                "nrc=${assessment.nrc ?: "-"} response_ids=${assessment.responseIds.joinToString(";")}"
+                        )
+                        when (assessment.kind) {
+                            ToyotaResponseKind.POSITIVE -> {
+                                positiveCount++
+                                headerReached = true
+                                service22Supported = true
+                                updateProgress("POSITIVE $header / $req / IDs ${assessment.responseIds.joinToString()}")
+                            }
+                            ToyotaResponseKind.NEGATIVE -> {
+                                negativeCount++
+                                headerReached = true
+                                if (assessment.nrc != "11") service22Supported = true
+                                updateProgress("ECU REACHED $header / $req / NRC ${assessment.nrc} ${assessment.nrcText}")
+                            }
+                            ToyotaResponseKind.NONE -> Unit
                         }
                         if (result.status == TransactionStatus.BUS_ERROR) break
-                        Thread.sleep(500)
+                        Thread.sleep(900)
                     }
+
+                    if (headerReached) {
+                        reachedEcuCount++
+                        // Only expand the whitelist on a header that actually answered.
+                        for (req in extendedKnownRequests) {
+                            val result = elm.command(req, 15_000, 1200, 350)
+                            record(header, result)
+                            val assessment = assessToyotaResponse(req, result)
+                            logger.logConnection(
+                                "TOYOTA_ASSESS header=$header request=$req kind=${assessment.kind} " +
+                                    "nrc=${assessment.nrc ?: "-"} response_ids=${assessment.responseIds.joinToString(";")}"
+                            )
+                            when (assessment.kind) {
+                                ToyotaResponseKind.POSITIVE -> positiveCount++
+                                ToyotaResponseKind.NEGATIVE -> negativeCount++
+                                ToyotaResponseKind.NONE -> Unit
+                            }
+                            if (result.status == TransactionStatus.BUS_ERROR) break
+                            Thread.sleep(900)
+                        }
+                    }
+
+                    logger.logConnection(
+                        "TOYOTA_HEADER_SUMMARY header=$header reached=$headerReached service22_supported=$service22Supported"
+                    )
+                    Thread.sleep(1200)
                 }
+
                 currentHeader = null
-                record(null, elm.command("ATSH7DF", 6000, 700))
+                record(null, elm.command("ATSH7DF", 6000, 900))
                 restoreAndLockBest(best)
                 updateStatus("TOYOTA PROBE COMPLETE — LIVE LINK RESTORED")
+                updateProgress("ECUs reached=$reachedEcuCount | positive=$positiveCount | negative=$negativeCount")
             } catch (e: Exception) {
                 logger.logError("TOYOTA_PROBE_ERROR", e)
                 lastError = "TOYOTA: ${e.message}"
@@ -462,10 +522,49 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun isToyotaResponse(request: String, result: CommandResult): Boolean {
+    private enum class ToyotaResponseKind { POSITIVE, NEGATIVE, NONE }
+
+    private data class ToyotaAssessment(
+        val kind: ToyotaResponseKind,
+        val nrc: String? = null,
+        val nrcText: String = "",
+        val responseIds: Set<String> = emptySet()
+    )
+
+    private fun assessToyotaResponse(request: String, result: CommandResult): ToyotaAssessment {
         val did = request.removePrefix("22")
-        val lines = normalizedLines(result)
-        return lines.any { it.contains("62$did") || it.contains("7F22") }
+        val compactLines = normalizedLines(result)
+        val ids = extractResponseIds(result)
+        if (compactLines.any { it.contains("62$did") }) {
+            return ToyotaAssessment(ToyotaResponseKind.POSITIVE, responseIds = ids)
+        }
+        val nrcMatch = compactLines.asSequence()
+            .mapNotNull { Regex("7F22([0-9A-F]{2})").find(it) }
+            .firstOrNull()
+        if (nrcMatch != null) {
+            val nrc = nrcMatch.groupValues[1]
+            return ToyotaAssessment(
+                ToyotaResponseKind.NEGATIVE,
+                nrc = nrc,
+                nrcText = decodeNrc(nrc),
+                responseIds = ids
+            )
+        }
+        return ToyotaAssessment(ToyotaResponseKind.NONE, responseIds = ids)
+    }
+
+    private fun decodeNrc(nrc: String): String = when (nrc) {
+        "10" -> "GENERAL REJECT"
+        "11" -> "SERVICE NOT SUPPORTED"
+        "12" -> "SUBFUNCTION NOT SUPPORTED"
+        "13" -> "INCORRECT LENGTH / FORMAT"
+        "21" -> "BUSY — REPEAT REQUEST"
+        "22" -> "CONDITIONS NOT CORRECT"
+        "24" -> "REQUEST SEQUENCE ERROR"
+        "31" -> "REQUEST OUT OF RANGE"
+        "33" -> "SECURITY ACCESS DENIED"
+        "78" -> "RESPONSE PENDING"
+        else -> "UNKNOWN NRC"
     }
 
     private fun updateBaseline(command: String, result: CommandResult) {

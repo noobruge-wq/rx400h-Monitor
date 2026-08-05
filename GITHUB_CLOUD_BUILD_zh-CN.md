@@ -23,10 +23,10 @@ Debug 构建会始终使用同一密钥签名，因此后续 GitHub Actions 生�
 
 构建成功后，在运行详情底部下载 Artifact：
 
-`RX400hProtocolProbe-v0.1.6-debug-signed`
+`RX400hProtocolProbe-v0.1.7-debug-signed`
 
 解压后安装：
 
-`RX400hProtocolProbe-v0.1.6-debug-signed.apk`
+`RX400hProtocolProbe-v0.1.7-debug-signed.apk`
 
 该密钥仅适合内部 Debug 测试，不应用于正式发布版本。
