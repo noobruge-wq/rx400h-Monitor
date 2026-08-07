@@ -67,8 +67,10 @@ class ObdParsersTest {
     @Test
     fun decode21CF_parsesBatteryTemperatures() {
         val d = MutableList(25) { 0 }
-        d[8] = 0x80
-        d[9] = 0xC8
+        for (index in listOf(8, 10, 12, 14, 16, 18, 20, 22)) {
+            d[index] = 0x87
+            d[index + 1] = 0xD0
+        }
         val payload = listOf(0x61, 0xCF) + d
         val decoded = ObdParsers.decode21CF(isoTpLines("7EA", payload))
         assertNotNull(decoded)

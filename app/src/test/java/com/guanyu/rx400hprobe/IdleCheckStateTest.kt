@@ -42,6 +42,8 @@ class IdleCheckStateTest {
         val state = IdleCheckState()
         state.update(null, null, null, null, 0L)
         state.update(true, 1000.0, 0.0, 20.0, 2000L)
+        assertFalse(state.active)
+        state.update(true, 1000.0, 0.0, 20.0, 3200L)
         assertTrue(state.active)
         state.reset()
         assertFalse(state.active)
