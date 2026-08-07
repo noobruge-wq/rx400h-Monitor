@@ -1,4 +1,4 @@
-# GitHub 云端自动编译说明（V0.1.10 UI/cleanup candidate）
+# GitHub 云端自动编译说明（V0.2.0 Reactive Core candidate）
 
 本包已整合与 V0.1.6、V0.1.7、V0.1.8 相同的固定 Debug 测试签名。
 
@@ -11,16 +11,16 @@
 
 Artifact：
 
-`RX400hProtocolProbe-v0.1.10-cleanup-debug-signed`
+`RX400hProtocolProbe-v0.2.0-reactive-debug-signed`
 
 APK：
 
-`RX400hProtocolProbe-v0.1.10-cleanup-debug-signed.apk`
+`RX400hProtocolProbe-v0.2.0-reactive-debug-signed.apk`
 
 签名证书 SHA-256：
 
 `77:BA:84:B1:F4:F7:37:A5:D6:1B:91:0B:F4:38:6D:F1:67:54:8B:9C:6C:E6:89:ED:25:E9:94:C3:7B:2B:C1:92`
 
-`versionCode = 9`，高于 V0.1.8 自动签名版的 `versionCode = 8`。在设备上已安装同一固定签名的 Debug 版时，应可直接覆盖升级。
+`versionCode = 10`，高于 V0.1.10 自动签名版的 `versionCode = 9`。在设备上已安装同一固定签名的 Debug 版时，应可直接覆盖升级。
 
 > 注意：这是研究/测试 Debug 签名，不是发布商店使用的正式 release key。

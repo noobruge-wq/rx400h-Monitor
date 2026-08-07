@@ -41,17 +41,18 @@ data class SignalValue<T>(
     var value: T? = null,
     var status: SignalStatus = SignalStatus.IDLE,
     var source: String? = null,
-    var updatedAtElapsedMs: Long? = null
-)
+    var updatedAtElapsedMs: Long? = null,
+    var sourceTimestampElapsedMs: Long? = null,
+    var version: Long = 0L
+) {
+    fun ageMs(nowMs: Long): Long? = updatedAtElapsedMs?.let { nowMs - it }
+}
 
 data class BaselineData(
     val rpm: SignalValue<Double> = SignalValue(),
     val speedKph: SignalValue<Double> = SignalValue(),
     val coolantC: SignalValue<Double> = SignalValue(),
-    val adapterVoltageV: SignalValue<Double> = SignalValue(),
-    val engineLoadPct: SignalValue<Double> = SignalValue(),
-    val ignitionTimingDeg: SignalValue<Double> = SignalValue(),
-    val mafGps: SignalValue<Double> = SignalValue()
+    val adapterVoltageV: SignalValue<Double> = SignalValue()
 )
 
 data class HybridData(
@@ -63,17 +64,9 @@ data class HybridData(
     val batteryTempMinC: SignalValue<Double> = SignalValue(),
     val batteryTempMaxC: SignalValue<Double> = SignalValue(),
     val batteryTempAvgC: SignalValue<Double> = SignalValue(),
-    val mg1Rpm: SignalValue<Double> = SignalValue(),
-    val mg2Rpm: SignalValue<Double> = SignalValue(),
-    val mg1TorqueNm: SignalValue<Double> = SignalValue(),
-    val mg2TorqueNm: SignalValue<Double> = SignalValue(),
-    val rearMgRpm: SignalValue<Double> = SignalValue(),
-    val rearMgTorqueNm: SignalValue<Double> = SignalValue(),
     val iceTorqueNm: SignalValue<Double> = SignalValue(),
-    val injectionUl: SignalValue<Double> = SignalValue(),
     val warmupActive: SignalValue<Boolean> = SignalValue(),
-    val brakeRegenTorqueCandidate: SignalValue<Double> = SignalValue(),
-    val brakeMasterTorqueCandidate: SignalValue<Double> = SignalValue()
+    val idleCheckActive: SignalValue<Boolean> = SignalValue()
 )
 
 data class CanFrame(val canId: String, val bytes: List<Int>)
@@ -89,31 +82,20 @@ data class IsoTpMessage(
 }
 
 data class StandardDecoded(
-    val engineLoadPct: Double? = null,
     val coolantC: Double? = null,
     val rpm: Double? = null,
-    val speedKph: Double? = null,
-    val timingDeg: Double? = null,
-    val mafGps: Double? = null
+    val speedKph: Double? = null
 )
 
 data class ToyotaC3Decoded(
-    val mg2Rpm: Double,
-    val mg2TorqueNm: Double,
-    val mg1Rpm: Double,
-    val mg1TorqueNm: Double,
     val socPct: Double,
     val hvVoltageV: Double,
     val hvCurrentA: Double,
     val hvPowerKw: Double,
-    val brakeRegenTorqueCandidate: Double,
-    val brakeMasterTorqueCandidate: Double,
     val rawDataHex: String
 )
 
 data class ToyotaC4Decoded(
-    val rearMgRpm: Double,
-    val rearMgTorqueNm: Double,
     val warmupActive: Boolean,
     val rawDataHex: String
 )
@@ -128,7 +110,6 @@ data class ToyotaCfDecoded(
 
 data class ToyotaCdF3Decoded(
     val iceTorqueNm: Double,
-    val injectionUl: Double,
     val rawDataHex: String
 )
 

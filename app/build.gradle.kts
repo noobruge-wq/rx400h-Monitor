@@ -11,8 +11,8 @@ android {
         applicationId = "com.guanyu.rx400hprobe"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.1.10"
+        versionCode = 10
+        versionName = "0.2.0"
     }
 
     // Fixed project debug signing key, retained from v0.1.6-v0.1.8.
@@ -49,4 +49,5 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
+    testImplementation("junit:junit:4.13.2")
 }

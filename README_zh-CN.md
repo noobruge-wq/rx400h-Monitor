@@ -1,37 +1,38 @@
-# RX400h Monitor / Protocol Probe V0.1.10 清理候选版
+# RX400h Monitor V0.2.0 — Reactive Core（开发版）
 
-> **状态：源码候选，未实车验证，不是协议新版本。**
->
-> 基线：V0.1.8 已验证请求链。V0.1.9 已作废，本候选没有从 V0.1.9 继续开发。
+> **状态：开发中。** V0.1.10 仍是最后实车验证基线。V0.2.0 不改变车辆请求白名单，也不提高轮询频率。
 
-## 本候选的目标
+## V0.2.0 做什么
 
-这次只做 UI / 代码收敛和已确认的解析语义修正，不增加车辆请求，也不改变 V0.1.8 的调度周期与请求频率。快速调度优化留给独立测试版本，避免把 UI 回归和总线时序变化混在一次实车测试里。
+- 轻量 typed `SignalStore`：每个信号带 value / source timestamp / update timestamp / age / quality / version / source，时间统一用 monotonic clock。
+- 事件/脏标记驱动的 UI 发布：不再每 500 ms 无条件全量重绘，只有变化的字段才更新。
+- 三域默认 UI：BATTERY、VEHICLE STATUS、POWER；`IDLE CHECK` 仅在判定为真实 Idle Check 时显示。
+- 最小 `IdleCheckEligibilityState`（实验性）：warmup active、900<RPM<1100、ICE 功率≈0 kW、speed≤55 km/h、稳定约 1 s；状态转换写入日志等待 replay/实车验证。
+- Consumer audit：删除无消费者的 typed 字段（Engine Load、MAF、Timing、Injection、MG1/MG2/MGR、rear MG、brake candidates），原始响应仍完整保留在 `raw_io.jsonl`。
+- 性能/健康观测基线：`performance.csv` 记录 PSS、Java heap、CPU delta、GC/allocation 计数、调度周期、UI 渲染耗时、logger 写耗时。
+- 固定 `RequestTable` 描述请求周期/优先级，为 V0.3.0 的 deadline/priority 调度准备接口；V0.2.0 实际调度时序与 V0.1.10 保持一致。
 
 ## 默认 UI
 
-默认界面改为驾驶可读布局：
+```text
+BATTERY
+  SOC (A)
+  AVG TEMP (A)
+  MAX / MIN (B)
 
-- 大号车速、SOC、HV 电池功率、RPM；
-- 显示冷却液、电池最高温、12V OBD、ICE 状态、Warmup 状态；
-- 仅保留设备、连接/断开、开始/停止实时、结束并导出四个控制；
-- 不显示十六进制响应、CAN ID、原始请求、事务滚动文本；
-- 删除旧的链路确认、HA 链验证和 READY/REGEN 等手动事件按钮；
-- 所有原始响应仍完整写入 `raw_io.jsonl`，没有减少证据数据。
+VEHICLE STATUS
+  SPEED (A)
+  COOLANT (A)
+  12V OBD (A)
 
-## 代码清理
+POWER
+  ICE POWER (A)
+  ENGINE RPM (A)
+    IDLE CHECK (B, 条件显示)
+  HV BATTERY POWER (A)
+```
 
-- 删除已无调用的 `ProtocolAttempt`、`bestProtocol`、`protocol_matrix.csv`、`logProtocolAttempt()`、`logProtocolSummary()`；
-- 删除 `SignalValue.rawResponse`，避免每个 Signal 在内存中重复保存原始字符串；
-- 删除 V0.1.8 中错误的 `61C3 d[8:10]/100 = ICE power` 字段；
-- `21CDF3` 字段按已恢复 HA 语义命名为 `ice_torque_nm` 和 `injection_ul`，但不再用 Injection 判断燃烧状态；
-- `21C4` 加入已由 HCI 重放确认的 `warmup_active = (d[1] & 1) != 0`；
-- 标准组合请求已有的 Engine Load / Ignition Timing / MAF 正式写入日志，但不占主 UI；
-- `Response Pending` 改为按 CAN/ISO-TP payload 起始位置和请求服务号判断，避免普通数据中的 `7F xx 78` 假阳性；
-- AT 文本响应 `ATI/STI/AT@1/ATDP/ATDPN` 可正确分类为 OK；
-- BluetoothAdapter 获取改为 BluetoothManager；
-- FileProvider 同时允许 external files 与 filesDir fallback 的日志 ZIP 分享；
-- 日志中的 OBD 适配器 MAC 改为 SHA-256 标识，不再直接写出地址。
+不显示 S0–S4、Warmup 文本、MG1/MG2/MGR 功率行；所有原始响应仍完整写入 `raw_io.jsonl`。
 
 ## 请求安全边界
 
@@ -51,4 +52,4 @@ ATRV
 
 ## 调度
 
-**保持 V0.1.8 时序不变。** 这是刻意的：先验证 UI/清理版没有回归，再单独推进基于 HA HCI 的 1.5–2 Hz 核心调度。
+**保持 V0.1.10 时序不变。** 高刷新率探索属于 V0.3.0，前提是 V0.2.0 的性能观测基线建立完成。

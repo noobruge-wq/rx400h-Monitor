@@ -209,3 +209,77 @@ latest relevant real-vehicle/replay evidence if not already in repo
 ```
 
 The receiving conversation should first summarize these files and explicitly state the current baseline/next gate before proposing changes.
+
+---
+
+## 13. Build/signing and repository-upload reproducibility
+
+The handoff is incomplete if a new developer knows the architecture but cannot reproduce the signed GitHub build or update the baseline documents.
+
+Canonical operational instructions live in:
+
+```text
+GITHUB_BUILD_AND_BASELINE_WORKFLOW.md
+```
+
+It must document and remain synchronized with:
+
+- `.github/workflows/build-apk.yml`;
+- the fixed development/test signing key path and certificate identity;
+- JDK/Gradle/build task expectations;
+- APK signature verification;
+- Termux source push workflow;
+- complete baseline overlay/update workflow;
+- `BASELINE_MANIFEST.sha256` regeneration and verification.
+
+If any of these change, update the workflow document in the same commit.
+
+The major-version handoff packet therefore includes:
+
+```text
+PROJECT_STATE.md
+DECISIONS.md
+ROADMAP.md
+CHANGELOG.md
+DEVELOPMENT_PROTOCOL.md
+GITHUB_BUILD_AND_BASELINE_WORKFLOW.md
+EVIDENCE_INDEX.md
+BASELINE_README.md
+BASELINE_MANIFEST.sha256
+latest source / repository commit
+latest required evidence not already in repository
+```
+
+
+---
+
+## 14. Codex / repository access gate
+
+For Codex, startup order is expanded to:
+
+```text
+AGENTS.md
+CODEX_HANDOFF.md
+PROJECT_STATE.md
+DECISIONS.md
+ROADMAP.md
+CHANGELOG.md
+DEVELOPMENT_PROTOCOL.md
+EVIDENCE_INDEX.md
+GITHUB_BUILD_AND_BASELINE_WORKFLOW.md
+REPO_ACCESS_AND_AUTH.md
+latest source
+```
+
+Before editing source, Codex must verify repository access:
+
+```text
+git fetch = PASS
+baseline read = PASS
+write dry-run = PASS
+working tree clean or explicitly understood
+```
+
+If authentication is missing, prefer `gh auth login --web` and system credential storage. Never request that a PAT be pasted into a project file.
+
+A failed ChatGPT connector write is not a reason to block development when local GitHub credentials work.

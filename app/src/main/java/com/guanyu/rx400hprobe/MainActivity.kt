@@ -25,9 +25,6 @@ class MainActivity : Activity() {
         private const val RESPONSE_ENGINE = "7E8"
         private const val HEADER_HYBRID = "7E2"
         private const val RESPONSE_HYBRID = "7EA"
-
-        // Deliberately unchanged from the verified V0.1.8 runtime.
-        private const val CORE_CYCLE_MS = 800L
     }
 
     private val worker = Executors.newSingleThreadExecutor()
@@ -42,12 +39,20 @@ class MainActivity : Activity() {
     private var deviceAddress: String? = null
     private var deviceName: String? = null
     private var currentHeader: String? = null
-    private val baseline = BaselineData()
-    private val hybrid = HybridData()
+    private val store = SignalStore()
+    private val baseline get() = store.baseline
+    private val hybrid get() = store.hybrid
+    private val idleCheckState = IdleCheckState()
+    private val performanceTracker = PerformanceTracker()
 
     private var reconnectCount = 0
     private var consecutiveErrors = 0
     private var lastError = "NONE"
+    @Volatile
+    private var lastRenderDurationMs = 0L
+    private var lastPerfSampleMs = 0L
+    private var lastLoggerWriteMs = 0L
+    private var lastIdleCheckLogged: Boolean? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,7 +81,6 @@ class MainActivity : Activity() {
 
     private val refreshUiRunnable = object : Runnable {
         override fun run() {
-            refreshStaleStates()
             renderDashboard()
             ui.postDelayed(this, 500)
         }
@@ -218,7 +222,7 @@ class MainActivity : Activity() {
     }
 
     private fun runLiveScheduler() {
-        logger.logConnection("LIVE_MODE_START cycle_target_ms=$CORE_CYCLE_MS scheduler=${ProbeLogger.SCHEDULER_PROFILE}")
+        logger.logConnection("LIVE_MODE_START cycle_target_ms=${RequestTable.CORE_CYCLE_MS} scheduler=${ProbeLogger.SCHEDULER_PROFILE}")
         var nextCoolant = 0L
         var nextVoltage = 0L
         var nextCdF3 = 0L
@@ -237,22 +241,23 @@ class MainActivity : Activity() {
             }
             val cycleStart = SystemClock.elapsedRealtime()
             try {
+                store.refreshStaleStates(SystemClock.elapsedRealtime())
                 ensureHeader(HEADER_ENGINE)
                 pollStandardCore()
                 var now = SystemClock.elapsedRealtime()
                 if (now >= nextCoolant) {
                     pollCoolantBlock()
-                    nextCoolant = now + 3000L
+                    nextCoolant = now + RequestTable.period("coolant")
                 }
                 now = SystemClock.elapsedRealtime()
                 if (now >= nextCdF3) {
                     pollCdF3()
-                    nextCdF3 = now + 1000L
+                    nextCdF3 = now + RequestTable.period("cd_f3")
                 }
                 now = SystemClock.elapsedRealtime()
                 if (now >= nextVoltage) {
                     pollAdapterVoltage()
-                    nextVoltage = now + 3000L
+                    nextVoltage = now + RequestTable.period("atrv")
                 }
 
                 ensureHeader(HEADER_HYBRID)
@@ -260,18 +265,21 @@ class MainActivity : Activity() {
                 now = SystemClock.elapsedRealtime()
                 if (now >= nextC4) {
                     pollC4()
-                    nextC4 = now + 1500L
+                    nextC4 = now + RequestTable.period("c4")
                 }
                 now = SystemClock.elapsedRealtime()
                 if (now >= nextCf) {
                     pollCf()
-                    nextCf = now + 5000L
+                    nextCf = now + RequestTable.period("cf")
                 }
                 now = SystemClock.elapsedRealtime()
                 if (now >= nextFrameLog) {
+                    val logStart = SystemClock.elapsedRealtime()
                     logger.logFrame(baseline, hybrid)
+                    lastLoggerWriteMs = SystemClock.elapsedRealtime() - logStart
                     nextFrameLog = now + 1000L
                 }
+                updateIdleCheckState()
                 consecutiveErrors = 0
             } catch (e: Exception) {
                 consecutiveErrors++
@@ -279,7 +287,14 @@ class MainActivity : Activity() {
                 safeLogError("LIVE_POLL_ERROR count=$consecutiveErrors", e)
                 if (consecutiveErrors >= 3) elm.close()
             }
-            val remaining = CORE_CYCLE_MS - (SystemClock.elapsedRealtime() - cycleStart)
+            val cycleDuration = SystemClock.elapsedRealtime() - cycleStart
+            val nowAfterCycle = SystemClock.elapsedRealtime()
+            if (nowAfterCycle - lastPerfSampleMs >= 5000L) {
+                val sample = performanceTracker.sample(cycleDuration, lastRenderDurationMs, lastLoggerWriteMs)
+                logger.logPerformance(sample)
+                lastPerfSampleMs = nowAfterCycle
+            }
+            val remaining = RequestTable.CORE_CYCLE_MS - cycleDuration
             if (remaining > 0L) Thread.sleep(remaining)
         }
         logger.logConnection("LIVE_MODE_STOP")
@@ -308,7 +323,7 @@ class MainActivity : Activity() {
         val result = sendData(HEADER_ENGINE, command, 5000)
         val decoded = ObdParsers.decodeStandard(result.rawLines, RESPONSE_ENGINE)
         if (decoded == null) {
-            markDecodeFailure(listOf(baseline.rpm, baseline.speedKph, baseline.engineLoadPct, baseline.ignitionTimingDeg, baseline.mafGps), command, result)
+            markDecodeFailure(listOf(baseline.rpm, baseline.speedKph), command, result)
             return
         }
         applyStandard(command, result, decoded)
@@ -333,13 +348,11 @@ class MainActivity : Activity() {
         val result = sendData(HEADER_ENGINE, command, 5000)
         val decoded = ObdParsers.decode21CdF3(result.rawLines)
         if (decoded == null) {
-            markDecodeFailure(listOf(hybrid.iceTorqueNm, hybrid.injectionUl), command, result)
+            markDecodeFailure(listOf(hybrid.iceTorqueNm), command, result)
             return
         }
         updateSignal(hybrid.iceTorqueNm, decoded.iceTorqueNm, command, result)
-        updateSignal(hybrid.injectionUl, decoded.injectionUl, command, result)
         logger.logDecoded("ice_torque_nm", decoded.iceTorqueNm, "Nm", command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
-        logger.logDecoded("injection_ul", decoded.injectionUl, "uL", command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
     }
 
     private fun pollC3() {
@@ -347,7 +360,7 @@ class MainActivity : Activity() {
         val result = sendData(HEADER_HYBRID, command, 6000)
         val decoded = ObdParsers.decode21C3(result.rawLines)
         if (decoded == null) {
-            markDecodeFailure(listOf(hybrid.socPct, hybrid.hvVoltageV, hybrid.hvCurrentA, hybrid.hvPowerKw, hybrid.mg1Rpm, hybrid.mg2Rpm), command, result)
+            markDecodeFailure(listOf(hybrid.socPct, hybrid.hvVoltageV, hybrid.hvCurrentA, hybrid.hvPowerKw), command, result)
             return
         }
         applyC3(command, result, decoded)
@@ -358,14 +371,10 @@ class MainActivity : Activity() {
         val result = sendData(HEADER_HYBRID, command, 6000)
         val decoded = ObdParsers.decode21C4(result.rawLines)
         if (decoded == null) {
-            markDecodeFailure(listOf(hybrid.rearMgRpm, hybrid.rearMgTorqueNm, hybrid.warmupActive), command, result)
+            markDecodeFailure(listOf(hybrid.warmupActive), command, result)
             return
         }
-        updateSignal(hybrid.rearMgRpm, decoded.rearMgRpm, command, result)
-        updateSignal(hybrid.rearMgTorqueNm, decoded.rearMgTorqueNm, command, result)
         updateSignal(hybrid.warmupActive, decoded.warmupActive, command, result)
-        logger.logDecoded("rear_mg_rpm", decoded.rearMgRpm, "rpm", command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
-        logger.logDecoded("rear_mg_torque_nm", decoded.rearMgTorqueNm, "Nm", command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
         logger.logDecoded("warmup_active", decoded.warmupActive, null, command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
     }
 
@@ -392,9 +401,6 @@ class MainActivity : Activity() {
         decoded.rpm?.let { updateSignal(baseline.rpm, it, command, result); logger.logDecoded("rpm", it, "rpm", command, raw, ObdParsers.DECODER_VERSION) }
         decoded.speedKph?.let { updateSignal(baseline.speedKph, it, command, result); logger.logDecoded("speed_kph", it, "km/h", command, raw, ObdParsers.DECODER_VERSION) }
         decoded.coolantC?.let { updateSignal(baseline.coolantC, it, command, result); logger.logDecoded("coolant_c", it, "C", command, raw, ObdParsers.DECODER_VERSION) }
-        decoded.engineLoadPct?.let { updateSignal(baseline.engineLoadPct, it, command, result); logger.logDecoded("engine_load_pct", it, "%", command, raw, ObdParsers.DECODER_VERSION) }
-        decoded.timingDeg?.let { updateSignal(baseline.ignitionTimingDeg, it, command, result); logger.logDecoded("ignition_timing_deg", it, "deg", command, raw, ObdParsers.DECODER_VERSION) }
-        decoded.mafGps?.let { updateSignal(baseline.mafGps, it, command, result); logger.logDecoded("maf_gps", it, "g/s", command, raw, ObdParsers.DECODER_VERSION) }
     }
 
     private fun applyC3(command: String, result: CommandResult, decoded: ToyotaC3Decoded) {
@@ -402,19 +408,9 @@ class MainActivity : Activity() {
         updateSignal(hybrid.hvVoltageV, decoded.hvVoltageV, command, result)
         updateSignal(hybrid.hvCurrentA, decoded.hvCurrentA, command, result)
         updateSignal(hybrid.hvPowerKw, decoded.hvPowerKw, command, result)
-        updateSignal(hybrid.mg1Rpm, decoded.mg1Rpm, command, result)
-        updateSignal(hybrid.mg2Rpm, decoded.mg2Rpm, command, result)
-        updateSignal(hybrid.mg1TorqueNm, decoded.mg1TorqueNm, command, result)
-        updateSignal(hybrid.mg2TorqueNm, decoded.mg2TorqueNm, command, result)
-        updateSignal(hybrid.brakeRegenTorqueCandidate, decoded.brakeRegenTorqueCandidate, command, result)
-        updateSignal(hybrid.brakeMasterTorqueCandidate, decoded.brakeMasterTorqueCandidate, command, result)
         val values = listOf(
             Triple("soc_pct", decoded.socPct, "%"), Triple("hv_voltage_v", decoded.hvVoltageV, "V"),
-            Triple("hv_current_a", decoded.hvCurrentA, "A"), Triple("hv_power_kw", decoded.hvPowerKw, "kW"),
-            Triple("mg1_rpm", decoded.mg1Rpm, "rpm"), Triple("mg2_rpm", decoded.mg2Rpm, "rpm"),
-            Triple("mg1_torque_nm", decoded.mg1TorqueNm, "Nm"), Triple("mg2_torque_nm", decoded.mg2TorqueNm, "Nm"),
-            Triple("brake_regen_torque_candidate", decoded.brakeRegenTorqueCandidate, "raw"),
-            Triple("brake_master_torque_candidate", decoded.brakeMasterTorqueCandidate, "raw")
+            Triple("hv_current_a", decoded.hvCurrentA, "A"), Triple("hv_power_kw", decoded.hvPowerKw, "kW")
         )
         for ((name, value, unit) in values) logger.logDecoded(name, value, unit, command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
     }
@@ -426,25 +422,11 @@ class MainActivity : Activity() {
     }
 
     private fun <T> updateSignal(signal: SignalValue<T>, value: T?, command: String, result: CommandResult) {
-        signal.source = command
-        if (value != null) {
-            signal.value = value
-            signal.updatedAtElapsedMs = SystemClock.elapsedRealtime()
-            signal.status = SignalStatus.VALID
-        } else {
-            signal.status = resultToSignalStatus(result)
-        }
+        store.update(signal, value, command, result)
     }
 
     private fun markDecodeFailure(signals: List<SignalValue<*>>, command: String, result: CommandResult) {
-        signals.forEach { signal -> signal.source = command; signal.status = resultToSignalStatus(result) }
-    }
-
-    private fun resultToSignalStatus(result: CommandResult): SignalStatus = when (result.status) {
-        TransactionStatus.NO_DATA -> SignalStatus.NO_DATA
-        TransactionStatus.INTERRUPTED -> SignalStatus.INTERRUPTED
-        TransactionStatus.TIMEOUT -> SignalStatus.TIMEOUT
-        else -> SignalStatus.DECODE_ERROR
+        store.markDecodeFailure(signals, command, result)
     }
 
     private fun payloadHex(result: CommandResult, canId: String): String =
@@ -474,23 +456,6 @@ class MainActivity : Activity() {
             }
         }
         return false
-    }
-
-    private fun refreshStaleStates() {
-        val now = SystemClock.elapsedRealtime()
-        listOf(
-            baseline.rpm, baseline.speedKph, baseline.coolantC, baseline.adapterVoltageV,
-            baseline.engineLoadPct, baseline.ignitionTimingDeg, baseline.mafGps,
-            hybrid.socPct, hybrid.hvVoltageV, hybrid.hvCurrentA, hybrid.hvPowerKw,
-            hybrid.mg1Rpm, hybrid.mg2Rpm, hybrid.iceTorqueNm, hybrid.warmupActive
-        ).forEach { markStale(it, now, 5000L) }
-        listOf(hybrid.batteryTempsC, hybrid.batteryTempMinC, hybrid.batteryTempMaxC, hybrid.batteryTempAvgC)
-            .forEach { markStale(it, now, 12_000L) }
-    }
-
-    private fun markStale(signal: SignalValue<*>, now: Long, thresholdMs: Long) {
-        val updated = signal.updatedAtElapsedMs ?: return
-        if (signal.value != null && now - updated > thresholdMs) signal.status = SignalStatus.STALE
     }
 
     private fun finishAndShareLogs() {
@@ -527,23 +492,51 @@ class MainActivity : Activity() {
     private fun safeLogError(message: String, throwable: Throwable) { try { logger.logError(message, throwable) } catch (_: Exception) {} }
 
     private fun renderDashboard() = ui.post {
-        val engineState = engineStateLabel()
-        val warmupText = when (hybrid.warmupActive.value) { true -> "WARMUP ACTIVE"; false -> "WARMUP OFF"; null -> "WARMUP —" }
+        val renderStart = SystemClock.elapsedRealtime()
+        val rpmFresh = baseline.rpm.status == SignalStatus.VALID
+        val socFresh = hybrid.socPct.status == SignalStatus.VALID
+        val batteryTempFresh = hybrid.batteryTempAvgC.status == SignalStatus.VALID
+        val hvPowerFresh = hybrid.hvPowerKw.status == SignalStatus.VALID
+        val coolantFresh = baseline.coolantC.status == SignalStatus.VALID
+        val voltageFresh = baseline.adapterVoltageV.status == SignalStatus.VALID
+        val icePower = mechanicalPowerKw(baseline.rpm.value, hybrid.iceTorqueNm.value)
+        val icePowerFresh = rpmFresh && hybrid.iceTorqueNm.status == SignalStatus.VALID
+        val icePowerVersion = maxOf(baseline.rpm.version, hybrid.iceTorqueNm.version)
+        val batteryTempVersion = maxOf(
+            hybrid.batteryTempMinC.version,
+            hybrid.batteryTempMaxC.version,
+            hybrid.batteryTempAvgC.version
+        )
         dashboard.render(
             DashboardSnapshot(
-                baseline.speedKph.value, baseline.speedKph.status == SignalStatus.VALID,
-                hybrid.socPct.value, hybrid.socPct.status == SignalStatus.VALID,
-                hybrid.batteryTempMinC.value, hybrid.batteryTempMaxC.value, hybrid.batteryTempAvgC.value,
-                hybrid.batteryTempMaxC.status == SignalStatus.VALID,
-                hybrid.hvPowerKw.value, hybrid.hvPowerKw.status == SignalStatus.VALID,
-                baseline.rpm.value, baseline.rpm.status == SignalStatus.VALID,
-                baseline.coolantC.value, baseline.coolantC.status == SignalStatus.VALID,
-                baseline.adapterVoltageV.value, baseline.adapterVoltageV.status == SignalStatus.VALID,
-                engineState, warmupText,
-                mechanicalPowerKw(baseline.rpm.value, hybrid.iceTorqueNm.value),
-                mechanicalPowerKw(hybrid.mg1Rpm.value, hybrid.mg1TorqueNm.value),
-                mechanicalPowerKw(hybrid.mg2Rpm.value, hybrid.mg2TorqueNm.value),
-                mechanicalPowerKw(hybrid.rearMgRpm.value, hybrid.rearMgTorqueNm.value)
+                speedKph = baseline.speedKph.value,
+                speedFresh = baseline.speedKph.status == SignalStatus.VALID,
+                speedVersion = baseline.speedKph.version,
+                socPct = hybrid.socPct.value,
+                socFresh = socFresh,
+                socVersion = hybrid.socPct.version,
+                batteryTempMinC = hybrid.batteryTempMinC.value,
+                batteryTempMaxC = hybrid.batteryTempMaxC.value,
+                batteryTempAvgC = hybrid.batteryTempAvgC.value,
+                batteryTempFresh = batteryTempFresh,
+                batteryTempVersion = batteryTempVersion,
+                hvPowerKw = hybrid.hvPowerKw.value,
+                hvPowerFresh = hvPowerFresh,
+                hvPowerVersion = hybrid.hvPowerKw.version,
+                rpm = baseline.rpm.value,
+                rpmFresh = rpmFresh,
+                rpmVersion = baseline.rpm.version,
+                coolantC = baseline.coolantC.value,
+                coolantFresh = coolantFresh,
+                coolantVersion = baseline.coolantC.version,
+                adapterVoltageV = baseline.adapterVoltageV.value,
+                adapterVoltageFresh = voltageFresh,
+                adapterVoltageVersion = baseline.adapterVoltageV.version,
+                icePowerKw = icePower,
+                icePowerFresh = icePowerFresh,
+                icePowerVersion = icePowerVersion,
+                idleCheckActive = hybrid.idleCheckActive.value == true,
+                idleCheckVersion = hybrid.idleCheckActive.version
             )
         )
         val connection = if (elm.isConnected()) "CONNECTED" else "OFFLINE"
@@ -561,21 +554,37 @@ class MainActivity : Activity() {
                 lastError.takeUnless { it == "NONE" }, logger.isDegraded() || lastError != "NONE"
             )
         )
-    }
-
-    private fun engineStateLabel(): String {
-        val rpm = baseline.rpm.value ?: return "STATE UNKNOWN"
-        val torque = hybrid.iceTorqueNm.value
-        return when {
-            torque != null && torque < 0.0 && rpm > 0.0 -> "ICE SPINNING"
-            rpm >= 800.0 -> "ICE RUNNING"
-            else -> "EV / ICE OFF"
-        }
+        lastRenderDurationMs = SystemClock.elapsedRealtime() - renderStart
     }
 
     private fun mechanicalPowerKw(rpm: Double?, torqueNm: Double?): Double? {
         if (rpm == null || torqueNm == null) return null
         return torqueNm * 2.0 * Math.PI * rpm / 60.0 / 1000.0
+    }
+
+    private fun updateIdleCheckState() {
+        val rpm = baseline.rpm
+        val torque = hybrid.iceTorqueNm
+        val warmup = hybrid.warmupActive
+        val speed = baseline.speedKph
+        val fresh = rpm.status == SignalStatus.VALID &&
+            torque.status == SignalStatus.VALID &&
+            warmup.status == SignalStatus.VALID &&
+            speed.status == SignalStatus.VALID
+        if (!fresh) {
+            idleCheckState.reset()
+            store.setDerived(hybrid.idleCheckActive, null, "IDLE_CHECK")
+            return
+        }
+        val icePower = mechanicalPowerKw(rpm.value, torque.value)
+        idleCheckState.update(warmup.value, rpm.value, icePower, speed.value, SystemClock.elapsedRealtime())
+        val active = idleCheckState.active
+        store.setDerived(hybrid.idleCheckActive, active, "IDLE_CHECK")
+        if (lastIdleCheckLogged != active) {
+            logger.logDecoded("idle_check_active", active, null, "IDLE_CHECK", "", ObdParsers.DECODER_VERSION)
+            logger.logEvent(if (active) "IDLE_CHECK_ACTIVE" else "IDLE_CHECK_INACTIVE")
+            lastIdleCheckLogged = active
+        }
     }
 
     private fun setControlsEnabled(enabled: Boolean) = ui.post { dashboard.setControlsEnabled(enabled, liveMode.get()) }

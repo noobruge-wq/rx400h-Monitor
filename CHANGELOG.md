@@ -6,13 +6,26 @@ This changelog records engineering baselines, not every chat turn. Major-version
 
 ## [Unreleased] — V0.2.0 Reactive Core
 
+
+### Development infrastructure / Codex migration
+
+- Added `AGENTS.md` as Codex repository-level operating instructions.
+- Added `CODEX_HANDOFF.md` as a complete new-session recovery entry point.
+- Added `REPO_ACCESS_AND_AUTH.md` and Windows/Unix bootstrap scripts for GitHub read/write setup.
+- Formalized local `git` + GitHub CLI browser OAuth as the Codex write path.
+- Added a self-contained migration package containing source/evidence/reference archives so chat history is no longer required.
+
 ### Planned
 
 - Introduce lightweight typed `SignalStore` with value/source timestamp/age/quality/version/source.
 - Use monotonic time for scheduling, freshness, state timers and performance metrics.
 - Replace periodic full-dashboard repaint with change-driven publication.
+- Add minimal `IdleCheckEligibilityState` with transition logging for replay validation.
+- Add unit tests for parsers, SignalStore and Idle Check; run them in GitHub Actions before the APK build.
 - Add performance/health telemetry suitable for A55 + 1 GB targets.
 - Add consumer traceability and remove unused typed Runtime fields while preserving raw evidence.
+- `frames.csv` schema updated in the same version: no-consumer columns removed, `idle_check_active` added; new `performance.csv` for observability.
+- Removed unreferenced probe profile JSON assets containing banned `22xxxx`/`2C` commands (recoverable from git history).
 - Establish current product UI contract:
   - BATTERY: SOC, AVG temperature, MAX/MIN secondary.
   - VEHICLE STATUS: speed, coolant, 12V OBD.
@@ -126,3 +139,11 @@ SHA-256 a0f9293fdcf2f870725f20333c19711ce73d7dd1288333d7b8966a1673ee9bd1
 ## Historical pre-0.1.8 notes
 
 Earlier versions were research probes used to establish CAN/ELM paths, logging discipline and failure modes. They are evidence history, not development baselines.
+
+### Documentation / reproducibility amendment — 2026-08-08
+
+- Added `GITHUB_BUILD_AND_BASELINE_WORKFLOW.md`.
+- Documented phone-first Termux → GitHub Actions build workflow.
+- Documented fixed development/test signing identity and signature verification requirement.
+- Documented complete project-baseline overlay upload, SHA-256 manifest regeneration/verification, commit/push, and remote-state checks.
+- Updated baseline handoff requirements so a new conversation can recover both project state and the build/upload process without chat history.

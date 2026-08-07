@@ -1,7 +1,7 @@
 package com.guanyu.rx400hprobe
 
 object ObdParsers {
-    const val DECODER_VERSION = "rx400h-ha-cleanup-20260807-001"
+    const val DECODER_VERSION = "rx400h-reactive-20260808-001"
 
     private val canLine = Regex("^([0-9A-F]{3})([0-9A-F]{2,})$")
 
@@ -51,13 +51,10 @@ object ObdParsers {
         val payload = isoTpMessage(lines, expectedCanId)?.payload ?: return null
         if (payload.firstOrNull() != 0x41) return null
         var i = 1
-        var engineLoad: Double? = null
         var coolant: Double? = null
         var rpm: Double? = null
         var speed: Double? = null
-        var timing: Double? = null
-        var maf: Double? = null
-        val sizes = mapOf(0x04 to 1, 0x05 to 1, 0x06 to 1, 0x07 to 1, 0x0C to 2, 0x0D to 1, 0x0E to 1, 0x10 to 2)
+        val sizes = mapOf(0x05 to 1, 0x0C to 2, 0x0D to 1)
         while (i < payload.size) {
             val pid = payload[i++]
             val size = sizes[pid] ?: break
@@ -65,15 +62,12 @@ object ObdParsers {
             val values = payload.subList(i, i + size)
             i += size
             when (pid) {
-                0x04 -> engineLoad = values[0] * 100.0 / 255.0
                 0x05 -> coolant = values[0] - 40.0
                 0x0C -> rpm = u16(values, 0) / 4.0
                 0x0D -> speed = values[0].toDouble()
-                0x0E -> timing = values[0] / 2.0 - 64.0
-                0x10 -> maf = u16(values, 0) / 100.0
             }
         }
-        return StandardDecoded(engineLoad, coolant, rpm, speed, timing, maf)
+        return StandardDecoded(coolant, rpm, speed)
     }
 
     fun decode21C3(lines: List<String>): ToyotaC3Decoded? {
@@ -84,16 +78,10 @@ object ObdParsers {
         val voltage = d[24] * 2.0
         val current = d[26] * 2.0 - 256.0
         return ToyotaC3Decoded(
-            mg2Rpm = (u16(d, 0) - 16383).toDouble(),
-            mg2TorqueNm = (u16(d, 2) - 4000) / 8.0,
-            mg1Rpm = (u16(d, 4) - 16383).toDouble(),
-            mg1TorqueNm = (u16(d, 6) - 4000) / 8.0,
             socPct = d[14] / 2.55,
             hvVoltageV = voltage,
             hvCurrentA = current,
             hvPowerKw = voltage * current / 1000.0,
-            brakeRegenTorqueCandidate = d[30] * 4.0,
-            brakeMasterTorqueCandidate = (d[32] - 255) * 8.0,
             rawDataHex = hex(d)
         )
     }
@@ -104,8 +92,6 @@ object ObdParsers {
         val d = payload.drop(2)
         if (d.size < 25) return null
         return ToyotaC4Decoded(
-            rearMgRpm = (u16(d, 2) - 16383).toDouble(),
-            rearMgTorqueNm = (u16(d, 4) - 4000) / 8.0,
             warmupActive = (d[1] and 0x01) != 0,
             rawDataHex = hex(d)
         )
@@ -135,7 +121,6 @@ object ObdParsers {
         if (d.size < 14 || d[11] != 0xF3) return null
         return ToyotaCdF3Decoded(
             iceTorqueNm = ((d[3] - 128) * 2).toDouble(),
-            injectionUl = u16(d, 12) / 32.0,
             rawDataHex = hex(d)
         )
     }

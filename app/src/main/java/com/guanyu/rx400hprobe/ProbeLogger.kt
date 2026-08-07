@@ -23,9 +23,9 @@ enum class SessionState { IDLE, ACTIVE, FINALIZING, FINALIZED, FINALIZE_FAILED }
 
 class ProbeLogger(private val context: Context) {
     companion object {
-        const val APP_VERSION = "0.1.10"
+        const val APP_VERSION = "0.2.0"
         const val PROFILE_VERSION = "rx400h_ha_hci_20260805_002"
-        const val SCHEDULER_PROFILE = "v018_timing_ui_cleanup_candidate"
+        const val SCHEDULER_PROFILE = "v020_reactive_core_candidate"
     }
 
     private val root: File = (context.getExternalFilesDir(null) ?: context.filesDir).resolve("probe_sessions")
@@ -37,6 +37,7 @@ class ProbeLogger(private val context: Context) {
     private var connectionWriter: BufferedWriter? = null
     private var errorWriter: BufferedWriter? = null
     private var decodedWriter: BufferedWriter? = null
+    private var performanceWriter: BufferedWriter? = null
     private var sessionStartedAtMs: Long = 0L
     private var transactionCount: Long = 0L
     private var frameCount: Long = 0L
@@ -87,11 +88,16 @@ class ProbeLogger(private val context: Context) {
         eventWriter = writer(dir, "events.csv").also { it.write("timestamp_ms,event_type,note\n") }
         frameWriter = writer(dir, "frames.csv").also {
             it.write(
-                "timestamp_ms,rpm,speed_kph,coolant_c,adapter_12v_v,engine_load_pct,ignition_timing_deg,maf_gps," +
+                "timestamp_ms,rpm,speed_kph,coolant_c,adapter_12v_v," +
                     "soc_pct,hv_voltage_v,hv_current_a,hv_power_kw,battery_temp_min_c,battery_temp_max_c,battery_temp_avg_c," +
                     "battery_temp_1_c,battery_temp_2_c,battery_temp_3_c,battery_temp_4_c,battery_temp_5_c,battery_temp_6_c,battery_temp_7_c,battery_temp_8_c," +
-                    "mg1_rpm,mg2_rpm,mg1_torque_nm,mg2_torque_nm,rear_mg_rpm,rear_mg_torque_nm," +
-                    "ice_torque_nm,ice_power_kw,injection_ul,warmup_active,brake_regen_torque_candidate,brake_master_torque_candidate\n"
+                    "ice_torque_nm,ice_power_kw,warmup_active,idle_check_active\n"
+            )
+        }
+        performanceWriter = writer(dir, "performance.csv").also {
+            it.write(
+                "timestamp_iso,elapsed_ms,pss_kb,java_heap_used_kb,java_heap_total_kb," +
+                    "cpu_delta_ms,alloc_delta,freed_delta,cycle_ms,render_ms,logger_write_ms\n"
             )
         }
 
@@ -201,18 +207,26 @@ class ProbeLogger(private val context: Context) {
         val row = listOf(
             System.currentTimeMillis(),
             data.rpm.value, data.speedKph.value, data.coolantC.value, data.adapterVoltageV.value,
-            data.engineLoadPct.value, data.ignitionTimingDeg.value, data.mafGps.value,
             hybrid.socPct.value, hybrid.hvVoltageV.value, hybrid.hvCurrentA.value, hybrid.hvPowerKw.value,
             hybrid.batteryTempMinC.value, hybrid.batteryTempMaxC.value, hybrid.batteryTempAvgC.value,
             temps.getOrNull(0), temps.getOrNull(1), temps.getOrNull(2), temps.getOrNull(3),
             temps.getOrNull(4), temps.getOrNull(5), temps.getOrNull(6), temps.getOrNull(7),
-            hybrid.mg1Rpm.value, hybrid.mg2Rpm.value, hybrid.mg1TorqueNm.value, hybrid.mg2TorqueNm.value,
-            hybrid.rearMgRpm.value, hybrid.rearMgTorqueNm.value,
-            hybrid.iceTorqueNm.value, icePower, hybrid.injectionUl.value, hybrid.warmupActive.value,
-            hybrid.brakeRegenTorqueCandidate.value, hybrid.brakeMasterTorqueCandidate.value
+            hybrid.iceTorqueNm.value, icePower, hybrid.warmupActive.value, hybrid.idleCheckActive.value
         ).joinToString(",") { it?.toString() ?: "" }
         safeWrite("frames.csv") { frameWriter?.apply { write(row); newLine() } }
         flushLightweight()
+    }
+
+    @Synchronized
+    fun logPerformance(sample: PerformanceTracker.Sample) {
+        if (!isWritable()) return
+        safeWrite("performance.csv") { performanceWriter?.apply {
+            write(
+                "${sample.wallTimeIso},${sample.elapsedMs},${sample.pssKb},${sample.javaHeapUsedKb},${sample.javaHeapTotalKb}," +
+                    "${sample.cpuDeltaMs},${sample.allocDelta},${sample.freedDelta},${sample.cycleMs},${sample.renderMs},${sample.loggerWriteMs}\n"
+            )
+            flush()
+        } }
     }
 
     fun currentSessionDir(): File? = sessionDir
@@ -267,7 +281,7 @@ class ProbeLogger(private val context: Context) {
     }
 
     private fun closeWriters() {
-        listOf(rawWriter, eventWriter, frameWriter, connectionWriter, errorWriter, decodedWriter).forEach {
+        listOf(rawWriter, eventWriter, frameWriter, connectionWriter, errorWriter, decodedWriter, performanceWriter).forEach {
             try { it?.flush(); it?.close() } catch (_: Exception) {}
         }
         rawWriter = null
@@ -276,6 +290,7 @@ class ProbeLogger(private val context: Context) {
         connectionWriter = null
         errorWriter = null
         decodedWriter = null
+        performanceWriter = null
     }
 
     private fun safeWrite(target: String, block: () -> Unit) {

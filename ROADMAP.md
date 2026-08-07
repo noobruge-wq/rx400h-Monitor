@@ -33,6 +33,8 @@ V0.2.0.
 
 ## V0.2.0 — Reactive Core
 
+**Status:** In progress — 2026-08-08.
+
 ### Goal
 
 Define how vehicle truth exists inside the product.

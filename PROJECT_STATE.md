@@ -1,8 +1,9 @@
 # RX400h Monitor — PROJECT_STATE
 
-**Baseline date:** 2026-08-08  
-**Current engineering baseline:** V0.1.10 cleanup / real-vehicle validated branch  
-**Next major milestone:** V0.2.0 — Reactive Core  
+**Baseline date:** 2026-08-08<br>
+**Current engineering baseline:** V0.2.0 — Reactive Core (in development)<br>
+**Last validated engineering baseline:** V0.1.10 cleanup / real-vehicle validated branch<br>
+**Next major milestone:** V0.3.0 — High-Performance Scheduler / Refresh Frontier
 **Repository:** `noobruge-wq/rx400h-Monitor`
 
 > This file is the primary handoff document. Future development must update this document before code changes. A new AI/developer should be able to resume the project from this file + `DECISIONS.md` + `ROADMAP.md` + latest source without relying on chat history.
@@ -353,6 +354,8 @@ Only questions that genuinely require the vehicle should consume real-vehicle te
 
 ## 14. Next milestone — V0.2.0 Reactive Core
 
+**Status: in progress — 2026-08-08.** V0.1.10 remains the last real-vehicle-validated baseline until V0.2.0 passes build, deterministic replay and accumulated normal-driving validation.
+
 V0.2.0 target:
 
 - Formal typed `SignalStore`.
@@ -385,10 +388,99 @@ Read in this order:
 Then verify:
 
 ```text
-Current baseline = V0.1.10
+Current baseline = V0.2.0 (in development; last validated = V0.1.10)
 V0.1.9 = VOID
-Next major milestone = V0.2.0 Reactive Core
+Next major milestone = V0.3.0 High-Performance Scheduler
 Protocol whitelist unchanged unless new evidence explicitly says otherwise
 ```
 
 Do not reconstruct project state from old chat messages unless the baseline documents explicitly identify a missing evidence item.
+
+---
+
+## 16. Repository / GitHub build baseline
+
+The project must remain recoverable without chat history, including its APK build and install-continuity workflow.
+
+Current development build path:
+
+```text
+Termux git push
+→ GitHub Actions (.github/workflows/build-apk.yml)
+→ JDK 17 / Gradle 8.9
+→ :app:assembleDebug
+→ fixed project debug/test signing key
+→ apksigner verify
+→ versioned GitHub artifact
+```
+
+Fixed development signing is intentional so successive test APKs can overwrite the previous project build when package/version rules allow. The bundled key is a development/test key, not a production-store release credential.
+
+Canonical detailed instructions, including Termux commands and complete baseline-document upload/verification, are in:
+
+```text
+GITHUB_BUILD_AND_BASELINE_WORKFLOW.md
+```
+
+A major version is not considered properly handed off if the source is recoverable but the build/signing/baseline-upload procedure is missing.
+
+
+---
+
+## 17. Codex migration / repository access state — 2026-08-08
+
+The project is being migrated from a long ChatGPT conversation to Codex.
+
+New canonical handoff files:
+
+```text
+AGENTS.md
+CODEX_HANDOFF.md
+REPO_ACCESS_AND_AUTH.md
+```
+
+Known repository state from the user's successful Git push:
+
+```text
+628da4b Add v0.1.10 project baseline
+43a9e6b Update to v0.1.10 cleanup candidate
+0121b66 Update to v0.1.8
+```
+
+Codex must fetch the current remote and treat a newer remote HEAD as authoritative.
+
+### Access behavior
+
+- ChatGPT's connected GitHub integration can read the repository.
+- A direct contents write attempt returned GitHub 403 `Resource not accessible by integration`.
+- Therefore normal project writes must use Codex/local `git`, not depend on ChatGPT connector writes.
+- Preferred new-machine authentication is GitHub CLI browser OAuth + credential helper.
+- The migration automation may launch browser authorization, but the first user consent cannot be silently bypassed.
+
+### Migration acceptance
+
+A new Codex session is considered successfully migrated when it can:
+1. read the canonical baseline;
+2. reconcile baseline vs current source;
+3. fetch/pull;
+4. pass `git push --dry-run` write verification;
+5. inspect the signed-debug GitHub Actions workflow;
+6. summarize V0.2.0 scope without chat history.
+
+---
+
+## 18. V0.2.0 current work — 2026-08-08
+
+Implementation is proceeding in this order:
+
+1. Docs-first migration closure: install Codex handoff documents and refresh baseline manifest.
+2. Lightweight typed `SignalStore` with value/source timestamp/update timestamp/age/quality/version/source.
+3. Presentation contract + change-driven UI publication (no periodic full-dashboard repaint as primary mechanism).
+4. Three-domain UI: BATTERY / VEHICLE STATUS / POWER with conditional `IDLE CHECK`.
+5. Minimal `IdleCheckEligibilityState`; transition results written to evidence logs for replay validation.
+6. Consumer audit: remove no-consumer typed fields (load/MAF/timing, injection, MG1/MG2/MGR, rear MG, brake candidates) while preserving raw evidence.
+7. Performance/health observability baseline (`performance.csv` or equivalent).
+8. Scheduler request-table interface prepared for deadline/priority operation; polling rates deliberately unchanged.
+9. Unit tests for parsers, SignalStore and Idle Check; GitHub Actions runs `testDebugUnitTest` before `assembleDebug`.
+
+The V0.2.0 exit gate remains: renderer replacement requires no Decoder/SignalStore semantic changes, and every typed Runtime field has a documented consumer.

@@ -240,3 +240,136 @@ Required durable documents:
 **Reason:** Project continuity must not depend on a single long AI conversation.
 
 **Consequences:** A future chat should resume from these files + latest source in minutes. Chat history is supplementary evidence, not the canonical state store.
+
+
+---
+
+## D-018 — Codex handoff becomes a first-class repository contract
+
+**Status:** Accepted — 2026-08-08
+
+**Decision:** Add `AGENTS.md` + `CODEX_HANDOFF.md` so Codex can recover project rules and state directly from the repository/migration package.
+
+**Reason:** ChatGPT and Codex conversation histories are not a reliable shared project database.
+
+**Consequences:** New Codex sessions must first read the handoff/baseline and provide a recovery report before source changes.
+
+---
+
+## D-019 — GitHub writes use local Git/gh, not ChatGPT connector writes
+
+**Status:** Accepted — 2026-08-08
+
+**Decision:** Treat local `git` + GitHub CLI/browser OAuth as the canonical write path for Codex.
+
+**Reason:** Connected GitHub reading works, while direct ChatGPT contents write returned GitHub 403 `Resource not accessible by integration`.
+
+**Consequences:** Do not store PATs in the repository. Migration automation may initiate `gh auth login --web`, but first-time authorization remains a user-consent boundary.
+
+---
+
+## D-020 — Migration package must be self-contained enough for offline recovery
+
+**Status:** Accepted — 2026-08-08
+
+**Decision:** The full Codex transfer package contains canonical state documents, current source snapshot, key E1 logs, HCI evidence, reconstruction/reference documents, historical valid/void source archives, UI references, access/bootstrap scripts and integrity manifests.
+
+**Reason:** Repository access or conversation availability should not be a single point of failure.
+
+**Consequences:** Large binary evidence is archival/supporting material; Codex should read the compact canonical documents first and open large artifacts only when needed.
+
+---
+
+## D-021 — V0.2.0 typed SignalStore and stable presentation contract
+
+**Status:** Accepted — 2026-08-08
+
+**Decision:** V0.2.0 introduces a lightweight typed `SignalStore` where each signal carries value, source timestamp, update timestamp, age, quality, version and source, using monotonic time for scheduling/freshness/state timers. A separate presentation contract carries only what the renderer needs.
+
+**Reason:** Probe-era code mixes acquisition, state, logging and rendering in `MainActivity`; V0.2.0 must make the presentation layer replaceable without changing vehicle truth.
+
+**Consequences:** Decoder/SignalStore semantics are the frozen boundary for renderer replacement; UI/skin code never writes vehicle truth or raw logs.
+
+---
+
+## D-022 — Change-driven UI publication
+
+**Status:** Accepted — 2026-08-08
+
+**Decision:** The dashboard no longer repaints all fields on a fixed 500 ms timer. Updates are published on signal change; the renderer compares per-field versions and updates only changed Views.
+
+**Reason:** Unchanged low-frequency values must not trigger string formatting or setText work; this is the main UI cost in V0.1.10.
+
+**Consequences:** Fast signals may publish several times per second; unchanged values do not repaint; the 500 ms stale-refresh timer may remain only for stale marking and status line refresh.
+
+---
+
+## D-023 — Three-domain product UI replaces Probe-era dashboard cards
+
+**Status:** Accepted — 2026-08-08
+
+**Decision:** Default UI is BATTERY (SOC, AVG temp, MAX/MIN), VEHICLE STATUS (speed, coolant, 12V OBD) and POWER (ICE power, RPM, conditional IDLE CHECK, HV power). WARMUP text, ENGINE STATE text and MG1/MG2/MGR power lines are removed from the default dashboard.
+
+**Reason:** The documented product contract has no consumer for those display items; MG1/MG2/MGR must not enter the default UI merely because they are decodable.
+
+**Consequences:** Raw evidence remains in `raw_io.jsonl`; removed display items can return only through a new evidence/decision.
+
+---
+
+## D-024 — Minimal IdleCheckEligibilityState (experimental until replay-validated)
+
+**Status:** Experimental — 2026-08-08
+
+**Decision:** V0.2.0 implements a minimal eligibility state: warmup active, 900 < RPM < 1100, ICE mechanical power ~0 kW (tolerance 0.05 kW for floating-point safety), speed <= 55 km/h, stable for ~1 s. State transitions are written to the session log. `IDLE CHECK` is displayed only while the state is active; otherwise the position is blank.
+
+**Reason:** Current V0.1.10 code contains no S0–S4 state machine, so there is no full reference implementation to delete; the recovered candidate conditions are the best available evidence.
+
+**Consequences:** This state remains experimental until deterministic replay against E1 logs and, when available, natural real-vehicle Idle Check observations confirm equivalence. Insufficient evidence means the field stays blank rather than guessing.
+
+---
+
+## D-025 — V0.2.0 consumer audit removes no-consumer typed fields
+
+**Status:** Accepted — 2026-08-08
+
+**Decision:** Remove from typed Runtime/decoded summaries: engine load, MAF, ignition timing, injection, MG1/MG2/MGR, rear MG and brake candidates, unless a consumer is identified during the audit. Raw responses stay in `raw_io.jsonl`. The unreferenced probe profile JSON assets containing banned 22/2C requests are deleted from the repo; they remain recoverable from git history and the migration package.
+
+**Reason:** Lean Core requires every typed field to have an explicit consumer; logger-only fields are not product consumers.
+
+**Consequences:** `frames.csv` schema is updated in the same version; historical evidence archives remain unchanged and can be re-parsed later.
+
+---
+
+## D-026 — Performance observability baseline in V0.2.0
+
+**Status:** Accepted — 2026-08-08
+
+**Decision:** Add a constant-space streaming `performance.csv` (or equivalent) with PSS, Java heap, process CPU time delta, GC/allocation counters where available, scheduler cycle duration, UI render duration and logger/request latency indicators, sampled about every 5 s.
+
+**Reason:** V0.3.0 frequency work must be data-driven; V0.2.0 must establish the baseline before any rate increase.
+
+**Consequences:** Telemetry itself is bounded and low-overhead; no session-duration-proportional RAM growth.
+
+---
+
+## D-027 — Scheduler interface prepared without changing rates
+
+**Status:** Accepted — 2026-08-08
+
+**Decision:** Introduce a fixed request table describing header/command/target period/priority/timeouts so V0.3.0 can implement deadline scheduling; V0.2.0 keeps current polling periods unchanged.
+
+**Reason:** Uncontrolled frequency increase before observability exists is explicitly forbidden by the project.
+
+**Consequences:** The live loop behavior stays equivalent to V0.1.10 in this release; only structure changes.
+
+---
+
+## D-028 — Unit test gate in CI
+
+**Status:** Accepted — 2026-08-08
+
+**Decision:** Add parser/SignalStore/Idle Check unit tests and run `:app:testDebugUnitTest` before `:app:assembleDebug` in GitHub Actions.
+
+**Reason:** Most regressions should be testable without the vehicle; CI must catch parser/state regressions early.
+
+**Consequences:** JUnit becomes a test-only dependency; runtime dependencies remain unchanged.

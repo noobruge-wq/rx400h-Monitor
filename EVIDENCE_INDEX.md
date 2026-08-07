@@ -33,6 +33,10 @@ SHA-256: 7d7975a6d24dfbe8e6e1c797db1879dd3d2c6cd8292216b044c27fc0366236b7
 
 Role: phone-first/GitHub Actions package using the fixed debug-signing workflow.
 
+### V0.2.0 Reactive Core source
+
+Pending: first CI-signed build artifact and source snapshot hash will be recorded here after GitHub Actions verification.
+
 ---
 
 ## B. Void source
@@ -207,3 +211,41 @@ package: com.guanyu.rx400hprobe.debug
 Do not replace the signing identity casually or existing installations may no longer upgrade in place.
 
 Sensitive secret material should not be copied into project-state documents beyond what is already intentionally public/test-only and required for reproducibility.
+
+
+---
+
+## I. Repository/Codex migration evidence
+
+User-confirmed Git state during migration:
+
+```text
+628da4b (HEAD -> main, origin/main) Add v0.1.10 project baseline
+43a9e6b Update to v0.1.10 cleanup candidate
+0121b66 Update to v0.1.8
+```
+
+The user also confirmed:
+
+```text
+git push -> main updated successfully
+git status -> working tree clean
+```
+
+Connected GitHub read access later successfully fetched:
+- `PROJECT_STATE.md`
+- `DECISIONS.md`
+- `ROADMAP.md`
+- `CHANGELOG.md`
+- `DEVELOPMENT_PROTOCOL.md`
+- `EVIDENCE_INDEX.md`
+- `.github/workflows/build-apk.yml`
+- `app/build.gradle.kts`
+
+A direct attempt to create `AGENTS.md` through the ChatGPT GitHub contents integration returned:
+
+```text
+403 Resource not accessible by integration
+```
+
+This is why Codex write automation uses local Git/`gh` credentials instead of relying on connector write scopes.
