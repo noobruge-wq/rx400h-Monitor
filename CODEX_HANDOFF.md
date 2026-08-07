@@ -25,7 +25,7 @@ Codex 启动后仍必须 `git fetch` 并以远端最新 HEAD 为准；上述 SHA
 ## 2. 当前真值
 
 ```text
-Valid current baseline: V0.2.0 Reactive Core (in development)
+Valid current baseline: V0.2.0 Reactive Core (implementation complete; validation pending)
 Last real-vehicle-validated baseline: V0.1.10 cleanup
 Valid protocol evidence baseline: V0.1.8
 VOID: V0.1.9

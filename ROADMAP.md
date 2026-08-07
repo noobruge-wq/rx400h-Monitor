@@ -33,7 +33,7 @@ V0.2.0.
 
 ## V0.2.0 — Reactive Core
 
-**Status:** In progress — 2026-08-08.
+**Status:** Implementation complete — 2026-08-08 (unit tests + CI signed build passed). Idle Check eligibility remains experimental pending replay/natural validation. Next: V0.3.0.
 
 ### Goal
 

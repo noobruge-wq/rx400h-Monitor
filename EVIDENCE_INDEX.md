@@ -35,7 +35,15 @@ Role: phone-first/GitHub Actions package using the fixed debug-signing workflow.
 
 ### V0.2.0 Reactive Core source
 
-Pending: first CI-signed build artifact and source snapshot hash will be recorded here after GitHub Actions verification.
+```text
+Commit: a0ee1a9bd333adf64cc7e7449fd148094e4ce33d (main)
+GitHub Actions run: 31194615369 — success
+Artifact: RX400hProtocolProbe-v0.2.0-reactive-debug-signed
+APK SHA-256: f1c87bda96d1b4238488627300c40343768e809d251fbf154d41fd846960aa3e
+Unit tests: 15 passed
+```
+
+Role: V0.2.0 Reactive Core implementation baseline (SignalStore, change-driven UI, consumer audit, performance observability, scheduler table). Idle Check state is experimental until replay/natural real-vehicle validation.
 
 ---
 

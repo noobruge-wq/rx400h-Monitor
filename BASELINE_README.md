@@ -24,7 +24,7 @@
 
 - project memory lives in Git docs, not chat;
 - V0.1.9 = VOID;
-- current baseline = V0.2.0 Reactive Core (in development; last validated = V0.1.10);
+- current baseline = V0.2.0 Reactive Core (implementation complete, CI-signed build passed; awaiting validation; last validated = V0.1.10);
 - next milestone = V0.3.0 High-Performance Scheduler;
 - protocol is whitelist/evidence-driven;
 - Lean Core + high useful refresh are first-class objectives;

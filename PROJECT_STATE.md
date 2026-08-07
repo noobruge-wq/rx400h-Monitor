@@ -354,7 +354,7 @@ Only questions that genuinely require the vehicle should consume real-vehicle te
 
 ## 14. Next milestone — V0.2.0 Reactive Core
 
-**Status: in progress — 2026-08-08.** V0.1.10 remains the last real-vehicle-validated baseline until V0.2.0 passes build, deterministic replay and accumulated normal-driving validation.
+**Status: implementation complete — 2026-08-08.** Unit tests (15) and the CI-signed APK build pass. Idle Check eligibility remains experimental pending replay/natural real-vehicle validation. V0.1.10 remains the last real-vehicle-validated baseline until normal-driving regression accumulates.
 
 V0.2.0 target:
 
@@ -469,9 +469,9 @@ A new Codex session is considered successfully migrated when it can:
 
 ---
 
-## 18. V0.2.0 current work — 2026-08-08
+## 18. V0.2.0 status — 2026-08-08
 
-Implementation is proceeding in this order:
+Implementation is complete and verified by GitHub Actions (`a0ee1a9`, run `31194615369`, success):
 
 1. Docs-first migration closure: install Codex handoff documents and refresh baseline manifest.
 2. Lightweight typed `SignalStore` with value/source timestamp/update timestamp/age/quality/version/source.

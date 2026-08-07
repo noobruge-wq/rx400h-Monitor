@@ -4,7 +4,13 @@ This changelog records engineering baselines, not every chat turn. Major-version
 
 ---
 
-## [Unreleased] — V0.2.0 Reactive Core
+## [Unreleased]
+
+No unreleased changes yet.
+
+---
+
+## [0.2.0] — Reactive Core — 2026-08-08
 
 
 ### Development infrastructure / Codex migration
@@ -15,24 +21,32 @@ This changelog records engineering baselines, not every chat turn. Major-version
 - Formalized local `git` + GitHub CLI browser OAuth as the Codex write path.
 - Added a self-contained migration package containing source/evidence/reference archives so chat history is no longer required.
 
-### Planned
+### Implemented
 
-- Introduce lightweight typed `SignalStore` with value/source timestamp/age/quality/version/source.
-- Use monotonic time for scheduling, freshness, state timers and performance metrics.
-- Replace periodic full-dashboard repaint with change-driven publication.
-- Add minimal `IdleCheckEligibilityState` with transition logging for replay validation.
-- Add unit tests for parsers, SignalStore and Idle Check; run them in GitHub Actions before the APK build.
-- Add performance/health telemetry suitable for A55 + 1 GB targets.
-- Add consumer traceability and remove unused typed Runtime fields while preserving raw evidence.
+- Introduced lightweight typed `SignalStore` with value/source timestamp/age/quality/version/source.
+- Used monotonic time for scheduling, freshness, state timers and performance metrics.
+- Replaced periodic full-dashboard repaint with change-driven publication.
+- Added minimal `IdleCheckEligibilityState` with transition logging for replay validation.
+- Added unit tests for parsers, SignalStore and Idle Check; run them in GitHub Actions before the APK build.
+- Added performance/health telemetry suitable for A55 + 1 GB targets.
+- Added consumer traceability and removed unused typed Runtime fields while preserving raw evidence.
 - `frames.csv` schema updated in the same version: no-consumer columns removed, `idle_check_active` added; new `performance.csv` for observability.
 - Removed unreferenced probe profile JSON assets containing banned `22xxxx`/`2C` commands (recoverable from git history).
-- Establish current product UI contract:
+- Established current product UI contract:
   - BATTERY: SOC, AVG temperature, MAX/MIN secondary.
   - VEHICLE STATUS: speed, coolant, 12V OBD.
   - POWER: ICE power, RPM, HV battery power.
   - `IDLE CHECK` appears below RPM only while truly active.
-- Prepare scheduler API for deadline/priority operation without yet performing uncontrolled high-rate polling.
-- Enforce Lean Core allocation/dependency rules.
+- Prepared scheduler API for deadline/priority operation without yet performing uncontrolled high-rate polling.
+- Enforced Lean Core allocation/dependency rules.
+
+### Verification (2026-08-08)
+
+- Unit tests: 15 passed (`:app:testDebugUnitTest`), including parsers, SignalStore and Idle Check state.
+- GitHub Actions run `31194615369` (HEAD `a0ee1a9`) completed **success**; `:app:assembleDebug` signed APK verified with the fixed project debug key.
+- Artifact: `RX400hProtocolProbe-v0.2.0-reactive-debug-signed`, APK SHA-256 `f1c87bda96d1b4238488627300c40343768e809d251fbf154d41fd846960aa3e`.
+- `versionCode = 10`, `versionName = 0.2.0`.
+- Idle Check eligibility remains **experimental**: implementation passes unit tests, but replay/natural real-vehicle equivalence validation is still pending.
 
 ---
 
