@@ -9,7 +9,7 @@
 
     <application
         android:allowBackup="false"
-        android:label="RX400h Protocol Probe"
+        android:label="RX400h Monitor (Research)"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
         <provider

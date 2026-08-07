@@ -16,7 +16,6 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.ArrayDeque
-import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -24,8 +23,9 @@ enum class SessionState { IDLE, ACTIVE, FINALIZING, FINALIZED, FINALIZE_FAILED }
 
 class ProbeLogger(private val context: Context) {
     companion object {
-        const val APP_VERSION = "0.1.8"
+        const val APP_VERSION = "0.1.10"
         const val PROFILE_VERSION = "rx400h_ha_hci_20260805_002"
+        const val SCHEDULER_PROFILE = "v018_timing_ui_cleanup_candidate"
     }
 
     private val root: File = (context.getExternalFilesDir(null) ?: context.filesDir).resolve("probe_sessions")
@@ -37,12 +37,12 @@ class ProbeLogger(private val context: Context) {
     private var connectionWriter: BufferedWriter? = null
     private var errorWriter: BufferedWriter? = null
     private var decodedWriter: BufferedWriter? = null
-    private var protocolWriter: BufferedWriter? = null
     private var sessionStartedAtMs: Long = 0L
     private var transactionCount: Long = 0L
     private var frameCount: Long = 0L
     private var eventCount: Long = 0L
     private var errorCount: Long = 0L
+    @Volatile
     private var loggerDegraded = false
     private val pendingErrors = ArrayDeque<String>(100)
 
@@ -51,10 +51,12 @@ class ProbeLogger(private val context: Context) {
         private set
 
     private data class Stat(var count: Long = 0, var ok: Long = 0, var totalLatency: Long = 0, var maxLatency: Long = 0)
-    private val requestStats = ConcurrentHashMap<String, Stat>()
+    private val requestStats = linkedMapOf<String, Stat>()
 
     var sessionId: String? = null
         private set
+
+    fun isDegraded(): Boolean = loggerDegraded
 
     @Synchronized
     fun start(adapterName: String, adapterAddress: String): File {
@@ -80,18 +82,16 @@ class ProbeLogger(private val context: Context) {
 
         rawWriter = writer(dir, "raw_io.jsonl")
         decodedWriter = writer(dir, "decoded.jsonl")
-        protocolWriter = writer(dir, "protocol_matrix.csv").also {
-            it.write("requested_code,label,resolved_code,description,valid_0100,total_0100,valid_010c,total_010c,valid_0105,total_0105,valid_010d,total_010d,ecu_ids,valid_frames,no_data,bus_errors,avg_latency_ms,score\n")
-        }
         connectionWriter = writer(dir, "connection.log")
         errorWriter = writer(dir, "errors.log")
         eventWriter = writer(dir, "events.csv").also { it.write("timestamp_ms,event_type,note\n") }
         frameWriter = writer(dir, "frames.csv").also {
             it.write(
-                "timestamp_ms,rpm,speed_kph,coolant_c,adapter_12v_v,soc_pct,hv_voltage_v,hv_current_a,hv_power_kw," +
-                    "battery_temp_min_c,battery_temp_max_c,battery_temp_avg_c," +
+                "timestamp_ms,rpm,speed_kph,coolant_c,adapter_12v_v,engine_load_pct,ignition_timing_deg,maf_gps," +
+                    "soc_pct,hv_voltage_v,hv_current_a,hv_power_kw,battery_temp_min_c,battery_temp_max_c,battery_temp_avg_c," +
                     "battery_temp_1_c,battery_temp_2_c,battery_temp_3_c,battery_temp_4_c,battery_temp_5_c,battery_temp_6_c,battery_temp_7_c,battery_temp_8_c," +
-                    "mg1_rpm,mg2_rpm,mg1_torque_nm,mg2_torque_nm,rear_mg_rpm,rear_mg_torque_nm,injection_ul,ice_torque_raw\n"
+                    "mg1_rpm,mg2_rpm,mg1_torque_nm,mg2_torque_nm,rear_mg_rpm,rear_mg_torque_nm," +
+                    "ice_torque_nm,ice_power_kw,injection_ul,warmup_active,brake_regen_torque_candidate,brake_master_torque_candidate\n"
             )
         }
 
@@ -103,7 +103,7 @@ class ProbeLogger(private val context: Context) {
                 .put("android_release", Build.VERSION.RELEASE)
                 .put("api_level", Build.VERSION.SDK_INT)
                 .put("adapter_name", adapterName)
-                .put("adapter_address", adapterAddress)
+                .put("adapter_id_sha256", sha256Text(adapterAddress.lowercase()))
                 .put("screen_width_px", context.resources.displayMetrics.widthPixels)
                 .put("screen_height_px", context.resources.displayMetrics.heightPixels)
                 .put("screen_density", context.resources.displayMetrics.density)
@@ -111,7 +111,7 @@ class ProbeLogger(private val context: Context) {
                 .toString(2)
         )
         writeSessionJson("active", null)
-        logConnection("SESSION_START id=$id adapter=$adapterName address=$adapterAddress profile=$PROFILE_VERSION")
+        logConnection("SESSION_START id=$id adapter=$adapterName profile=$PROFILE_VERSION scheduler=$SCHEDULER_PROFILE")
         return dir
     }
 
@@ -134,6 +134,7 @@ class ProbeLogger(private val context: Context) {
             .put("first_byte_latency_ms", result.firstByteLatencyMs ?: JSONObject.NULL)
             .put("prompt_latency_ms", result.promptLatencyMs ?: JSONObject.NULL)
             .put("quiet_window_ms", result.quietWindowMs)
+            .put("pre_drain_ms", result.preDrainMs)
             .put("prompt_seen", result.promptSeen)
             .put("response_pending_seen", result.responsePendingSeen)
             .put("status", result.status.name)
@@ -147,63 +148,6 @@ class ProbeLogger(private val context: Context) {
         stat.totalLatency += result.latencyMs
         if (result.latencyMs > stat.maxLatency) stat.maxLatency = result.latencyMs
         flushLightweight()
-    }
-
-    @Synchronized
-    fun logProtocolAttempt(a: ProtocolAttempt) {
-        if (!isWritable()) return
-        safeWrite("protocol_matrix.csv") {
-            protocolWriter?.apply {
-                write(
-                    listOf(
-                        a.requestedCode, a.label, a.resolvedCode ?: "", a.description ?: "",
-                        a.valid0100, a.total0100, a.valid010C, a.total010C,
-                        a.valid0105, a.total0105, a.valid010D, a.total010D,
-                        a.ecuIds.joinToString(";"), a.validFrames, a.noData, a.busErrors,
-                        a.averageLatencyMs, a.score
-                    ).joinToString(",") { csv(it.toString()) }
-                )
-                write("\n")
-                flush()
-            }
-        }
-    }
-
-    @Synchronized
-    fun logProtocolSummary(attempts: List<ProtocolAttempt>, best: ProtocolAttempt?) {
-        if (!isWritable()) return
-        val dir = sessionDir ?: return
-        val arr = JSONArray()
-        attempts.forEach { a ->
-            arr.put(
-                JSONObject()
-                    .put("requested_code", a.requestedCode)
-                    .put("label", a.label)
-                    .put("resolved_code", a.resolvedCode ?: JSONObject.NULL)
-                    .put("description", a.description ?: JSONObject.NULL)
-                    .put("valid_0100", a.valid0100)
-                    .put("total_0100", a.total0100)
-                    .put("valid_010c", a.valid010C)
-                    .put("valid_0105", a.valid0105)
-                    .put("valid_010d", a.valid010D)
-                    .put("ecu_ids", JSONArray(a.ecuIds.toList()))
-                    .put("valid_frames", a.validFrames)
-                    .put("no_data", a.noData)
-                    .put("bus_errors", a.busErrors)
-                    .put("avg_latency_ms", a.averageLatencyMs)
-                    .put("score", a.score)
-            )
-        }
-        safeFileWrite("protocol_summary.json") {
-            File(dir, "protocol_summary.json").writeText(
-                JSONObject()
-                    .put("best_requested_code", best?.requestedCode ?: JSONObject.NULL)
-                    .put("best_label", best?.label ?: JSONObject.NULL)
-                    .put("best_resolved_code", best?.resolvedCode ?: JSONObject.NULL)
-                    .put("attempts", arr)
-                    .toString(2)
-            )
-        }
     }
 
     @Synchronized
@@ -253,14 +197,19 @@ class ProbeLogger(private val context: Context) {
         if (!isWritable()) return
         frameCount++
         val temps = hybrid.batteryTempsC.value ?: emptyList()
+        val icePower = icePowerKw(data.rpm.value, hybrid.iceTorqueNm.value)
         val row = listOf(
-            System.currentTimeMillis(), data.rpm.value, data.speedKph.value, data.coolantC.value, data.adapterVoltageV.value,
+            System.currentTimeMillis(),
+            data.rpm.value, data.speedKph.value, data.coolantC.value, data.adapterVoltageV.value,
+            data.engineLoadPct.value, data.ignitionTimingDeg.value, data.mafGps.value,
             hybrid.socPct.value, hybrid.hvVoltageV.value, hybrid.hvCurrentA.value, hybrid.hvPowerKw.value,
             hybrid.batteryTempMinC.value, hybrid.batteryTempMaxC.value, hybrid.batteryTempAvgC.value,
             temps.getOrNull(0), temps.getOrNull(1), temps.getOrNull(2), temps.getOrNull(3),
             temps.getOrNull(4), temps.getOrNull(5), temps.getOrNull(6), temps.getOrNull(7),
             hybrid.mg1Rpm.value, hybrid.mg2Rpm.value, hybrid.mg1TorqueNm.value, hybrid.mg2TorqueNm.value,
-            hybrid.rearMgRpm.value, hybrid.rearMgTorqueNm.value, hybrid.injectionUl.value, hybrid.iceTorqueRaw.value
+            hybrid.rearMgRpm.value, hybrid.rearMgTorqueNm.value,
+            hybrid.iceTorqueNm.value, icePower, hybrid.injectionUl.value, hybrid.warmupActive.value,
+            hybrid.brakeRegenTorqueCandidate.value, hybrid.brakeMasterTorqueCandidate.value
         ).joinToString(",") { it?.toString() ?: "" }
         safeWrite("frames.csv") { frameWriter?.apply { write(row); newLine() } }
         flushLightweight()
@@ -318,7 +267,7 @@ class ProbeLogger(private val context: Context) {
     }
 
     private fun closeWriters() {
-        listOf(rawWriter, eventWriter, frameWriter, connectionWriter, errorWriter, decodedWriter, protocolWriter).forEach {
+        listOf(rawWriter, eventWriter, frameWriter, connectionWriter, errorWriter, decodedWriter).forEach {
             try { it?.flush(); it?.close() } catch (_: Exception) {}
         }
         rawWriter = null
@@ -327,7 +276,6 @@ class ProbeLogger(private val context: Context) {
         connectionWriter = null
         errorWriter = null
         decodedWriter = null
-        protocolWriter = null
     }
 
     private fun safeWrite(target: String, block: () -> Unit) {
@@ -335,14 +283,6 @@ class ProbeLogger(private val context: Context) {
             block()
         } catch (e: Exception) {
             markDegraded("write failed target=$target ${e::class.java.simpleName}: ${e.message}")
-        }
-    }
-
-    private fun safeFileWrite(target: String, block: () -> Unit) {
-        try {
-            block()
-        } catch (e: Exception) {
-            markDegraded("file write failed target=$target ${e::class.java.simpleName}: ${e.message}")
         }
     }
 
@@ -388,6 +328,7 @@ class ProbeLogger(private val context: Context) {
             .put("app_version", APP_VERSION)
             .put("protocol_profile_version", PROFILE_VERSION)
             .put("decoder_version", ObdParsers.DECODER_VERSION)
+            .put("scheduler_profile", SCHEDULER_PROFILE)
             .put("transaction_count", transactionCount)
             .put("frame_count", frameCount)
             .put("event_count", eventCount)
@@ -407,6 +348,7 @@ class ProbeLogger(private val context: Context) {
                 .put("generated_at", Instant.now().toString())
                 .put("profile_version", PROFILE_VERSION)
                 .put("decoder_version", ObdParsers.DECODER_VERSION)
+                .put("scheduler_profile", SCHEDULER_PROFILE)
                 .put("evidence_complete", !loggerDegraded)
                 .put("files", files)
                 .toString(2)
@@ -424,6 +366,16 @@ class ProbeLogger(private val context: Context) {
             }
         }
         return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+    }
+
+    private fun sha256Text(text: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+    }
+
+    private fun icePowerKw(rpm: Double?, torqueNm: Double?): Double? {
+        if (rpm == null || torqueNm == null) return null
+        return torqueNm * 2.0 * Math.PI * rpm / 60.0 / 1000.0
     }
 
     private fun csv(text: String): String = "\"${text.replace("\"", "\"\"")}\""

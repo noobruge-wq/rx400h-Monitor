@@ -2,7 +2,7 @@ package com.guanyu.rx400hprobe
 
 import android.Manifest
 import android.app.Activity
-import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -22,18 +22,22 @@ class DevicePickerActivity : Activity() {
     }
 
     private fun showDevices() {
-        val adapter = BluetoothAdapter.getDefaultAdapter()
-        val devices = try { adapter?.bondedDevices?.sortedBy { it.name ?: it.address }.orEmpty() } catch (_: SecurityException) { emptyList() }
+        val adapter = getSystemService(BluetoothManager::class.java).adapter
+        val devices = try {
+            adapter?.bondedDevices?.sortedBy { it.name ?: it.address }.orEmpty()
+        } catch (_: SecurityException) {
+            emptyList()
+        }
         if (devices.isEmpty()) {
             setContentView(TextView(this).apply {
-                text = "没有可用的已配对蓝牙设备。请先在安卓系统蓝牙设置中配对OBD适配器。"
+                text = "没有可用的已配对蓝牙设备。请先在安卓系统蓝牙设置中配对 OBD 适配器。"
                 textSize = 18f
                 setPadding(32, 32, 32, 32)
             })
             return
         }
         val list = ListView(this)
-        list.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, devices.map { "${it.name ?: "Unknown"}\n${it.address}" })
+        list.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, devices.map { it.name ?: "Unknown" })
         list.setOnItemClickListener { _, _, position, _ ->
             val device = devices[position]
             setResult(RESULT_OK, Intent().putExtra("name", device.name ?: "Unknown").putExtra("address", device.address))

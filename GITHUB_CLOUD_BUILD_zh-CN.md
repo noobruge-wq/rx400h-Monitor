@@ -1,14 +1,26 @@
-# GitHub 云端自动编译说明（v0.1.8）
+# GitHub 云端自动编译说明（V0.1.10 UI/cleanup candidate）
 
-推送到 `main` 或 `master` 后，GitHub Actions 会自动：
+本包已整合与 V0.1.6、V0.1.7、V0.1.8 相同的固定 Debug 测试签名。
 
-1. 使用 JDK 17 与 Gradle 8.9 编译 Debug APK；
+推送到 `main` 或 `master` 后，GitHub Actions 自动：
+
+1. 使用 JDK 17 与 Gradle 8.9 编译 `assembleDebug`；
 2. 使用项目内固定测试证书签名；
-3. 用 `apksigner` 验证最终 APK；
-4. 输出 APK、签名报告及 SHA-256 校验文件。
+3. 使用 Android `apksigner` 验证 APK 签名；
+4. 输出 APK、签名报告及 SHA-256。
 
-Artifact 名称：
+Artifact：
 
-`RX400hProtocolProbe-v0.1.8-debug-signed`
+`RX400hProtocolProbe-v0.1.10-cleanup-debug-signed`
 
-此版本沿用 v0.1.6/v0.1.7 的固定测试签名，可覆盖安装此前同签名的 Debug 版本。
+APK：
+
+`RX400hProtocolProbe-v0.1.10-cleanup-debug-signed.apk`
+
+签名证书 SHA-256：
+
+`77:BA:84:B1:F4:F7:37:A5:D6:1B:91:0B:F4:38:6D:F1:67:54:8B:9C:6C:E6:89:ED:25:E9:94:C3:7B:2B:C1:92`
+
+`versionCode = 9`，高于 V0.1.8 自动签名版的 `versionCode = 8`。在设备上已安装同一固定签名的 Debug 版时，应可直接覆盖升级。
+
+> 注意：这是研究/测试 Debug 签名，不是发布商店使用的正式 release key。

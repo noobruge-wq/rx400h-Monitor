@@ -2,27 +2,18 @@ package com.guanyu.rx400hprobe
 
 import android.Manifest
 import android.app.Activity
-import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.view.Gravity
-import android.view.View
 import android.view.WindowManager
-import android.widget.Button
-import android.widget.HorizontalScrollView
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
 import androidx.core.content.FileProvider
 import java.io.IOException
-import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -34,6 +25,8 @@ class MainActivity : Activity() {
         private const val RESPONSE_ENGINE = "7E8"
         private const val HEADER_HYBRID = "7E2"
         private const val RESPONSE_HYBRID = "7EA"
+
+        // Deliberately unchanged from the verified V0.1.8 runtime.
         private const val CORE_CYCLE_MS = 800L
     }
 
@@ -41,6 +34,7 @@ class MainActivity : Activity() {
     private val ui = Handler(Looper.getMainLooper())
     private val elm = Elm327Client()
     private lateinit var logger: ProbeLogger
+    private lateinit var dashboard: DashboardUi
 
     private val busy = AtomicBoolean(false)
     private val liveMode = AtomicBoolean(false)
@@ -48,42 +42,27 @@ class MainActivity : Activity() {
     private var deviceAddress: String? = null
     private var deviceName: String? = null
     private var currentHeader: String? = null
-    private var bestProtocol: ProtocolAttempt? = null
     private val baseline = BaselineData()
     private val hybrid = HybridData()
 
     private var reconnectCount = 0
     private var consecutiveErrors = 0
     private var lastError = "NONE"
-    private var lastTransaction = "IDLE"
-    private var lastHeader = "FUNCTIONAL"
-    private var liveStartedElapsedMs: Long? = null
-
-    private lateinit var statusText: TextView
-    private lateinit var progressText: TextView
-    private lateinit var dataText: TextView
-    private lateinit var rawText: TextView
-    private lateinit var probeButton: Button
-    private lateinit var liveButton: Button
-    private lateinit var toyotaButton: Button
-    private lateinit var exportButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         logger = ProbeLogger(this)
-        setContentView(buildUi())
+        setContentView(buildDashboard())
         loadSavedDevice()
-        updateStatus("OFFLINE")
-        renderData()
+        renderDashboard()
         ui.post(refreshUiRunnable)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        setContentView(buildUi())
-        renderData()
-        updateStatus(if (elm.isConnected()) "CONNECTED: $deviceName" else "OFFLINE")
+        setContentView(buildDashboard())
+        renderDashboard()
     }
 
     override fun onDestroy() {
@@ -98,71 +77,18 @@ class MainActivity : Activity() {
     private val refreshUiRunnable = object : Runnable {
         override fun run() {
             refreshStaleStates()
-            renderData()
+            renderDashboard()
             ui.postDelayed(this, 500)
         }
     }
 
-    private fun buildUi(): View {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(3, 10, 8))
-            setPadding(14, 10, 14, 10)
-        }
-        root.addView(TextView(this).apply {
-            text = "RX400h PROTOCOL PROBE  V0.1.8"
-            textSize = 21f
-            setTextColor(Color.rgb(110, 255, 180))
-        })
-        statusText = TextView(this).apply { textSize = 15f; setTextColor(Color.rgb(255, 210, 80)) }
-        progressText = TextView(this).apply { textSize = 13f; setTextColor(Color.rgb(150, 220, 255)) }
-        root.addView(statusText)
-        root.addView(progressText)
-
-        fun button(label: String, action: () -> Unit): Button = Button(this).apply {
-            text = label
-            setOnClickListener { action() }
-        }
-
-        val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        controls.addView(button("选择设备") { startActivityForResult(Intent(this, DevicePickerActivity::class.java), REQUEST_DEVICE) })
-        controls.addView(button("连接") { connectSelected() })
-        controls.addView(button("断开") { disconnect() })
-        probeButton = button("链路确认") { startLinkProbe() }
-        liveButton = button("开始实时仪表") { toggleLiveMode() }
-        toyotaButton = button("HA链验证") { startHaChainValidation() }
-        exportButton = button("结束并发送所有日志") { finishAndShareLogs() }
-        controls.addView(probeButton)
-        controls.addView(liveButton)
-        controls.addView(toyotaButton)
-        controls.addView(exportButton)
-        root.addView(HorizontalScrollView(this).apply { addView(controls) })
-
-        dataText = TextView(this).apply { textSize = 16f; setTextColor(Color.rgb(110, 255, 180)); setPadding(10, 8, 10, 8) }
-        rawText = TextView(this).apply { textSize = 12f; setTextColor(Color.rgb(210, 240, 220)); setPadding(10, 8, 10, 8) }
-        val metrics = resources.displayMetrics
-        val widthDp = metrics.widthPixels / metrics.density
-        val heightDp = metrics.heightPixels / metrics.density
-        val isWide = widthDp >= 600f || widthDp > heightDp
-        val body = LinearLayout(this).apply { orientation = if (isWide) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL }
-        val dataScroll = ScrollView(this).apply { addView(dataText) }
-        val rawScroll = ScrollView(this).apply { addView(rawText) }
-        if (isWide) {
-            body.addView(dataScroll, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.48f))
-            body.addView(rawScroll, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.52f))
-        } else {
-            body.addView(dataScroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.58f))
-            body.addView(rawScroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.42f))
-        }
-        root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-
-        val events = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        for (name in listOf("READY", "ENGINE_STARTED", "ENGINE_STOPPED", "EV_MOVE", "REGEN", "STOP")) {
-            events.addView(button(name) { logger.logEvent(name); appendRaw("EVENT $name") })
-        }
-        root.addView(HorizontalScrollView(this).apply { addView(events) })
-        return root
-    }
+    private fun buildDashboard() = DashboardUi(
+        activity = this,
+        onSelectDevice = { startActivityForResult(Intent(this, DevicePickerActivity::class.java), REQUEST_DEVICE) },
+        onConnectToggle = { if (elm.isConnected()) disconnect() else connectSelected() },
+        onLiveToggle = { toggleLiveMode() },
+        onExport = { finishAndShareLogs() }
+    ).also { dashboard = it }.root
 
     private fun loadSavedDevice() {
         val preferences = getSharedPreferences("probe", MODE_PRIVATE)
@@ -170,7 +96,7 @@ class MainActivity : Activity() {
         deviceName = preferences.getString("name", null)
     }
 
-    @Deprecated("Deprecated in Android framework, retained for minSdk-compatible device picker")
+    @Deprecated("Deprecated in Android framework; kept to avoid adding another activity dependency during protocol freeze")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_DEVICE && resultCode == RESULT_OK) {
@@ -180,7 +106,7 @@ class MainActivity : Activity() {
                 .putString("name", deviceName)
                 .putString("address", deviceAddress)
                 .apply()
-            updateStatus("SELECTED: $deviceName / $deviceAddress")
+            renderDashboard()
         }
     }
 
@@ -192,37 +118,41 @@ class MainActivity : Activity() {
         return true
     }
 
+    private fun bluetoothManager(): BluetoothManager = getSystemService(BluetoothManager::class.java)
+
     private fun connectSelected() {
         if (!ensurePermission() || busy.get()) return
-        val address = deviceAddress ?: run { updateStatus("请先选择设备"); return }
+        val address = deviceAddress ?: run {
+            lastError = "NO DEVICE SELECTED"
+            renderDashboard()
+            return
+        }
         busy.set(true)
-        setButtonsEnabled(false)
+        setControlsEnabled(false)
         worker.execute {
             try {
-                establishConnection(address, newSession = true)
-                updateStatus("CONNECTED: $deviceName")
+                establishConnection(address, newSession = logger.state != SessionState.ACTIVE)
+                lastError = "NONE"
             } catch (e: Exception) {
                 safeLogError("CONNECT_ERROR", e)
                 lastError = "CONNECT: ${e.message}"
-                updateStatus("CONNECT ERROR: ${e.message}")
                 elm.close()
             } finally {
                 busy.set(false)
-                setButtonsEnabled(true)
+                setControlsEnabled(true)
+                renderDashboard()
             }
         }
     }
 
     private fun establishConnection(address: String, newSession: Boolean) {
-        updateStatus("CONNECTING: $deviceName")
-        val adapter = BluetoothAdapter.getDefaultAdapter() ?: error("Bluetooth unavailable")
+        val adapter = bluetoothManager().adapter ?: error("Bluetooth unavailable")
         val device = adapter.getRemoteDevice(address)
         elm.connect(device)
         if (newSession || logger.currentSessionDir() == null || logger.state != SessionState.ACTIVE) {
-            val dir = logger.start(deviceName ?: "Unknown", address)
-            appendRaw("SESSION ${dir.absolutePath}")
+            logger.start(deviceName ?: "Unknown", address)
         }
-        logger.logConnection("BLUETOOTH_CONNECTED name=${deviceName ?: "Unknown"} address=$address")
+        logger.logConnection("BLUETOOTH_CONNECTED name=${deviceName ?: "Unknown"}")
         elm.initialize().forEach { record(null, it) }
         for (command in listOf("ATI", "STI", "AT@1", "ATDP", "ATDPN", "ATRV")) {
             val result = elm.command(command, 6000, 300)
@@ -234,108 +164,30 @@ class MainActivity : Activity() {
 
     private fun disconnect() {
         liveMode.set(false)
+        logger.logEvent("DISCONNECT_REQUEST")
         logger.logConnection("DISCONNECT_REQUEST")
         elm.close()
         currentHeader = null
-        updateStatus("OFFLINE")
-        ui.post { liveButton.text = "开始实时仪表"; setButtonsEnabled(true) }
-    }
-
-    private fun startLinkProbe() {
-        if (!elm.isConnected()) { updateStatus("未连接OBD"); return }
-        if (!busy.compareAndSet(false, true)) return
-        liveMode.set(false)
-        setButtonsEnabled(false)
-        worker.execute {
-            try {
-                configureRuntimeAdapter()
-                updateStatus("VERIFYING HCI-DERIVED PATHS")
-
-                ensureHeader(HEADER_ENGINE)
-                val standard = sendData(HEADER_ENGINE, "01040C0D0E10 2", 6000)
-                val standardDecoded = ObdParsers.decodeStandard(standard.rawLines, RESPONSE_ENGINE)
-                    ?: error("7E0→7E8 standard response decode failed")
-                applyStandard("01040C0D0E10 2", standard, standardDecoded)
-
-                ensureHeader(HEADER_HYBRID)
-                val c3Result = sendData(HEADER_HYBRID, "21C3 6", 6000)
-                val c3 = ObdParsers.decode21C3(c3Result.rawLines)
-                    ?: error("7E2→7EA 61C3 response decode failed")
-                applyC3("21C3 6", c3Result, c3)
-
-                bestProtocol = ProtocolAttempt("6", "CAN 11/500 — HA capture").apply {
-                    resolvedCode = "6"
-                    valid0100 = 1
-                    total0100 = 1
-                    ecuIds += listOf(RESPONSE_ENGINE, RESPONSE_HYBRID)
-                    validFrames = 2
-                }
-                logger.logConnection("HCI_PATHS_CONFIRMED engine=$HEADER_ENGINE/$RESPONSE_ENGINE hybrid=$HEADER_HYBRID/$RESPONSE_HYBRID")
-                updateStatus("LINK READY — HA PATHS CONFIRMED")
-                updateProgress("SOC=${fmt(c3.socPct, 1)}% | HV=${fmt(c3.hvVoltageV, 0)}V ${fmt(c3.hvCurrentA, 0)}A")
-            } catch (e: Exception) {
-                safeLogError("LINK_PROBE_ERROR", e)
-                lastError = "LINK: ${e.message}"
-                updateStatus("LINK PROBE ERROR: ${e.message}")
-            } finally {
-                busy.set(false)
-                setButtonsEnabled(true)
-            }
-        }
-    }
-
-    private fun startHaChainValidation() {
-        if (!elm.isConnected()) { updateStatus("未连接OBD"); return }
-        if (!busy.compareAndSet(false, true)) return
-        liveMode.set(false)
-        setButtonsEnabled(false)
-        worker.execute {
-            try {
-                configureRuntimeAdapter()
-                updateStatus("HA CHAIN VALIDATION")
-                updateProgress("Only HCI-observed RX400h commands; no scan")
-
-                ensureHeader(HEADER_ENGINE)
-                pollStandardCore()
-                pollCoolantBlock()
-                pollCdF3()
-                pollAdapterVoltage()
-
-                ensureHeader(HEADER_HYBRID)
-                pollC3()
-                pollC4()
-                pollCf()
-                logger.logFrame(baseline, hybrid)
-
-                updateStatus("HA CHAIN VALID — ALL CORE DECODERS RAN")
-                updateProgress("61C3 / 61C4 / 61CF / 61CD decoded")
-            } catch (e: Exception) {
-                safeLogError("HA_CHAIN_VALIDATION_ERROR", e)
-                lastError = "HA CHAIN: ${e.message}"
-                updateStatus("HA CHAIN ERROR: ${e.message}")
-            } finally {
-                busy.set(false)
-                setButtonsEnabled(true)
-            }
-        }
+        ui.post { dashboard.setLiveButton(false) }
+        renderDashboard()
     }
 
     private fun toggleLiveMode() {
         if (liveMode.get()) {
             liveMode.set(false)
-            ui.post { liveButton.text = "开始实时仪表" }
-            updateStatus("LIVE STOPPING")
+            logger.logEvent("LIVE_STOP_REQUEST")
+            ui.post { dashboard.setLiveButton(false) }
             return
         }
-        if (!elm.isConnected()) { updateStatus("未连接OBD"); return }
+        if (!elm.isConnected()) {
+            lastError = "OBD NOT CONNECTED"
+            renderDashboard()
+            return
+        }
         if (!busy.compareAndSet(false, true)) return
         liveMode.set(true)
-        liveStartedElapsedMs = SystemClock.elapsedRealtime()
-        ui.post {
-            liveButton.text = "停止实时仪表"
-            probeButton.isEnabled = false
-            toyotaButton.isEnabled = false
-        }
+        logger.logEvent("LIVE_START")
+        ui.post { dashboard.setLiveButton(true) }
         worker.execute {
             try {
                 configureRuntimeAdapter()
@@ -343,19 +195,18 @@ class MainActivity : Activity() {
             } catch (e: Exception) {
                 safeLogError("LIVE_MODE_ERROR", e)
                 lastError = "LIVE: ${e.message}"
-                updateStatus("LIVE ERROR: ${e.message}")
             } finally {
                 liveMode.set(false)
                 busy.set(false)
-                ui.post { liveButton.text = "开始实时仪表"; setButtonsEnabled(true) }
+                ui.post { dashboard.setLiveButton(false) }
+                setControlsEnabled(true)
+                renderDashboard()
             }
         }
     }
 
     private fun configureRuntimeAdapter() {
-        updateProgress("Configuring HCI-derived CAN 11/500 profile")
-        val commands = listOf("ATSP6", "ATAT1", "ATH1", "ATL0", "ATS0", "ATCAF1", "ATAL")
-        for (command in commands) {
+        for (command in listOf("ATSP6", "ATAT1", "ATH1", "ATL0", "ATS0", "ATCAF1", "ATAL")) {
             val result = elm.command(command, 5000, 250)
             record(null, result)
             if (result.status == TransactionStatus.COMMAND_ERROR || result.status == TransactionStatus.TIMEOUT) {
@@ -363,16 +214,11 @@ class MainActivity : Activity() {
             }
         }
         currentHeader = null
-        bestProtocol = ProtocolAttempt("6", "CAN 11/500 — HA capture").apply {
-            resolvedCode = "6"
-            ecuIds += listOf(RESPONSE_ENGINE, RESPONSE_HYBRID)
-        }
         logger.logConnection("RUNTIME_PROFILE_CONFIGURED profile=${ProbeLogger.PROFILE_VERSION}")
     }
 
     private fun runLiveScheduler() {
-        updateStatus("LIVE — HCI-DERIVED RX400h PROFILE")
-        logger.logConnection("LIVE_MODE_START cycle_target_ms=$CORE_CYCLE_MS")
+        logger.logConnection("LIVE_MODE_START cycle_target_ms=$CORE_CYCLE_MS scheduler=${ProbeLogger.SCHEDULER_PROFILE}")
         var nextCoolant = 0L
         var nextVoltage = 0L
         var nextCdF3 = 0L
@@ -433,11 +279,11 @@ class MainActivity : Activity() {
                 safeLogError("LIVE_POLL_ERROR count=$consecutiveErrors", e)
                 if (consecutiveErrors >= 3) elm.close()
             }
-            val remaining: Long = CORE_CYCLE_MS - (SystemClock.elapsedRealtime() - cycleStart)
+            val remaining = CORE_CYCLE_MS - (SystemClock.elapsedRealtime() - cycleStart)
             if (remaining > 0L) Thread.sleep(remaining)
         }
         logger.logConnection("LIVE_MODE_STOP")
-        updateStatus("LIVE STOPPED")
+        logger.logEvent("LIVE_STOP")
     }
 
     private fun ensureHeader(header: String) {
@@ -446,7 +292,6 @@ class MainActivity : Activity() {
         record(null, result)
         if (result.status != TransactionStatus.OK) error("Header $header failed: ${result.status}")
         currentHeader = header
-        lastHeader = header
     }
 
     private fun sendData(header: String, command: String, timeoutMs: Long): CommandResult {
@@ -463,7 +308,7 @@ class MainActivity : Activity() {
         val result = sendData(HEADER_ENGINE, command, 5000)
         val decoded = ObdParsers.decodeStandard(result.rawLines, RESPONSE_ENGINE)
         if (decoded == null) {
-            markDecodeFailure(listOf(baseline.rpm, baseline.speedKph), command, result)
+            markDecodeFailure(listOf(baseline.rpm, baseline.speedKph, baseline.engineLoadPct, baseline.ignitionTimingDeg, baseline.mafGps), command, result)
             return
         }
         applyStandard(command, result, decoded)
@@ -478,8 +323,7 @@ class MainActivity : Activity() {
     }
 
     private fun pollAdapterVoltage() {
-        val command = "ATRV"
-        val result = elm.command(command, 4000, 120, 80)
+        val result = elm.command("ATRV", 4000, 120, 80)
         record(null, result)
         updateAdapterVoltage(result)
     }
@@ -489,13 +333,13 @@ class MainActivity : Activity() {
         val result = sendData(HEADER_ENGINE, command, 5000)
         val decoded = ObdParsers.decode21CdF3(result.rawLines)
         if (decoded == null) {
-            markDecodeFailure(listOf(hybrid.injectionUl, hybrid.iceTorqueRaw), command, result)
+            markDecodeFailure(listOf(hybrid.iceTorqueNm, hybrid.injectionUl), command, result)
             return
         }
+        updateSignal(hybrid.iceTorqueNm, decoded.iceTorqueNm, command, result)
         updateSignal(hybrid.injectionUl, decoded.injectionUl, command, result)
-        updateSignal(hybrid.iceTorqueRaw, decoded.iceTorqueRaw, command, result)
+        logger.logDecoded("ice_torque_nm", decoded.iceTorqueNm, "Nm", command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
         logger.logDecoded("injection_ul", decoded.injectionUl, "uL", command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
-        logger.logDecoded("ice_torque_raw", decoded.iceTorqueRaw, "raw", command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
     }
 
     private fun pollC3() {
@@ -503,11 +347,7 @@ class MainActivity : Activity() {
         val result = sendData(HEADER_HYBRID, command, 6000)
         val decoded = ObdParsers.decode21C3(result.rawLines)
         if (decoded == null) {
-            markDecodeFailure(
-                listOf(hybrid.socPct, hybrid.hvVoltageV, hybrid.hvCurrentA, hybrid.hvPowerKw, hybrid.mg1Rpm, hybrid.mg2Rpm),
-                command,
-                result
-            )
+            markDecodeFailure(listOf(hybrid.socPct, hybrid.hvVoltageV, hybrid.hvCurrentA, hybrid.hvPowerKw, hybrid.mg1Rpm, hybrid.mg2Rpm), command, result)
             return
         }
         applyC3(command, result, decoded)
@@ -518,13 +358,15 @@ class MainActivity : Activity() {
         val result = sendData(HEADER_HYBRID, command, 6000)
         val decoded = ObdParsers.decode21C4(result.rawLines)
         if (decoded == null) {
-            markDecodeFailure(listOf(hybrid.rearMgRpm, hybrid.rearMgTorqueNm), command, result)
+            markDecodeFailure(listOf(hybrid.rearMgRpm, hybrid.rearMgTorqueNm, hybrid.warmupActive), command, result)
             return
         }
         updateSignal(hybrid.rearMgRpm, decoded.rearMgRpm, command, result)
         updateSignal(hybrid.rearMgTorqueNm, decoded.rearMgTorqueNm, command, result)
+        updateSignal(hybrid.warmupActive, decoded.warmupActive, command, result)
         logger.logDecoded("rear_mg_rpm", decoded.rearMgRpm, "rpm", command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
         logger.logDecoded("rear_mg_torque_nm", decoded.rearMgTorqueNm, "Nm", command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+        logger.logDecoded("warmup_active", decoded.warmupActive, null, command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
     }
 
     private fun pollCf() {
@@ -532,11 +374,7 @@ class MainActivity : Activity() {
         val result = sendData(HEADER_HYBRID, command, 6000)
         val decoded = ObdParsers.decode21CF(result.rawLines)
         if (decoded == null) {
-            markDecodeFailure(
-                listOf(hybrid.batteryTempsC, hybrid.batteryTempMinC, hybrid.batteryTempMaxC, hybrid.batteryTempAvgC),
-                command,
-                result
-            )
+            markDecodeFailure(listOf(hybrid.batteryTempsC, hybrid.batteryTempMinC, hybrid.batteryTempMaxC, hybrid.batteryTempAvgC), command, result)
             return
         }
         updateSignal(hybrid.batteryTempsC, decoded.batteryTempsC, command, result)
@@ -550,18 +388,13 @@ class MainActivity : Activity() {
     }
 
     private fun applyStandard(command: String, result: CommandResult, decoded: StandardDecoded) {
-        decoded.rpm?.let {
-            updateSignal(baseline.rpm, it, command, result)
-            logger.logDecoded("rpm", it, "rpm", command, payloadHex(result, RESPONSE_ENGINE), ObdParsers.DECODER_VERSION)
-        }
-        decoded.speedKph?.let {
-            updateSignal(baseline.speedKph, it, command, result)
-            logger.logDecoded("speed_kph", it, "km/h", command, payloadHex(result, RESPONSE_ENGINE), ObdParsers.DECODER_VERSION)
-        }
-        decoded.coolantC?.let {
-            updateSignal(baseline.coolantC, it, command, result)
-            logger.logDecoded("coolant_c", it, "C", command, payloadHex(result, RESPONSE_ENGINE), ObdParsers.DECODER_VERSION)
-        }
+        val raw = payloadHex(result, RESPONSE_ENGINE)
+        decoded.rpm?.let { updateSignal(baseline.rpm, it, command, result); logger.logDecoded("rpm", it, "rpm", command, raw, ObdParsers.DECODER_VERSION) }
+        decoded.speedKph?.let { updateSignal(baseline.speedKph, it, command, result); logger.logDecoded("speed_kph", it, "km/h", command, raw, ObdParsers.DECODER_VERSION) }
+        decoded.coolantC?.let { updateSignal(baseline.coolantC, it, command, result); logger.logDecoded("coolant_c", it, "C", command, raw, ObdParsers.DECODER_VERSION) }
+        decoded.engineLoadPct?.let { updateSignal(baseline.engineLoadPct, it, command, result); logger.logDecoded("engine_load_pct", it, "%", command, raw, ObdParsers.DECODER_VERSION) }
+        decoded.timingDeg?.let { updateSignal(baseline.ignitionTimingDeg, it, command, result); logger.logDecoded("ignition_timing_deg", it, "deg", command, raw, ObdParsers.DECODER_VERSION) }
+        decoded.mafGps?.let { updateSignal(baseline.mafGps, it, command, result); logger.logDecoded("maf_gps", it, "g/s", command, raw, ObdParsers.DECODER_VERSION) }
     }
 
     private fun applyC3(command: String, result: CommandResult, decoded: ToyotaC3Decoded) {
@@ -573,27 +406,17 @@ class MainActivity : Activity() {
         updateSignal(hybrid.mg2Rpm, decoded.mg2Rpm, command, result)
         updateSignal(hybrid.mg1TorqueNm, decoded.mg1TorqueNm, command, result)
         updateSignal(hybrid.mg2TorqueNm, decoded.mg2TorqueNm, command, result)
+        updateSignal(hybrid.brakeRegenTorqueCandidate, decoded.brakeRegenTorqueCandidate, command, result)
+        updateSignal(hybrid.brakeMasterTorqueCandidate, decoded.brakeMasterTorqueCandidate, command, result)
         val values = listOf(
-            "soc_pct" to decoded.socPct,
-            "hv_voltage_v" to decoded.hvVoltageV,
-            "hv_current_a" to decoded.hvCurrentA,
-            "hv_power_kw" to decoded.hvPowerKw,
-            "mg1_rpm" to decoded.mg1Rpm,
-            "mg2_rpm" to decoded.mg2Rpm,
-            "mg1_torque_nm" to decoded.mg1TorqueNm,
-            "mg2_torque_nm" to decoded.mg2TorqueNm
+            Triple("soc_pct", decoded.socPct, "%"), Triple("hv_voltage_v", decoded.hvVoltageV, "V"),
+            Triple("hv_current_a", decoded.hvCurrentA, "A"), Triple("hv_power_kw", decoded.hvPowerKw, "kW"),
+            Triple("mg1_rpm", decoded.mg1Rpm, "rpm"), Triple("mg2_rpm", decoded.mg2Rpm, "rpm"),
+            Triple("mg1_torque_nm", decoded.mg1TorqueNm, "Nm"), Triple("mg2_torque_nm", decoded.mg2TorqueNm, "Nm"),
+            Triple("brake_regen_torque_candidate", decoded.brakeRegenTorqueCandidate, "raw"),
+            Triple("brake_master_torque_candidate", decoded.brakeMasterTorqueCandidate, "raw")
         )
-        for ((name, value) in values) {
-            val unit = when {
-                name.endsWith("_pct") -> "%"
-                name.endsWith("_v") -> "V"
-                name.endsWith("_a") -> "A"
-                name.endsWith("_kw") -> "kW"
-                name.endsWith("_rpm") -> "rpm"
-                else -> "Nm"
-            }
-            logger.logDecoded(name, value, unit, command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
-        }
+        for ((name, value, unit) in values) logger.logDecoded(name, value, unit, command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
     }
 
     private fun updateAdapterVoltage(result: CommandResult) {
@@ -604,7 +427,6 @@ class MainActivity : Activity() {
 
     private fun <T> updateSignal(signal: SignalValue<T>, value: T?, command: String, result: CommandResult) {
         signal.source = command
-        signal.rawResponse = result.rawLines.joinToString(" | ")
         if (value != null) {
             signal.value = value
             signal.updatedAtElapsedMs = SystemClock.elapsedRealtime()
@@ -615,18 +437,13 @@ class MainActivity : Activity() {
     }
 
     private fun markDecodeFailure(signals: List<SignalValue<*>>, command: String, result: CommandResult) {
-        for (signal in signals) {
-            signal.source = command
-            signal.rawResponse = result.rawLines.joinToString(" | ")
-            signal.status = resultToSignalStatus(result)
-        }
+        signals.forEach { signal -> signal.source = command; signal.status = resultToSignalStatus(result) }
     }
 
     private fun resultToSignalStatus(result: CommandResult): SignalStatus = when (result.status) {
         TransactionStatus.NO_DATA -> SignalStatus.NO_DATA
         TransactionStatus.INTERRUPTED -> SignalStatus.INTERRUPTED
         TransactionStatus.TIMEOUT -> SignalStatus.TIMEOUT
-        TransactionStatus.IN_PROGRESS -> SignalStatus.SEARCHING_PROTOCOL
         else -> SignalStatus.DECODE_ERROR
     }
 
@@ -640,7 +457,6 @@ class MainActivity : Activity() {
         while (liveMode.get()) {
             reconnectCount++
             val wait = delays[attempt.coerceAtMost(delays.lastIndex)]
-            updateStatus("RECONNECTING in ${wait / 1000}s")
             logger.logConnection("RECONNECT_WAIT count=$reconnectCount delay_ms=$wait")
             Thread.sleep(wait)
             if (!liveMode.get()) return false
@@ -649,7 +465,7 @@ class MainActivity : Activity() {
                 configureRuntimeAdapter()
                 consecutiveErrors = 0
                 logger.logConnection("RECONNECT_SUCCESS total_attempts=$reconnectCount")
-                updateStatus("LIVE — RECONNECTED")
+                logger.logEvent("RECONNECT_SUCCESS", reconnectCount.toString())
                 return true
             } catch (e: Exception) {
                 safeLogError("RECONNECT_FAILED attempt=${attempt + 1}", e)
@@ -662,22 +478,14 @@ class MainActivity : Activity() {
 
     private fun refreshStaleStates() {
         val now = SystemClock.elapsedRealtime()
-        val fiveSecond = listOf(
-            baseline.rpm,
-            baseline.speedKph,
-            baseline.coolantC,
-            baseline.adapterVoltageV,
-            hybrid.socPct,
-            hybrid.hvVoltageV,
-            hybrid.hvCurrentA,
-            hybrid.hvPowerKw,
-            hybrid.mg1Rpm,
-            hybrid.mg2Rpm,
-            hybrid.injectionUl
-        )
-        fiveSecond.forEach { signal -> markStale(signal, now, 5000L) }
+        listOf(
+            baseline.rpm, baseline.speedKph, baseline.coolantC, baseline.adapterVoltageV,
+            baseline.engineLoadPct, baseline.ignitionTimingDeg, baseline.mafGps,
+            hybrid.socPct, hybrid.hvVoltageV, hybrid.hvCurrentA, hybrid.hvPowerKw,
+            hybrid.mg1Rpm, hybrid.mg2Rpm, hybrid.iceTorqueNm, hybrid.warmupActive
+        ).forEach { markStale(it, now, 5000L) }
         listOf(hybrid.batteryTempsC, hybrid.batteryTempMinC, hybrid.batteryTempMaxC, hybrid.batteryTempAvgC)
-            .forEach { signal -> markStale(signal, now, 12_000L) }
+            .forEach { markStale(it, now, 12_000L) }
     }
 
     private fun markStale(signal: SignalValue<*>, now: Long, thresholdMs: Long) {
@@ -686,126 +494,89 @@ class MainActivity : Activity() {
     }
 
     private fun finishAndShareLogs() {
-        val session = logger.currentSessionDir() ?: run { updateStatus("当前没有可导出的测试会话"); return }
+        val session = logger.currentSessionDir() ?: run {
+            lastError = "NO ACTIVE SESSION"
+            renderDashboard()
+            return
+        }
         liveMode.set(false)
-        setButtonsEnabled(false)
+        setControlsEnabled(false)
         worker.execute {
             try {
                 logger.logEvent("SESSION_END")
                 logger.logConnection("END_AND_SHARE_CLICKED dir=${session.name}")
                 val zip = logger.finalizeAndZip()
+                elm.close()
+                currentHeader = null
                 val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", zip)
                 val share = Intent(Intent.ACTION_SEND).apply {
                     type = "application/zip"
                     putExtra(Intent.EXTRA_STREAM, uri)
-                    putExtra(Intent.EXTRA_SUBJECT, "RX400h Protocol Probe logs ${zip.name}")
+                    putExtra(Intent.EXTRA_SUBJECT, "RX400h Monitor research logs ${zip.name}")
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                ui.post {
-                    setButtonsEnabled(true)
-                    updateStatus("日志已封包: ${zip.name}")
-                    startActivity(Intent.createChooser(share, "发送所有测试日志"))
-                }
+                ui.post { setControlsEnabled(true); startActivity(Intent.createChooser(share, "发送全部测试日志")) }
             } catch (e: Exception) {
                 lastError = "EXPORT: ${e.message}"
-                ui.post { setButtonsEnabled(true); updateStatus("日志导出失败: ${e.message}") }
+                ui.post { setControlsEnabled(true); renderDashboard() }
             }
         }
     }
 
-    private fun record(header: String?, result: CommandResult) {
-        lastTransaction = "${result.command} ${result.status} ${result.latencyMs}ms"
-        logger.logTransaction(header, result)
-        appendRaw("${header ?: "ADAPTER"}  ${result.command}  ${result.status}  ${result.latencyMs}ms\n${result.rawLines.joinToString(" | ")}")
+    private fun record(header: String?, result: CommandResult) = logger.logTransaction(header, result)
+    private fun safeLogError(message: String, throwable: Throwable) { try { logger.logError(message, throwable) } catch (_: Exception) {} }
+
+    private fun renderDashboard() = ui.post {
+        val engineState = engineStateLabel()
+        val warmupText = when (hybrid.warmupActive.value) { true -> "WARMUP ACTIVE"; false -> "WARMUP OFF"; null -> "WARMUP —" }
+        dashboard.render(
+            DashboardSnapshot(
+                baseline.speedKph.value, baseline.speedKph.status == SignalStatus.VALID,
+                hybrid.socPct.value, hybrid.socPct.status == SignalStatus.VALID,
+                hybrid.batteryTempMinC.value, hybrid.batteryTempMaxC.value, hybrid.batteryTempAvgC.value,
+                hybrid.batteryTempMaxC.status == SignalStatus.VALID,
+                hybrid.hvPowerKw.value, hybrid.hvPowerKw.status == SignalStatus.VALID,
+                baseline.rpm.value, baseline.rpm.status == SignalStatus.VALID,
+                baseline.coolantC.value, baseline.coolantC.status == SignalStatus.VALID,
+                baseline.adapterVoltageV.value, baseline.adapterVoltageV.status == SignalStatus.VALID,
+                engineState, warmupText,
+                mechanicalPowerKw(baseline.rpm.value, hybrid.iceTorqueNm.value),
+                mechanicalPowerKw(hybrid.mg1Rpm.value, hybrid.mg1TorqueNm.value),
+                mechanicalPowerKw(hybrid.mg2Rpm.value, hybrid.mg2TorqueNm.value),
+                mechanicalPowerKw(hybrid.rearMgRpm.value, hybrid.rearMgTorqueNm.value)
+            )
+        )
+        val connection = if (elm.isConnected()) "CONNECTED" else "OFFLINE"
+        val mode = when { liveMode.get() -> "LIVE"; busy.get() -> "BUSY"; else -> "IDLE" }
+        val logging = when (logger.state) {
+            SessionState.ACTIVE -> if (logger.isDegraded()) "LOG!" else "LOG"
+            SessionState.FINALIZING -> "PACKING"
+            SessionState.FINALIZED -> "SAVED"
+            SessionState.FINALIZE_FAILED -> "LOG ERROR"
+            else -> "NO LOG"
+        }
+        dashboard.renderStatus(
+            DashboardStatus(
+                deviceName ?: "OBD", connection, mode, logging, reconnectCount,
+                lastError.takeUnless { it == "NONE" }, logger.isDegraded() || lastError != "NONE"
+            )
+        )
     }
 
-    private fun safeLogError(message: String, throwable: Throwable) {
-        try { logger.logError(message, throwable) } catch (_: Exception) {}
-    }
-
-    private fun renderData() {
-        ui.post {
-            val rpm = baseline.rpm.value
-            val injection = hybrid.injectionUl.value
-            val engineState = when {
-                rpm == null -> "UNKNOWN"
-                rpm <= 0.0 -> "OFF"
-                injection != null && injection > 0.0 -> "FUELING / COMBUSTION"
-                injection != null -> "ROTATING / NO INJECTION"
-                else -> "ROTATING / FUEL STATUS UNKNOWN"
-            }
-            val power = hybrid.hvPowerKw.value
-            val energyState = when {
-                power == null -> "UNKNOWN"
-                power > 0.5 -> "BATTERY DISCHARGE / TRACTION"
-                power < -0.5 -> "BATTERY CHARGE / REGEN"
-                else -> "HV NEUTRAL"
-            }
-            val liveSeconds = liveStartedElapsedMs?.takeIf { liveMode.get() }
-                ?.let { (SystemClock.elapsedRealtime() - it) / 1000 } ?: 0
-            val temps = hybrid.batteryTempsC.value
-
-            dataText.text = buildString {
-                appendLine("RUNTIME")
-                appendLine("MODE: ${if (liveMode.get()) "LIVE" else if (busy.get()) "BUSY" else "IDLE"}")
-                appendLine("BLUETOOTH: ${if (elm.isConnected()) "CONNECTED" else "OFFLINE"}")
-                appendLine("PROFILE: ${ProbeLogger.PROFILE_VERSION}")
-                appendLine("HEADER: $lastHeader")
-                appendLine("LIVE TIME: ${liveSeconds}s")
-                appendLine("RECONNECTS: $reconnectCount")
-                appendLine("LAST TX: $lastTransaction")
-                appendLine("LAST ERROR: $lastError")
-                appendLine()
-                appendLine("CORE 7 SIGNALS")
-                appendLine(signal("SOC", hybrid.socPct, "%", 1))
-                appendLine(signal("HV POWER", hybrid.hvPowerKw, "kW", 2))
-                appendLine(signal("COOLANT", baseline.coolantC, "°C", 1))
-                appendLine(signal("ENGINE RPM", baseline.rpm, "rpm", 0))
-                appendLine(signal("BATTERY MAX", hybrid.batteryTempMaxC, "°C", 2))
-                appendLine(signal("12V OBD", baseline.adapterVoltageV, "V", 2))
-                appendLine(signal("SPEED", baseline.speedKph, "km/h", 0))
-                appendLine()
-                appendLine("HV BATTERY")
-                appendLine(signal("VOLTAGE", hybrid.hvVoltageV, "V", 0))
-                appendLine(signal("CURRENT", hybrid.hvCurrentA, "A", 0))
-                appendLine("FLOW: $energyState")
-                appendLine(signal("TEMP MIN", hybrid.batteryTempMinC, "°C", 2))
-                appendLine(signal("TEMP AVG", hybrid.batteryTempAvgC, "°C", 2))
-                appendLine("T1–T8: ${temps?.joinToString("  ") { fmt(it, 2) } ?: "—"}")
-                appendLine()
-                appendLine("ENGINE / MOTOR")
-                appendLine("ENGINE STATE: $engineState")
-                appendLine(signal("INJECTION", hybrid.injectionUl, "µL", 2))
-                appendLine(signal("MG1 RPM", hybrid.mg1Rpm, "rpm", 0))
-                appendLine(signal("MG2 RPM", hybrid.mg2Rpm, "rpm", 0))
-                appendLine(signal("MG1 TORQUE", hybrid.mg1TorqueNm, "Nm", 1))
-                appendLine(signal("MG2 TORQUE", hybrid.mg2TorqueNm, "Nm", 1))
-                appendLine(signal("REAR MG RPM", hybrid.rearMgRpm, "rpm", 0))
-                appendLine(signal("REAR MG TORQUE", hybrid.rearMgTorqueNm, "Nm", 1))
-            }
+    private fun engineStateLabel(): String {
+        val rpm = baseline.rpm.value ?: return "STATE UNKNOWN"
+        val torque = hybrid.iceTorqueNm.value
+        return when {
+            torque != null && torque < 0.0 && rpm > 0.0 -> "ICE SPINNING"
+            rpm >= 800.0 -> "ICE RUNNING"
+            else -> "EV / ICE OFF"
         }
     }
 
-    private fun signal(name: String, signal: SignalValue<Double>, unit: String, digits: Int): String {
-        val age = signal.updatedAtElapsedMs?.let { (SystemClock.elapsedRealtime() - it) / 1000.0 }
-        val value = signal.value?.let { fmt(it, digits) } ?: "—"
-        return "$name: $value $unit  [${signal.status}]${age?.let { " age=${fmt(it, 1)}s" } ?: ""}"
+    private fun mechanicalPowerKw(rpm: Double?, torqueNm: Double?): Double? {
+        if (rpm == null || torqueNm == null) return null
+        return torqueNm * 2.0 * Math.PI * rpm / 60.0 / 1000.0
     }
 
-    private fun fmt(value: Double, digits: Int): String = String.format(Locale.US, "%.${digits}f", value)
-
-    private fun setButtonsEnabled(enabled: Boolean) = ui.post {
-        probeButton.isEnabled = enabled && !liveMode.get()
-        toyotaButton.isEnabled = enabled && !liveMode.get()
-        exportButton.isEnabled = enabled
-        liveButton.isEnabled = enabled || liveMode.get()
-    }
-
-    private fun appendRaw(text: String) = ui.post {
-        rawText.append(text + "\n\n")
-        if (rawText.text.length > 60_000) rawText.text = rawText.text.takeLast(40_000)
-    }
-
-    private fun updateStatus(text: String) = ui.post { statusText.text = text }
-    private fun updateProgress(text: String) = ui.post { progressText.text = text }
+    private fun setControlsEnabled(enabled: Boolean) = ui.post { dashboard.setControlsEnabled(enabled, liveMode.get()) }
 }
