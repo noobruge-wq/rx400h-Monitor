@@ -6,7 +6,10 @@ This changelog records engineering baselines, not every chat turn. Major-version
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Fixed
+
+- `01040C0D0E10 2` decoder no longer stops at PID `04` (engine load) before reaching PID `0C` (RPM) and `0D` (speed). This restores speed, RPM and derived ICE power after the V0.2.0 regression observed in the `RX400h_20260808_043828` real-vehicle session.
+- Regression test added for the standard-block skip behavior (unit suite now 16 tests).
 
 ---
 

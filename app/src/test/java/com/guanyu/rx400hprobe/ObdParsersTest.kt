@@ -28,6 +28,18 @@ class ObdParsersTest {
     }
 
     @Test
+    fun decodeStandard_skipsEngineLoadBeforeRpmAndSpeed() {
+        // Regression: 01040C0D0E10 responses start with PID 04 (engine load).
+        // The parser must skip it and continue to 0C (RPM) and 0D (speed).
+        val payload = listOf(0x41, 0x04, 0x00, 0x0C, 0x1A, 0xF8, 0x0D, 0x40)
+        val decoded = ObdParsers.decodeStandard(isoTpLines("7E8", payload), "7E8")
+        assertNotNull(decoded)
+        val d = decoded!!
+        assertEquals(1726.0, d.rpm!!, 0.001)
+        assertEquals(64.0, d.speedKph!!, 0.001)
+    }
+
+    @Test
     fun decode21CdF3_parsesIceTorque() {
         val d = MutableList(17) { 0 }
         d[3] = 0x82

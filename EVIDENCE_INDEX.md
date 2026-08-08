@@ -109,6 +109,19 @@ Recorded characteristics:
 - Terminal NO DATA only after deliberate vehicle shutdown.
 - Cleanup changed semantics/UI but intentionally not scheduler timing.
 
+### V0.2.0 first real-vehicle session (regression found)
+
+```text
+RX400h_20260808_043828.zip
+```
+
+Recorded characteristics:
+
+- App `0.2.0`, decoder `rx400h-reactive-20260808-001`, scheduler `v020_reactive_core_candidate`.
+- ~2 min LIVE, 332 transactions, 41 frames, 0 logged errors, evidence complete.
+- Speed, RPM and derived ICE power were missing because `decodeStandard` aborted at PID `04` (engine load) before reaching PID `0C`/`0D`.
+- Fix: decoder version `rx400h-reactive-20260808-002` restores full standard-block PID skipping; regression test added.
+
 ---
 
 ## D. Bluetooth HCI / RFCOMM evidence

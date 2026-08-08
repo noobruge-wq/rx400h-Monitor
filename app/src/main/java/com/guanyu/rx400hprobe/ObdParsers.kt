@@ -1,7 +1,7 @@
 package com.guanyu.rx400hprobe
 
 object ObdParsers {
-    const val DECODER_VERSION = "rx400h-reactive-20260808-001"
+    const val DECODER_VERSION = "rx400h-reactive-20260808-002"
 
     private val canLine = Regex("^([0-9A-F]{3})([0-9A-F]{2,})$")
 
@@ -54,7 +54,12 @@ object ObdParsers {
         var coolant: Double? = null
         var rpm: Double? = null
         var speed: Double? = null
-        val sizes = mapOf(0x05 to 1, 0x0C to 2, 0x0D to 1)
+        // Keep the full standard-block size table so unknown-to-UI PIDs are
+        // skipped instead of aborting the parse before RPM/speed are reached.
+        val sizes = mapOf(
+            0x04 to 1, 0x05 to 1, 0x06 to 1, 0x07 to 1,
+            0x0C to 2, 0x0D to 1, 0x0E to 1, 0x10 to 2
+        )
         while (i < payload.size) {
             val pid = payload[i++]
             val size = sizes[pid] ?: break

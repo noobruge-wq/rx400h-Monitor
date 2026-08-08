@@ -373,3 +373,15 @@ Required durable documents:
 **Reason:** Most regressions should be testable without the vehicle; CI must catch parser/state regressions early.
 
 **Consequences:** JUnit becomes a test-only dependency; runtime dependencies remain unchanged.
+
+---
+
+## D-029 — Standard-block decoder must skip unknown PIDs, not abort
+
+**Status:** Accepted — 2026-08-08
+
+**Decision:** `decodeStandard` keeps the full PID size table for the standard OBD block so PIDs with no typed consumer (e.g. `04`, `0E`, `10`) are skipped, and parsing continues to later PIDs such as `0C` (RPM) and `0D` (speed).
+
+**Reason:** V0.2.0 consumer audit removed the typed fields but also removed their sizes from the parser, causing the loop to break on the first skipped PID and lose RPM/speed/ICE power in the `RX400h_20260808_043828` real-vehicle session.
+
+**Consequences:** Decoder version bumped to `rx400h-reactive-20260808-002`; regression test added.
