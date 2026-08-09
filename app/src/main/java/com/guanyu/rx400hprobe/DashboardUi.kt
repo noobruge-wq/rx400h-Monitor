@@ -51,14 +51,18 @@ internal class DashboardUi(
     private val valueColor = Color.rgb(125, 255, 175)
     private val dimColor = Color.rgb(95, 205, 175)
     private val titleColor = Color.rgb(70, 215, 210)
+    private val fontScale: Float
 
     init {
         val metrics = activity.resources.displayMetrics
         val widthDp = metrics.widthPixels / metrics.density
         val heightDp = metrics.heightPixels / metrics.density
         val isWide = widthDp >= 600f || widthDp > heightDp
-        val valueSp = 40f
-        val smallSp = 26f
+        // V0.3.0 v6 (D-037): fonts and control metrics scale with the screen's
+        // short side, normalized to the 720dp target head-unit reference.
+        fontScale = (minOf(widthDp, heightDp) / 720f).coerceAtLeast(0.5f)
+        val valueSp = 40f * fontScale
+        val smallSp = 26f * fontScale
 
         val rootLayout = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -71,14 +75,14 @@ internal class DashboardUi(
         }
         titleColumn.addView(TextView(activity).apply {
             text = "RX400h"
-            textSize = if (isWide) 30f else 26f
+            textSize = (if (isWide) 30f else 26f) * fontScale
             setTextColor(Color.rgb(125, 255, 175))
             typeface = android.graphics.Typeface.MONOSPACE
             maxLines = 1
         })
         titleColumn.addView(TextView(activity).apply {
             text = "MONITOR"
-            textSize = if (isWide) 17f else 15f
+            textSize = (if (isWide) 17f else 15f) * fontScale
             setTextColor(Color.rgb(110, 235, 205))
             typeface = android.graphics.Typeface.MONOSPACE
             maxLines = 1
@@ -87,7 +91,7 @@ internal class DashboardUi(
         val top = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp(72)
+            minimumHeight = dp((72f * fontScale).toInt())
             setPadding(0, dp(6), 0, dp(6))
         }
         top.addView(titleColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -118,14 +122,14 @@ internal class DashboardUi(
             gravity = Gravity.END
         }
         statusDeviceText = TextView(activity).apply {
-            textSize = if (isWide) 17f else 15f
+            textSize = (if (isWide) 17f else 15f) * fontScale
             setTextColor(Color.rgb(220, 235, 225))
             gravity = Gravity.END
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
         fun statusLine(): TextView = TextView(activity).apply {
-            textSize = if (isWide) 14f else 12f
+            textSize = (if (isWide) 14f else 12f) * fontScale
             setTextColor(Color.rgb(130, 160, 150))
             gravity = Gravity.END
             maxLines = 1
@@ -307,7 +311,7 @@ internal class DashboardUi(
         }
         addView(TextView(activity).apply {
             text = title
-            textSize = 28f
+            textSize = 28f * fontScale
             setTextColor(titleColor)
             typeface = android.graphics.Typeface.MONOSPACE
             gravity = Gravity.CENTER
@@ -326,18 +330,17 @@ internal class DashboardUi(
 
     private fun smallButton(label: String, action: () -> Unit, compact: Boolean): Button = Button(activity).apply {
         text = label
-        textSize = if (compact) 14f else 16f
-        minHeight = dp(64)
-        minimumHeight = dp(64)
-        minWidth = if (compact) dp(56) else dp(72)
-        minimumWidth = if (compact) dp(56) else dp(72)
+        textSize = (if (compact) 14f else 16f) * fontScale
+        val buttonHeight = dp((64f * fontScale).toInt())
+        minHeight = buttonHeight
+        minimumHeight = buttonHeight
+        val buttonWidth = dp(((if (compact) 56f else 72f) * fontScale).toInt())
+        minWidth = buttonWidth
+        minimumWidth = buttonWidth
         setOnClickListener { action() }
-        setPadding(
-            if (compact) dp(12) else dp(16),
-            if (compact) dp(8) else dp(10),
-            if (compact) dp(12) else dp(16),
-            if (compact) dp(8) else dp(10)
-        )
+        val padX = dp(((if (compact) 12f else 16f) * fontScale).toInt())
+        val padY = dp(((if (compact) 8f else 10f) * fontScale).toInt())
+        setPadding(padX, padY, padX, padY)
     }
 
     private fun separator(): View = View(activity).apply {

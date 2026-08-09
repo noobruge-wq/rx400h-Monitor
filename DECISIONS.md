@@ -469,3 +469,15 @@ Required durable documents:
 **Reason:** User feedback after v3/v4: the separate button row wasted vertical space on the head unit.
 
 **Consequences:** Replaces D-035's wide-screen button-row-below arrangement. Layout/presentation-only change on branch `v0.3.0`; no protocol, scheduler, signal or presentation-contract changes.
+
+---
+
+## D-037 — Screen-proportional typography and control metrics
+
+**Status:** Accepted — 2026-08-10
+
+**Decision:** Dashboard fonts and button/header metrics scale with the screen's short side, normalized to the 720dp target head-unit reference: `factor = min(widthDp, heightDp) / 720`, clamped to ≥ 0.5. All dashboard text (titles, labels, values, status lines, buttons) and button min sizes, padding and header minimum height use this factor.
+
+**Reason:** User feedback: fixed sp sizes do not adapt to different screens; the layout should occupy a consistent proportion of the screen regardless of device size/density.
+
+**Consequences:** On the 720dp target the factor is exactly 1.0, so v5 proportions are unchanged; smaller screens shrink proportionally and larger screens grow. Layout-only change on branch `v0.3.0`; no protocol, scheduler, signal or presentation-contract changes.
