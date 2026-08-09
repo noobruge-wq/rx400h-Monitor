@@ -48,6 +48,18 @@ SHA-256: f431dd0107b9c6bb807f37bf6c71e1d9d52ebc1261995659baaefad4af35c5f2
 
 Role: V0.2.0 Reactive Core implementation baseline (SignalStore, change-driven UI, consumer audit, performance observability, scheduler table). Idle Check has natural E1 + deterministic replay support; further natural observations are tracked in V0.3.0.
 
+### V0.2.1 UI adjustment
+
+```text
+Commit: 4872045177ec7cb91416a5bb007eb6952dd52290 (main)
+GitHub Actions run: 31308752139 — success
+Artifact: RX400hProtocolProbe-v0.2.1-ui-debug-signed
+APK SHA-256: 701ecb4e00706aba468940d47ff3145d6914fd5ce81e2655fb8f7c1e8b3859ca
+Unit tests: 17 passed
+```
+
+Role: head-unit UI adjustment after V0.2.0 closure — taller top bar, centered and enlarged control buttons. No protocol or scheduler changes.
+
 ---
 
 ## B. Void source

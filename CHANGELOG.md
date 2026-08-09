@@ -24,7 +24,9 @@ This changelog records engineering baselines, not every chat turn. Major-version
 
 ### Verification
 
-- Pending GitHub Actions signed-APK verification.
+- GitHub Actions run `31308752139` (HEAD `4872045`) completed **success**; 17 unit tests passed.
+- Artifact: `RX400hProtocolProbe-v0.2.1-ui-debug-signed`, APK SHA-256 `701ecb4e00706aba468940d47ff3145d6914fd5ce81e2655fb8f7c1e8b3859ca`.
+- `versionCode = 11`, `versionName = 0.2.1`; signed with the fixed project debug key.
 
 ---
 
