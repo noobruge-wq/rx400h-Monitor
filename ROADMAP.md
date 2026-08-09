@@ -64,6 +64,8 @@ A renderer can be replaced without modifying decoder/signal semantics, and every
 
 First merged items: responsive/adaptive UI (D-033…D-039) — window-size-driven layout with dynamic card columns, width-based header modes, vertical scrolling instead of text shrinking, Chinese centered domain titles, label/value lines, proportional typography, POWER order and the permanent gray 怠速检查. Layout-only; scheduler work below is the next phase.
 
+Scheduler phase in progress (D-040): deadline/priority scheduler core with backpressure implemented; rates still at V0.2.0 periods pending staged frequency tests.
+
 ### Carried from V0.2.0 (real-vehicle-only)
 
 - Continue natural Idle Check observations to strengthen eligibility equivalence.

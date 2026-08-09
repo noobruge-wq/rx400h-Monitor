@@ -26,6 +26,15 @@ This changelog records engineering baselines, not every chat turn. Major-version
 - Unit tests: added `ResponsiveLayoutTest` (column-count and row-plan coverage across phone/narrow/wide/ultra-wide widths); suite is now 19 tests.
 - Layout-only entry: no protocol, scheduler, signal or presentation-contract changes.
 
+### V0.3.0 scheduler phase — started 2026-08-10
+
+- Added `DeadlineScheduler` core (D-040): independent periods, priority/header-group ordering, deadline-based skip/backpressure (no catch-up storms), executions/deadline-miss/skip counters.
+- Added bounded `LatencyWindow` (P50/P95/P99) and scheduler metrics: request Hz, signal-publish Hz, NO DATA / TIMEOUT / BUS error counters appended to `performance.csv`.
+- `ProbeLogger`: `APP_VERSION = 0.3.0`, `SCHEDULER_PROFILE = v030_deadline_001`, `performance.csv` schema extended.
+- Live loop now executes due requests from the scheduler instead of the fixed `next*` timer cadence; per-request header switching is ordered to minimize `ATSH` changes.
+- Request/whitelist unchanged; rates stay at V0.2.0 periods until staged frequency tests.
+- `versionCode = 20`, candidate artifact `RX400hProtocolProbe-v0.3.0-scheduler-debug-signed`.
+
 ### Verification (2026-08-10)
 
 - Header v1 (HEAD `8cd2e00`): GitHub Actions run `31314095899` completed **success**; 17 unit tests passed; artifact `RX400hProtocolProbe-v0.3.0-ui-header-debug-signed`, APK SHA-256 `f94ae4aafb45e57bb254074541ebe44c37d934fc4de7dce327db3a7c218ba08c`.

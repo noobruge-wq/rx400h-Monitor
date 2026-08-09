@@ -16,14 +16,13 @@ import androidx.core.content.FileProvider
 import java.io.IOException
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 class MainActivity : Activity() {
     companion object {
         private const val REQUEST_DEVICE = 100
         private const val REQUEST_BLUETOOTH = 20
-        private const val HEADER_ENGINE = "7E0"
         private const val RESPONSE_ENGINE = "7E8"
-        private const val HEADER_HYBRID = "7E2"
         private const val RESPONSE_HYBRID = "7EA"
     }
 
@@ -36,6 +35,14 @@ class MainActivity : Activity() {
 
     private val busy = AtomicBoolean(false)
     private val liveMode = AtomicBoolean(false)
+    private val scheduler = DeadlineScheduler(
+        RequestTable.requests.map { ScheduledSpec(it.id, it.header, it.targetPeriodMs, it.priority) }
+    )
+    private val latencyWindow = LatencyWindow(64)
+    private val publishCounter = AtomicLong()
+    private val noDataCount = AtomicLong()
+    private val timeoutCount = AtomicLong()
+    private val busErrorCount = AtomicLong()
 
     private var deviceAddress: String? = null
     private var deviceName: String? = null
@@ -51,7 +58,6 @@ class MainActivity : Activity() {
     private var lastError = "NONE"
     @Volatile
     private var lastRenderDurationMs = 0L
-    private var lastPerfSampleMs = 0L
     private var lastLoggerWriteMs = 0L
     private var lastIdleCheckLogged: Boolean? = null
 
@@ -242,62 +248,44 @@ class MainActivity : Activity() {
     }
 
     private fun runLiveScheduler() {
-        logger.logConnection("LIVE_MODE_START cycle_target_ms=${RequestTable.CORE_CYCLE_MS} scheduler=${ProbeLogger.SCHEDULER_PROFILE}")
-        var nextCoolant = 0L
-        var nextVoltage = 0L
-        var nextCdF3 = 0L
-        var nextC4 = 0L
-        var nextCf = 0L
+        logger.logConnection("LIVE_MODE_START scheduler=${ProbeLogger.SCHEDULER_PROFILE}")
+        scheduler.reset(SystemClock.elapsedRealtime())
         var nextFrameLog = 0L
+        var lastMetricSampleMs = 0L
+        var lastExecutions = 0L
+        var lastPublish = 0L
+        val due = IntArray(RequestTable.requests.size)
 
         while (liveMode.get()) {
             if (!elm.isConnected()) {
                 if (!attemptReconnect()) break
-                nextCoolant = 0L
-                nextVoltage = 0L
-                nextCdF3 = 0L
-                nextC4 = 0L
-                nextCf = 0L
+                scheduler.reset(SystemClock.elapsedRealtime())
+                nextFrameLog = 0L
             }
             val cycleStart = SystemClock.elapsedRealtime()
             try {
                 store.refreshStaleStates(SystemClock.elapsedRealtime())
-                ensureHeader(HEADER_ENGINE)
-                pollStandardCore()
-                var now = SystemClock.elapsedRealtime()
-                if (now >= nextCoolant) {
-                    pollCoolantBlock()
-                    nextCoolant = now + RequestTable.period("coolant")
+                val now = SystemClock.elapsedRealtime()
+                val dueCount = scheduler.dueRequests(now, due)
+                for (i in 0 until dueCount) {
+                    val request = RequestTable.requests[due[i]]
+                    val requestStart = SystemClock.elapsedRealtime()
+                    val result = executeScheduled(request)
+                    latencyWindow.add(SystemClock.elapsedRealtime() - requestStart)
+                    when (result.status) {
+                        TransactionStatus.NO_DATA -> noDataCount.incrementAndGet()
+                        TransactionStatus.TIMEOUT -> timeoutCount.incrementAndGet()
+                        TransactionStatus.BUS_ERROR -> busErrorCount.incrementAndGet()
+                        else -> {}
+                    }
+                    scheduler.markExecuted(due[i], SystemClock.elapsedRealtime())
                 }
-                now = SystemClock.elapsedRealtime()
-                if (now >= nextCdF3) {
-                    pollCdF3()
-                    nextCdF3 = now + RequestTable.period("cd_f3")
-                }
-                now = SystemClock.elapsedRealtime()
-                if (now >= nextVoltage) {
-                    pollAdapterVoltage()
-                    nextVoltage = now + RequestTable.period("atrv")
-                }
-
-                ensureHeader(HEADER_HYBRID)
-                pollC3()
-                now = SystemClock.elapsedRealtime()
-                if (now >= nextC4) {
-                    pollC4()
-                    nextC4 = now + RequestTable.period("c4")
-                }
-                now = SystemClock.elapsedRealtime()
-                if (now >= nextCf) {
-                    pollCf()
-                    nextCf = now + RequestTable.period("cf")
-                }
-                now = SystemClock.elapsedRealtime()
-                if (now >= nextFrameLog) {
+                val nowAfter = SystemClock.elapsedRealtime()
+                if (nowAfter >= nextFrameLog) {
                     val logStart = SystemClock.elapsedRealtime()
                     logger.logFrame(baseline, hybrid)
                     lastLoggerWriteMs = SystemClock.elapsedRealtime() - logStart
-                    nextFrameLog = now + 1000L
+                    nextFrameLog = nowAfter + 1000L
                 }
                 updateIdleCheckState()
                 consecutiveErrors = 0
@@ -309,13 +297,29 @@ class MainActivity : Activity() {
             }
             val cycleDuration = SystemClock.elapsedRealtime() - cycleStart
             val nowAfterCycle = SystemClock.elapsedRealtime()
-            if (nowAfterCycle - lastPerfSampleMs >= 5000L) {
-                val sample = performanceTracker.sample(cycleDuration, lastRenderDurationMs, lastLoggerWriteMs)
-                logger.logPerformance(sample)
-                lastPerfSampleMs = nowAfterCycle
+            if (nowAfterCycle - lastMetricSampleMs >= 5000L) {
+                val deltaMs = (nowAfterCycle - lastMetricSampleMs).coerceAtLeast(1L)
+                val executions = scheduler.executions
+                val publish = publishCounter.get()
+                val metrics = PerformanceTracker.SchedulerMetrics(
+                    requestHz = (executions - lastExecutions) * 1000.0 / deltaMs,
+                    publishHz = (publish - lastPublish) * 1000.0 / deltaMs,
+                    deadlineMisses = scheduler.deadlineMisses,
+                    skippedOverdue = scheduler.skippedOverdue,
+                    latencyP50Ms = latencyWindow.percentile(0.50),
+                    latencyP95Ms = latencyWindow.percentile(0.95),
+                    latencyP99Ms = latencyWindow.percentile(0.99),
+                    noData = noDataCount.get(),
+                    timeout = timeoutCount.get(),
+                    busError = busErrorCount.get()
+                )
+                logger.logPerformance(performanceTracker.sample(cycleDuration, lastRenderDurationMs, lastLoggerWriteMs, metrics))
+                lastMetricSampleMs = nowAfterCycle
+                lastExecutions = executions
+                lastPublish = publish
             }
-            val remaining = RequestTable.CORE_CYCLE_MS - cycleDuration
-            if (remaining > 0L) Thread.sleep(remaining)
+            val wakeMs = scheduler.nextWakeMs(SystemClock.elapsedRealtime())
+            Thread.sleep((wakeMs - SystemClock.elapsedRealtime()).coerceIn(5L, 250L))
         }
         logger.logConnection("LIVE_MODE_STOP")
         logger.logEvent("LIVE_STOP")
@@ -329,92 +333,77 @@ class MainActivity : Activity() {
         currentHeader = header
     }
 
-    private fun sendData(spec: ScheduledRequest): CommandResult {
-        val result = elm.command(spec.command, spec.timeoutMs, spec.minimumGapMs, spec.quietWindowMs, spec.preDrainMs)
-        record(spec.header, result)
+    private fun executeScheduled(request: ScheduledRequest): CommandResult {
+        request.header?.let { ensureHeader(it) }
+        val result = elm.command(request.command, request.timeoutMs, request.minimumGapMs, request.quietWindowMs, request.preDrainMs)
+        record(request.header, result)
         if (result.status == TransactionStatus.TIMEOUT || result.status == TransactionStatus.BUS_ERROR) {
-            throw IOException("${spec.header} ${spec.command} ${result.status}")
+            throw IOException("${request.header} ${request.command} ${result.status}")
         }
+        decodeScheduled(request, result)
         return result
     }
 
-    private fun pollStandardCore() {
-        val spec = RequestTable.spec("std_core")
-        val result = sendData(spec)
-        val decoded = ObdParsers.decodeStandard(result.rawLines, RESPONSE_ENGINE)
-        if (decoded == null) {
-            markDecodeFailure(listOf(baseline.rpm, baseline.speedKph), spec.command, result)
-            return
+    private fun decodeScheduled(request: ScheduledRequest, result: CommandResult) {
+        when (request.id) {
+            "std_core" -> {
+                val decoded = ObdParsers.decodeStandard(result.rawLines, RESPONSE_ENGINE)
+                if (decoded == null) {
+                    markDecodeFailure(listOf(baseline.rpm, baseline.speedKph), request.command, result)
+                    return
+                }
+                applyStandard(request.command, result, decoded)
+            }
+            "coolant" -> {
+                val decoded = ObdParsers.decodeStandard(result.rawLines, RESPONSE_ENGINE)
+                updateSignal(baseline.coolantC, decoded?.coolantC, request.command, result)
+                decoded?.coolantC?.let {
+                    logger.logDecoded("coolant_c", it, "C", request.command, payloadHex(result, RESPONSE_ENGINE), ObdParsers.DECODER_VERSION)
+                }
+            }
+            "cd_f3" -> {
+                val decoded = ObdParsers.decode21CdF3(result.rawLines)
+                if (decoded == null) {
+                    markDecodeFailure(listOf(hybrid.iceTorqueNm), request.command, result)
+                    return
+                }
+                updateSignal(hybrid.iceTorqueNm, decoded.iceTorqueNm, request.command, result)
+                logger.logDecoded("ice_torque_nm", decoded.iceTorqueNm, "Nm", request.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+            }
+            "c3" -> {
+                val decoded = ObdParsers.decode21C3(result.rawLines)
+                if (decoded == null) {
+                    markDecodeFailure(listOf(hybrid.socPct, hybrid.hvVoltageV, hybrid.hvCurrentA, hybrid.hvPowerKw), request.command, result)
+                    return
+                }
+                applyC3(request.command, result, decoded)
+            }
+            "c4" -> {
+                val decoded = ObdParsers.decode21C4(result.rawLines)
+                if (decoded == null) {
+                    markDecodeFailure(listOf(hybrid.warmupActive), request.command, result)
+                    return
+                }
+                updateSignal(hybrid.warmupActive, decoded.warmupActive, request.command, result)
+                logger.logDecoded("warmup_active", decoded.warmupActive, null, request.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+            }
+            "cf" -> {
+                val decoded = ObdParsers.decode21CF(result.rawLines)
+                if (decoded == null) {
+                    markDecodeFailure(listOf(hybrid.batteryTempsC, hybrid.batteryTempMinC, hybrid.batteryTempMaxC, hybrid.batteryTempAvgC), request.command, result)
+                    return
+                }
+                updateSignal(hybrid.batteryTempsC, decoded.batteryTempsC, request.command, result)
+                updateSignal(hybrid.batteryTempMinC, decoded.batteryTempMinC, request.command, result)
+                updateSignal(hybrid.batteryTempMaxC, decoded.batteryTempMaxC, request.command, result)
+                updateSignal(hybrid.batteryTempAvgC, decoded.batteryTempAvgC, request.command, result)
+                logger.logDecoded("battery_temps_c", decoded.batteryTempsC, "C", request.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+                logger.logDecoded("battery_temp_min_c", decoded.batteryTempMinC, "C", request.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+                logger.logDecoded("battery_temp_max_c", decoded.batteryTempMaxC, "C", request.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+                logger.logDecoded("battery_temp_avg_c", decoded.batteryTempAvgC, "C", request.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+            }
+            "atrv" -> updateAdapterVoltage(result)
         }
-        applyStandard(spec.command, result, decoded)
-    }
-
-    private fun pollCoolantBlock() {
-        val spec = RequestTable.spec("coolant")
-        val result = sendData(spec)
-        val decoded = ObdParsers.decodeStandard(result.rawLines, RESPONSE_ENGINE)
-        updateSignal(baseline.coolantC, decoded?.coolantC, spec.command, result)
-        decoded?.coolantC?.let { logger.logDecoded("coolant_c", it, "C", spec.command, payloadHex(result, RESPONSE_ENGINE), ObdParsers.DECODER_VERSION) }
-    }
-
-    private fun pollAdapterVoltage() {
-        val spec = RequestTable.spec("atrv")
-        val result = elm.command(spec.command, spec.timeoutMs, spec.minimumGapMs, spec.quietWindowMs, spec.preDrainMs)
-        record(null, result)
-        updateAdapterVoltage(result)
-    }
-
-    private fun pollCdF3() {
-        val spec = RequestTable.spec("cd_f3")
-        val result = sendData(spec)
-        val decoded = ObdParsers.decode21CdF3(result.rawLines)
-        if (decoded == null) {
-            markDecodeFailure(listOf(hybrid.iceTorqueNm), spec.command, result)
-            return
-        }
-        updateSignal(hybrid.iceTorqueNm, decoded.iceTorqueNm, spec.command, result)
-        logger.logDecoded("ice_torque_nm", decoded.iceTorqueNm, "Nm", spec.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
-    }
-
-    private fun pollC3() {
-        val spec = RequestTable.spec("c3")
-        val result = sendData(spec)
-        val decoded = ObdParsers.decode21C3(result.rawLines)
-        if (decoded == null) {
-            markDecodeFailure(listOf(hybrid.socPct, hybrid.hvVoltageV, hybrid.hvCurrentA, hybrid.hvPowerKw), spec.command, result)
-            return
-        }
-        applyC3(spec.command, result, decoded)
-    }
-
-    private fun pollC4() {
-        val spec = RequestTable.spec("c4")
-        val result = sendData(spec)
-        val decoded = ObdParsers.decode21C4(result.rawLines)
-        if (decoded == null) {
-            markDecodeFailure(listOf(hybrid.warmupActive), spec.command, result)
-            return
-        }
-        updateSignal(hybrid.warmupActive, decoded.warmupActive, spec.command, result)
-        logger.logDecoded("warmup_active", decoded.warmupActive, null, spec.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
-    }
-
-    private fun pollCf() {
-        val spec = RequestTable.spec("cf")
-        val result = sendData(spec)
-        val decoded = ObdParsers.decode21CF(result.rawLines)
-        if (decoded == null) {
-            markDecodeFailure(listOf(hybrid.batteryTempsC, hybrid.batteryTempMinC, hybrid.batteryTempMaxC, hybrid.batteryTempAvgC), spec.command, result)
-            return
-        }
-        updateSignal(hybrid.batteryTempsC, decoded.batteryTempsC, spec.command, result)
-        updateSignal(hybrid.batteryTempMinC, decoded.batteryTempMinC, spec.command, result)
-        updateSignal(hybrid.batteryTempMaxC, decoded.batteryTempMaxC, spec.command, result)
-        updateSignal(hybrid.batteryTempAvgC, decoded.batteryTempAvgC, spec.command, result)
-        logger.logDecoded("battery_temps_c", decoded.batteryTempsC, "C", spec.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
-        logger.logDecoded("battery_temp_min_c", decoded.batteryTempMinC, "C", spec.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
-        logger.logDecoded("battery_temp_max_c", decoded.batteryTempMaxC, "C", spec.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
-        logger.logDecoded("battery_temp_avg_c", decoded.batteryTempAvgC, "C", spec.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
     }
 
     private fun applyStandard(command: String, result: CommandResult, decoded: StandardDecoded) {
@@ -444,6 +433,7 @@ class MainActivity : Activity() {
 
     private fun <T> updateSignal(signal: SignalValue<T>, value: T?, command: String, result: CommandResult) {
         store.update(signal, value, command, result)
+        publishCounter.incrementAndGet()
     }
 
     private fun markDecodeFailure(signals: List<SignalValue<*>>, command: String, result: CommandResult) {

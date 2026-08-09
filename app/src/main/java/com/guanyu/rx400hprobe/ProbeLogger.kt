@@ -23,9 +23,9 @@ enum class SessionState { IDLE, ACTIVE, FINALIZING, FINALIZED, FINALIZE_FAILED }
 
 class ProbeLogger(private val context: Context) {
     companion object {
-        const val APP_VERSION = "0.2.1"
+        const val APP_VERSION = "0.3.0"
         const val PROFILE_VERSION = "rx400h_ha_hci_20260805_002"
-        const val SCHEDULER_PROFILE = "v020_reactive_core_candidate"
+        const val SCHEDULER_PROFILE = "v030_deadline_001"
     }
 
     private val root: File = (context.getExternalFilesDir(null) ?: context.filesDir).resolve("probe_sessions")
@@ -97,7 +97,9 @@ class ProbeLogger(private val context: Context) {
         performanceWriter = writer(dir, "performance.csv").also {
             it.write(
                 "timestamp_iso,elapsed_ms,pss_kb,java_heap_used_kb,java_heap_total_kb," +
-                    "cpu_delta_ms,alloc_delta,freed_delta,cycle_ms,render_ms,logger_write_ms\n"
+                    "cpu_delta_ms,alloc_delta,freed_delta,cycle_ms,render_ms,logger_write_ms," +
+                    "request_hz,publish_hz,deadline_misses,skipped_overdue," +
+                    "latency_p50_ms,latency_p95_ms,latency_p99_ms,no_data,timeout,bus_error\n"
             )
         }
 
@@ -223,7 +225,9 @@ class ProbeLogger(private val context: Context) {
         safeWrite("performance.csv") { performanceWriter?.apply {
             write(
                 "${sample.wallTimeIso},${sample.elapsedMs},${sample.pssKb},${sample.javaHeapUsedKb},${sample.javaHeapTotalKb}," +
-                    "${sample.cpuDeltaMs},${sample.allocDelta},${sample.freedDelta},${sample.cycleMs},${sample.renderMs},${sample.loggerWriteMs}\n"
+                    "${sample.cpuDeltaMs},${sample.allocDelta},${sample.freedDelta},${sample.cycleMs},${sample.renderMs},${sample.loggerWriteMs}," +
+                    "${sample.requestHz},${sample.publishHz},${sample.deadlineMisses},${sample.skippedOverdue}," +
+                    "${sample.latencyP50Ms},${sample.latencyP95Ms},${sample.latencyP99Ms},${sample.noData},${sample.timeout},${sample.busError}\n"
             )
             flush()
         } }

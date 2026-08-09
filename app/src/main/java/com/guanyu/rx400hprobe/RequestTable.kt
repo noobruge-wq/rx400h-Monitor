@@ -1,11 +1,11 @@
 package com.guanyu.rx400hprobe
 
 /**
- * V0.2.0 fixed request table.
+ * V0.3.0 fixed request table.
  *
  * Describes the whitelist with target periods and priorities so V0.3.0 can
- * implement deadline/priority scheduling. V0.2.0 deliberately keeps the
- * V0.1.10 polling periods unchanged.
+ * implement deadline/priority scheduling. Periods stay at the V0.1.10/V0.2.0
+ * values until staged frequency tests provide evidence to change them.
  */
 enum class RequestPriority { FAST, MEDIUM, SLOW, ADAPTER }
 
@@ -22,8 +22,6 @@ data class ScheduledRequest(
 )
 
 object RequestTable {
-    const val CORE_CYCLE_MS = 800L
-
     val requests: List<ScheduledRequest> = listOf(
         ScheduledRequest("std_core", "7E0", "01040C0D0E10 2", 800L, RequestPriority.FAST),
         ScheduledRequest("cd_f3", "7E0", "21CDF3 3", 1000L, RequestPriority.FAST),
@@ -33,8 +31,4 @@ object RequestTable {
         ScheduledRequest("cf", "7E2", "21CF 4", 5000L, RequestPriority.SLOW, timeoutMs = 6000L),
         ScheduledRequest("atrv", null, "ATRV", 3000L, RequestPriority.ADAPTER, timeoutMs = 4000L)
     )
-
-    fun period(id: String): Long = requests.first { it.id == id }.targetPeriodMs
-
-    fun spec(id: String): ScheduledRequest = requests.first { it.id == id }
 }

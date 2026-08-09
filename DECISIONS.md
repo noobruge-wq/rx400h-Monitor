@@ -505,3 +505,15 @@ Required durable documents:
 **Reason:** User requirement: the UI must be size-independent, reflow rather than scale, keep critical data readable, never clip or overlap, and shrink text only as the last resort.
 
 **Consequences:** Layout is derived from the current window at build time and live-resize time; column/row math is unit-tested in `ResponsiveLayoutTest`. On the 720dp target the factor remains 1.0. Layout-only change on branch `v0.3.0`; no protocol, scheduler, signal or presentation-contract changes.
+
+---
+
+## D-040 — V0.3.0 deadline/priority scheduler with backpressure
+
+**Status:** Accepted — 2026-08-10
+
+**Decision:** Replace the fixed whole-frame cadence with a `DeadlineScheduler`. Each whitelist request keeps an independent target period, priority and deadline; due requests are selected every loop and ordered to minimize ELM header switches (7E0 group → 7E2 group → adapter). A request overdue past its deadline is skipped for that cycle and its next slot is re-based on now, so there is never a catch-up request avalanche. The scheduler tracks executions, deadline misses, skips and a bounded latency window (P50/P95/P99); the live loop samples request Hz, signal-publish Hz and NO DATA/TIMEOUT/BUS error counters into `performance.csv` every ~5 s. Fast/slow rates remain the V0.2.0 periods until staged frequency tests provide evidence.
+
+**Reason:** ROADMAP V0.3.0 requires independent deadline/priority scheduling and backpressure (D-011/D-015) before any frequency increase; the old `next*` timer loop is a whole-frame cadence with no skip policy.
+
+**Consequences:** Scheduler profile becomes `v030_deadline_001`; `performance.csv` gains scheduler columns; `DeadlineScheduler` and `LatencyWindow` are pure, unit-tested code. No request/whitelist changes; rates stay at V0.2.0 values until the staged ladder tests.

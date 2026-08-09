@@ -13,6 +13,19 @@ import java.time.Instant
  * UI render duration and logger write duration.
  */
 class PerformanceTracker {
+    data class SchedulerMetrics(
+        val requestHz: Double,
+        val publishHz: Double,
+        val deadlineMisses: Long,
+        val skippedOverdue: Long,
+        val latencyP50Ms: Long,
+        val latencyP95Ms: Long,
+        val latencyP99Ms: Long,
+        val noData: Long,
+        val timeout: Long,
+        val busError: Long
+    )
+
     data class Sample(
         val wallTimeIso: String,
         val elapsedMs: Long,
@@ -24,14 +37,24 @@ class PerformanceTracker {
         val freedDelta: Long,
         val cycleMs: Long,
         val renderMs: Long,
-        val loggerWriteMs: Long
+        val loggerWriteMs: Long,
+        val requestHz: Double,
+        val publishHz: Double,
+        val deadlineMisses: Long,
+        val skippedOverdue: Long,
+        val latencyP50Ms: Long,
+        val latencyP95Ms: Long,
+        val latencyP99Ms: Long,
+        val noData: Long,
+        val timeout: Long,
+        val busError: Long
     )
 
     private var lastCpuMs: Long = Process.getElapsedCpuTime()
     private var lastAllocCount: Long = Debug.getGlobalAllocCount().toLong()
     private var lastFreedCount: Long = Debug.getGlobalFreedCount().toLong()
 
-    fun sample(cycleMs: Long, renderMs: Long, loggerWriteMs: Long): Sample {
+    fun sample(cycleMs: Long, renderMs: Long, loggerWriteMs: Long, scheduler: SchedulerMetrics): Sample {
         val now = SystemClock.elapsedRealtime()
         val cpu = Process.getElapsedCpuTime()
         val alloc = Debug.getGlobalAllocCount().toLong()
@@ -48,7 +71,17 @@ class PerformanceTracker {
             freedDelta = (freed - lastFreedCount).coerceAtLeast(0L),
             cycleMs = cycleMs,
             renderMs = renderMs,
-            loggerWriteMs = loggerWriteMs
+            loggerWriteMs = loggerWriteMs,
+            requestHz = scheduler.requestHz,
+            publishHz = scheduler.publishHz,
+            deadlineMisses = scheduler.deadlineMisses,
+            skippedOverdue = scheduler.skippedOverdue,
+            latencyP50Ms = scheduler.latencyP50Ms,
+            latencyP95Ms = scheduler.latencyP95Ms,
+            latencyP99Ms = scheduler.latencyP99Ms,
+            noData = scheduler.noData,
+            timeout = scheduler.timeout,
+            busError = scheduler.busError
         )
         lastCpuMs = cpu
         lastAllocCount = alloc
