@@ -156,6 +156,18 @@ Unit tests: 19 passed (incl. ResponsiveLayoutTest)
 
 Role: size-independent responsive/adaptive UI (D-039) — window-size-driven dynamic card columns (240dp min, max 3), width-based header mode, vertical scroll instead of text shrinking, live resize re-layout by bucket. Layout-only; visual pass at multiple window sizes is pending user device testing.
 
+### V0.3.0 scheduler core candidate (branch v0.3.0)
+
+```text
+Commit: fd3024011fd2d6566d42093a68cd3f9e9ffbe5d3 (v0.3.0)
+GitHub Actions run: 31320500825 — success
+Artifact: RX400hProtocolProbe-v0.3.0-scheduler-debug-signed
+APK SHA-256: 8cde4227cdc1fd45efa7f133c152b1664678bd95f9b714f023ca28ab194019fe
+Unit tests: 26 passed (incl. DeadlineSchedulerTest + LatencyWindow)
+```
+
+Role: V0.3.0 scheduler phase first candidate (D-040) — `DeadlineScheduler` (independent periods, priority/header order, deadline skip/backpressure), `LatencyWindow` P50/P95/P99, scheduler columns in `performance.csv`, `SCHEDULER_PROFILE = v030_deadline_001`. Rates still at V0.2.0 periods; real-vehicle ladder tests pending.
+
 ---
 
 ## B. Void source
