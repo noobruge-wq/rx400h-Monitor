@@ -36,14 +36,16 @@ Role: phone-first/GitHub Actions package using the fixed debug-signing workflow.
 ### V0.2.0 Reactive Core source
 
 ```text
-Commit: a0ee1a9bd333adf64cc7e7449fd148094e4ce33d (main)
-GitHub Actions run: 31194615369 — success
+Baseline: V0.2.0 (closed 2026-08-09), tag v0.2.0
+GitHub Actions run: 31298592420 — success (decoder 002 final)
 Artifact: RX400hProtocolProbe-v0.2.0-reactive-debug-signed
-APK SHA-256: f1c87bda96d1b4238488627300c40343768e809d251fbf154d41fd846960aa3e
-Unit tests: 15 passed
+APK SHA-256: 133954f819931ffe8a98a8acee82178e86f0b50d2cd7e6cd03a58afb410c32ed
+Unit tests: 17 passed
+Source snapshot: RX400hProtocolProbe_v0.2.0_source.zip
+SHA-256: f431dd0107b9c6bb807f37bf6c71e1d9d52ebc1261995659baaefad4af35c5f2
 ```
 
-Role: V0.2.0 Reactive Core implementation baseline (SignalStore, change-driven UI, consumer audit, performance observability, scheduler table). Idle Check state is experimental until replay/natural real-vehicle validation.
+Role: V0.2.0 Reactive Core implementation baseline (SignalStore, change-driven UI, consumer audit, performance observability, scheduler table). Idle Check has natural E1 + deterministic replay support; further natural observations are tracked in V0.3.0.
 
 ---
 
@@ -126,6 +128,7 @@ Recorded characteristics:
 
 ```text
 RX400h_20260808_234255.zip
+SHA-256: f46f716d9cefdcec58edd9f7afd91dc45d255fe29b37bab64b175173dc3d655a
 ```
 
 - Device: Samsung SM-F946B (Galaxy Z Fold5), Android 16 / API 36, portrait.
@@ -138,6 +141,7 @@ RX400h_20260808_234255.zip
 
 ```text
 RX400h_20260809_045711.zip
+SHA-256: e6b0478f85d4d5bb2f24408fcacf94c0144d7c221a16b65be21c4047d12406ec
 ```
 
 - Device: Spreadtrum sp7731e head unit, Android 8.1 / API 27, landscape 1280×720.

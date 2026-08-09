@@ -1,8 +1,8 @@
 # RX400h Monitor — PROJECT_STATE
 
-**Baseline date:** 2026-08-08<br>
-**Current engineering baseline:** V0.2.0 — Reactive Core (in development)<br>
-**Last validated engineering baseline:** V0.1.10 cleanup / real-vehicle validated branch<br>
+**Baseline date:** 2026-08-09<br>
+**Current engineering baseline:** V0.2.0 — Reactive Core (closed 2026-08-09)<br>
+**Historical validated engineering baseline:** V0.1.10 cleanup / real-vehicle validated branch<br>
 **Next major milestone:** V0.3.0 — High-Performance Scheduler / Refresh Frontier
 **Repository:** `noobruge-wq/rx400h-Monitor`
 
@@ -354,7 +354,7 @@ Only questions that genuinely require the vehicle should consume real-vehicle te
 
 ## 14. Next milestone — V0.2.0 Reactive Core
 
-**Status: implementation complete — 2026-08-08.** Unit tests (15) and the CI-signed APK build pass. Idle Check eligibility remains experimental pending replay/natural real-vehicle validation. V0.1.10 remains the last real-vehicle-validated baseline until normal-driving regression accumulates.
+**Status: closed — 2026-08-09.** Unit tests (17), the CI-signed APK build, and phone + head-unit real-vehicle sessions pass. The first natural Idle Check capture is recorded. V0.1.10 remains the historical real-vehicle-validated baseline; V0.2.0 is the current engineering baseline.
 
 V0.2.0 target:
 
@@ -388,7 +388,7 @@ Read in this order:
 Then verify:
 
 ```text
-Current baseline = V0.2.0 (in development; last validated = V0.1.10)
+Current baseline = V0.2.0 (closed 2026-08-09; historical validated baseline = V0.1.10)
 V0.1.9 = VOID
 Next major milestone = V0.3.0 High-Performance Scheduler
 Protocol whitelist unchanged unless new evidence explicitly says otherwise
@@ -469,9 +469,9 @@ A new Codex session is considered successfully migrated when it can:
 
 ---
 
-## 18. V0.2.0 status — 2026-08-09
+## 18. V0.2.0 closure — 2026-08-09
 
-Implementation is complete and verified by GitHub Actions (`a0ee1a9`, run `31194615369`, success):
+Closed as the current engineering baseline. Implementation is complete and verified by GitHub Actions (`a0ee1a9`, run `31194615369`, success):
 
 1. Docs-first migration closure: install Codex handoff documents and refresh baseline manifest.
 2. Lightweight typed `SignalStore` with value/source timestamp/update timestamp/age/quality/version/source.
@@ -490,3 +490,5 @@ Real-vehicle validation status (decoder `002`):
 - Decoder regression fix (`0478756`) is included; CI signed build passed.
 
 The V0.2.0 exit gate remains: renderer replacement requires no Decoder/SignalStore semantic changes, and every typed Runtime field has a documented consumer.
+
+Remaining real-vehicle-only items are tracked in V0.3.0: more natural Idle Check observations, long-session memory trend on the target head unit, and high-refresh ladder testing.

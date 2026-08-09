@@ -35,4 +35,6 @@ object RequestTable {
     )
 
     fun period(id: String): Long = requests.first { it.id == id }.targetPeriodMs
+
+    fun spec(id: String): ScheduledRequest = requests.first { it.id == id }
 }

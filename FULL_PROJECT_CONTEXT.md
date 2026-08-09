@@ -4,7 +4,7 @@
 **Purpose:** one-file technical digest of the long ChatGPT project history.<br>
 **Authority:** if this file conflicts with newer canonical repository documents or newer verified evidence, the newer repository state wins.
 
-**Update 2026-08-08:** V0.2.0 Reactive Core is in progress; `PROJECT_STATE.md`, `DECISIONS.md`, `ROADMAP.md` and `CHANGELOG.md` are authoritative for current status.
+**Update 2026-08-09:** V0.2.0 Reactive Core is closed (2026-08-09); `PROJECT_STATE.md`, `DECISIONS.md`, `ROADMAP.md` and `CHANGELOG.md` are authoritative for current status.
 
 ## A. Project identity and engineering philosophy
 

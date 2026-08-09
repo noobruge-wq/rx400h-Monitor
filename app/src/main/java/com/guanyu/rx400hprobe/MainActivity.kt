@@ -309,91 +309,92 @@ class MainActivity : Activity() {
         currentHeader = header
     }
 
-    private fun sendData(header: String, command: String, timeoutMs: Long): CommandResult {
-        val result = elm.command(command, timeoutMs, 120, 80)
-        record(header, result)
+    private fun sendData(spec: ScheduledRequest): CommandResult {
+        val result = elm.command(spec.command, spec.timeoutMs, spec.minimumGapMs, spec.quietWindowMs, spec.preDrainMs)
+        record(spec.header, result)
         if (result.status == TransactionStatus.TIMEOUT || result.status == TransactionStatus.BUS_ERROR) {
-            throw IOException("$header $command ${result.status}")
+            throw IOException("${spec.header} ${spec.command} ${result.status}")
         }
         return result
     }
 
     private fun pollStandardCore() {
-        val command = "01040C0D0E10 2"
-        val result = sendData(HEADER_ENGINE, command, 5000)
+        val spec = RequestTable.spec("std_core")
+        val result = sendData(spec)
         val decoded = ObdParsers.decodeStandard(result.rawLines, RESPONSE_ENGINE)
         if (decoded == null) {
-            markDecodeFailure(listOf(baseline.rpm, baseline.speedKph), command, result)
+            markDecodeFailure(listOf(baseline.rpm, baseline.speedKph), spec.command, result)
             return
         }
-        applyStandard(command, result, decoded)
+        applyStandard(spec.command, result, decoded)
     }
 
     private fun pollCoolantBlock() {
-        val command = "01050607 1"
-        val result = sendData(HEADER_ENGINE, command, 5000)
+        val spec = RequestTable.spec("coolant")
+        val result = sendData(spec)
         val decoded = ObdParsers.decodeStandard(result.rawLines, RESPONSE_ENGINE)
-        updateSignal(baseline.coolantC, decoded?.coolantC, command, result)
-        decoded?.coolantC?.let { logger.logDecoded("coolant_c", it, "C", command, payloadHex(result, RESPONSE_ENGINE), ObdParsers.DECODER_VERSION) }
+        updateSignal(baseline.coolantC, decoded?.coolantC, spec.command, result)
+        decoded?.coolantC?.let { logger.logDecoded("coolant_c", it, "C", spec.command, payloadHex(result, RESPONSE_ENGINE), ObdParsers.DECODER_VERSION) }
     }
 
     private fun pollAdapterVoltage() {
-        val result = elm.command("ATRV", 4000, 120, 80)
+        val spec = RequestTable.spec("atrv")
+        val result = elm.command(spec.command, spec.timeoutMs, spec.minimumGapMs, spec.quietWindowMs, spec.preDrainMs)
         record(null, result)
         updateAdapterVoltage(result)
     }
 
     private fun pollCdF3() {
-        val command = "21CDF3 3"
-        val result = sendData(HEADER_ENGINE, command, 5000)
+        val spec = RequestTable.spec("cd_f3")
+        val result = sendData(spec)
         val decoded = ObdParsers.decode21CdF3(result.rawLines)
         if (decoded == null) {
-            markDecodeFailure(listOf(hybrid.iceTorqueNm), command, result)
+            markDecodeFailure(listOf(hybrid.iceTorqueNm), spec.command, result)
             return
         }
-        updateSignal(hybrid.iceTorqueNm, decoded.iceTorqueNm, command, result)
-        logger.logDecoded("ice_torque_nm", decoded.iceTorqueNm, "Nm", command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+        updateSignal(hybrid.iceTorqueNm, decoded.iceTorqueNm, spec.command, result)
+        logger.logDecoded("ice_torque_nm", decoded.iceTorqueNm, "Nm", spec.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
     }
 
     private fun pollC3() {
-        val command = "21C3 6"
-        val result = sendData(HEADER_HYBRID, command, 6000)
+        val spec = RequestTable.spec("c3")
+        val result = sendData(spec)
         val decoded = ObdParsers.decode21C3(result.rawLines)
         if (decoded == null) {
-            markDecodeFailure(listOf(hybrid.socPct, hybrid.hvVoltageV, hybrid.hvCurrentA, hybrid.hvPowerKw), command, result)
+            markDecodeFailure(listOf(hybrid.socPct, hybrid.hvVoltageV, hybrid.hvCurrentA, hybrid.hvPowerKw), spec.command, result)
             return
         }
-        applyC3(command, result, decoded)
+        applyC3(spec.command, result, decoded)
     }
 
     private fun pollC4() {
-        val command = "21C4 5"
-        val result = sendData(HEADER_HYBRID, command, 6000)
+        val spec = RequestTable.spec("c4")
+        val result = sendData(spec)
         val decoded = ObdParsers.decode21C4(result.rawLines)
         if (decoded == null) {
-            markDecodeFailure(listOf(hybrid.warmupActive), command, result)
+            markDecodeFailure(listOf(hybrid.warmupActive), spec.command, result)
             return
         }
-        updateSignal(hybrid.warmupActive, decoded.warmupActive, command, result)
-        logger.logDecoded("warmup_active", decoded.warmupActive, null, command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+        updateSignal(hybrid.warmupActive, decoded.warmupActive, spec.command, result)
+        logger.logDecoded("warmup_active", decoded.warmupActive, null, spec.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
     }
 
     private fun pollCf() {
-        val command = "21CF 4"
-        val result = sendData(HEADER_HYBRID, command, 6000)
+        val spec = RequestTable.spec("cf")
+        val result = sendData(spec)
         val decoded = ObdParsers.decode21CF(result.rawLines)
         if (decoded == null) {
-            markDecodeFailure(listOf(hybrid.batteryTempsC, hybrid.batteryTempMinC, hybrid.batteryTempMaxC, hybrid.batteryTempAvgC), command, result)
+            markDecodeFailure(listOf(hybrid.batteryTempsC, hybrid.batteryTempMinC, hybrid.batteryTempMaxC, hybrid.batteryTempAvgC), spec.command, result)
             return
         }
-        updateSignal(hybrid.batteryTempsC, decoded.batteryTempsC, command, result)
-        updateSignal(hybrid.batteryTempMinC, decoded.batteryTempMinC, command, result)
-        updateSignal(hybrid.batteryTempMaxC, decoded.batteryTempMaxC, command, result)
-        updateSignal(hybrid.batteryTempAvgC, decoded.batteryTempAvgC, command, result)
-        logger.logDecoded("battery_temps_c", decoded.batteryTempsC, "C", command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
-        logger.logDecoded("battery_temp_min_c", decoded.batteryTempMinC, "C", command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
-        logger.logDecoded("battery_temp_max_c", decoded.batteryTempMaxC, "C", command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
-        logger.logDecoded("battery_temp_avg_c", decoded.batteryTempAvgC, "C", command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+        updateSignal(hybrid.batteryTempsC, decoded.batteryTempsC, spec.command, result)
+        updateSignal(hybrid.batteryTempMinC, decoded.batteryTempMinC, spec.command, result)
+        updateSignal(hybrid.batteryTempMaxC, decoded.batteryTempMaxC, spec.command, result)
+        updateSignal(hybrid.batteryTempAvgC, decoded.batteryTempAvgC, spec.command, result)
+        logger.logDecoded("battery_temps_c", decoded.batteryTempsC, "C", spec.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+        logger.logDecoded("battery_temp_min_c", decoded.batteryTempMinC, "C", spec.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+        logger.logDecoded("battery_temp_max_c", decoded.batteryTempMaxC, "C", spec.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+        logger.logDecoded("battery_temp_avg_c", decoded.batteryTempAvgC, "C", spec.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
     }
 
     private fun applyStandard(command: String, result: CommandResult, decoded: StandardDecoded) {

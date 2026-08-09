@@ -385,3 +385,15 @@ Required durable documents:
 **Reason:** V0.2.0 consumer audit removed the typed fields but also removed their sizes from the parser, causing the loop to break on the first skipped PID and lose RPM/speed/ICE power in the `RX400h_20260808_043828` real-vehicle session.
 
 **Consequences:** Decoder version bumped to `rx400h-reactive-20260808-002`; regression test added.
+
+---
+
+## D-030 — V0.2.0 closure and audit results
+
+**Status:** Accepted — 2026-08-09
+
+**Decision:** V0.2.0 closes as the current engineering baseline. Closure audits completed: dead-code (removed unused `SignalStore.revision`), consumer traceability, dependency, duplicate-state/cache, and hot-path allocation review (optimization deferred to V0.3.0 with measurements). Real-vehicle-only items move to V0.3.0.
+
+**Reason:** Exit gate is met, CI signed build passes, and two natural real-vehicle sessions (phone + target head unit) ran with 0 errors and all signals present; first natural Idle Check activation was captured.
+
+**Consequences:** V0.2.0 is tagged `v0.2.0`; V0.1.10 becomes the historical real-vehicle-validated baseline; V0.3.0 owns further Idle Check observations, long-session memory trends and high-refresh ladder testing.

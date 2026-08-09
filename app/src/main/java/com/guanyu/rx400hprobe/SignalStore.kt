@@ -14,8 +14,6 @@ class SignalStore(
     val baseline = BaselineData()
     val hybrid = HybridData()
 
-    private var revision = 0L
-
     fun <T> update(signal: SignalValue<T>, value: T?, command: String, result: CommandResult) {
         signal.source = command
         if (value != null) {
@@ -28,7 +26,6 @@ class SignalStore(
         } else {
             signal.status = resultToSignalStatus(result)
         }
-        revision++
     }
 
     fun <T> setDerived(signal: SignalValue<T>, value: T?, source: String) {
@@ -45,7 +42,6 @@ class SignalStore(
         signal.sourceTimestampElapsedMs = now
         signal.version++
         signal.status = targetStatus
-        revision++
     }
 
     fun markDecodeFailure(signals: List<SignalValue<*>>, command: String, result: CommandResult) {
@@ -55,17 +51,15 @@ class SignalStore(
             if (signal.status != newStatus) {
                 signal.status = newStatus
                 signal.version++
-                revision++
             }
         }
     }
 
     fun markStale(signal: SignalValue<*>, now: Long, thresholdMs: Long) {
-        val updated = signal.updatedAtElapsedMs ?: return
-        if (signal.value != null && now - updated > thresholdMs && signal.status != SignalStatus.STALE) {
+        val age = signal.ageMs(now) ?: return
+        if (signal.value != null && age > thresholdMs && signal.status != SignalStatus.STALE) {
             signal.status = SignalStatus.STALE
             signal.version++
-            revision++
         }
     }
 

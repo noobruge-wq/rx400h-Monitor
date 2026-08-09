@@ -6,19 +6,11 @@ This changelog records engineering baselines, not every chat turn. Major-version
 
 ## [Unreleased]
 
-### Fixed
-
-- `01040C0D0E10 2` decoder no longer stops at PID `04` (engine load) before reaching PID `0C` (RPM) and `0D` (speed). This restores speed, RPM and derived ICE power after the V0.2.0 regression observed in the `RX400h_20260808_043828` real-vehicle session.
-- Regression test added for the standard-block skip behavior (unit suite now 16 tests).
-
-### Validation
-
-- `RX400h_20260808_234255` (Samsung SM-F946B, Android 16): decoder `002`, ~7.7 min, 1287 tx, 167 frames, 0 errors, all signals present. Captured the first natural real-vehicle Idle Check activation (4 frames at RPM 901.5–903, speed 9–13 km/h, ICE power 0 kW, warmup true).
-- `RX400h_20260809_045711` (Spreadtrum sp7731e head unit, Android 8.1): decoder `002`, ~19.8 min, 3404 tx, 450 frames, 0 errors, all signals present. Weak-hardware stability confirmed with low PSS/heap and ~10% one-core CPU.
+No unreleased changes yet.
 
 ---
 
-## [0.2.0] — Reactive Core — 2026-08-08
+## [0.2.0] — Reactive Core — 2026-08-09
 
 
 ### Development infrastructure / Codex migration
@@ -54,7 +46,24 @@ This changelog records engineering baselines, not every chat turn. Major-version
 - GitHub Actions run `31194615369` (HEAD `a0ee1a9`) completed **success**; `:app:assembleDebug` signed APK verified with the fixed project debug key.
 - Artifact: `RX400hProtocolProbe-v0.2.0-reactive-debug-signed`, APK SHA-256 `f1c87bda96d1b4238488627300c40343768e809d251fbf154d41fd846960aa3e`.
 - `versionCode = 10`, `versionName = 0.2.0`.
-- Idle Check eligibility remains **experimental**: implementation passes unit tests, but replay/natural real-vehicle equivalence validation is still pending.
+- Idle Check eligibility has a natural E1 capture plus a deterministic replay test; further natural observations are tracked in V0.3.0.
+
+### Regression fix & real-vehicle validation
+
+- `01040C0D0E10 2` decoder no longer stops at PID `04` (engine load) before reaching PID `0C` (RPM) and `0D` (speed). Restores speed, RPM and derived ICE power after the regression observed in `RX400h_20260808_043828`.
+- Regression test added for the standard-block skip behavior.
+- `RX400h_20260808_234255` (Samsung SM-F946B, Android 16): decoder `002`, ~7.7 min, 1287 tx, 167 frames, 0 errors, all signals present. Captured the first natural real-vehicle Idle Check activation (4 frames at RPM 901.5–903, speed 9–13 km/h, ICE power 0 kW, warmup true).
+- `RX400h_20260809_045711` (Spreadtrum sp7731e head unit, Android 8.1): decoder `002`, ~19.8 min, 3404 tx, 450 frames, 0 errors, all signals present. Weak-hardware stability confirmed with low PSS/heap and ~10% one-core CPU.
+- Added deterministic Idle Check replay test from the phone E1 session (unit suite now 17 tests).
+
+### Closure audits (2026-08-09)
+
+- Dead-code audit: removed unused `SignalStore.revision`; `SignalValue.ageMs` is now used by stale marking; no remaining probe-era UI/dead-code paths.
+- Consumer audit: every typed Runtime field has an explicit consumer (UI, derived ICE power, Idle Check, or logger).
+- Dependency audit: runtime dependency set is unchanged (`androidx.core:core-ktx` only); JUnit is test-only.
+- Duplicate-state/cache audit: `SignalStore` is the single writer; no duplicate raw-response caches.
+- Allocation/hot-path audit: no new hot-path allocations introduced; regex/split hot-path optimization is deferred to V0.3.0 with measurements.
+- Real-vehicle-only items (more natural Idle Check observations, long-session memory trend on target hardware, high-refresh ladder tests) are moved to V0.3.0.
 
 ---
 

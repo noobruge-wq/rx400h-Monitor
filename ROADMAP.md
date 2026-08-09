@@ -33,7 +33,7 @@ V0.2.0.
 
 ## V0.2.0 — Reactive Core
 
-**Status:** Implementation complete — 2026-08-08 (unit tests + CI signed build passed). Idle Check eligibility remains experimental pending replay/natural validation. Next: V0.3.0.
+**Status:** Complete — 2026-08-09 (unit tests + CI signed build + phone/head-unit real-vehicle sessions passed; first natural Idle Check capture recorded). Next: V0.3.0.
 
 ### Goal
 
@@ -59,6 +59,11 @@ A renderer can be replaced without modifying decoder/signal semantics, and every
 ---
 
 ## V0.3.0 — High-Performance Scheduler / Refresh Frontier
+
+### Carried from V0.2.0 (real-vehicle-only)
+
+- Continue natural Idle Check observations to strengthen eligibility equivalence.
+- Longer-session memory/CPU trend on the target head unit via replay soak and natural driving.
 
 ### Goal
 

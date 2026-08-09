@@ -53,7 +53,8 @@ RX400h Monitor 是 **Lexus RX400h 专用** Android 原生仪表/监控软件。
 ## 2. 有效代码基线
 
 - V0.1.8：有效的协议/实车证据基线。
-- V0.1.10：最后实车验证 cleanup/runtime 基线。
+- V0.1.10：历史实车验证 cleanup/runtime 基线。
+- V0.2.0：当前已关闭 Reactive Core 基线。
 - **V0.1.9：VOID，绝不可作为后续代码基线。**
 
 ## 3. 当前冻结车辆请求白名单
@@ -197,9 +198,9 @@ local git
 
 ## 9. 当前里程碑
 
-当前工程基线：**V0.2.0 Reactive Core（实现完成，待验证）**。
+当前工程基线：**V0.2.0 Reactive Core（已关闭 2026-08-09）**。
 
-最后实车验证基线：**V0.1.10**。
+历史实车验证基线：**V0.1.10**。
 
 下一大版本：**V0.3.0 High-Performance Scheduler / Refresh Frontier**。
 
