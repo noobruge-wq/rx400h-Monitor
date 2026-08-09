@@ -120,6 +120,18 @@ Unit tests: 17 passed
 
 Role: header v5 (D-036) — buttons return inside the header row on wide screens (title / buttons / widened multi-line status), removing the separate button row so vertical space is not wasted; narrow screens keep the scrollable button row. Layout-only.
 
+### V0.3.0 header v6 candidate (branch v0.3.0)
+
+```text
+Commit: 5cc642679f6896cdea1a9a1d73703a2c1daa4072 (v0.3.0)
+GitHub Actions run: 31319195137 — success
+Artifact: RX400hProtocolProbe-v0.3.0-header-v6-debug-signed
+APK SHA-256: f192a05600d00d455460f41261d0791eefe5657e07f48ddb7331a5cee0f6455d
+Unit tests: 17 passed
+```
+
+Role: screen-proportional typography and controls (D-037) — fonts and button/header metrics scale with the screen's short side (reference 720dp, floor 0.5); factor is 1.0 on the target head unit. Layout-only.
+
 ---
 
 ## B. Void source
