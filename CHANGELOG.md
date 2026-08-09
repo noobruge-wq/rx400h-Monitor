@@ -19,6 +19,7 @@ This changelog records engineering baselines, not every chat turn. Major-version
 - All three-domain text is doubled (labels/values 40sp, titles 28sp) except battery MAX/MIN (26sp, dim) and the permanent gray 怠速检查, which turns the active green only while Idle Check is active.
 - `versionCode = 14`, `versionName = 0.3.0` on branch `v0.3.0` (candidate artifact `RX400hProtocolProbe-v0.3.0-header-v3-debug-signed`).
 - Fix (candidate v4): label/value pairs now alternate line by line (电量 / `--.-%`, 温度 / `--.-°C`, 最高 最低 / `--.-°C--.-°C`, …) instead of all labels stacking above all values. `versionCode = 15`, candidate artifact `RX400hProtocolProbe-v0.3.0-header-v4-debug-signed`.
+- Header v5 (D-036): buttons move back inside the header row on wide screens (between the two-line title and the widened multi-line status column), removing the separate button row so no vertical space is wasted; narrow screens keep the scrollable button row below. `versionCode = 16`, candidate artifact `RX400hProtocolProbe-v0.3.0-header-v5-debug-signed`.
 - Layout-only entry: no protocol, scheduler, signal or presentation-contract changes.
 
 ### Verification (2026-08-10)

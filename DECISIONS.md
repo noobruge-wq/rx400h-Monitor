@@ -457,3 +457,15 @@ Required durable documents:
 **Reason:** User's v3 text spec overrides the earlier mockup interpretation; buttons were still too wide and the previous single-line status squeezed the text zones. The distant head-unit screen needs the largest readable text and priority to text over buttons.
 
 **Consequences:** Supersedes D-033's "buttons inside the header row" decision and refines D-034. Layout/presentation-only change on branch `v0.3.0`; no protocol, scheduler, signal or presentation-contract changes.
+
+---
+
+## D-036 — V0.3.0 header v5: buttons back inside the header row
+
+**Status:** Accepted — 2026-08-10
+
+**Decision:** On wide screens the four buttons return inside the header row, between the two-line title and the widened multi-line status column, so no separate button row wastes vertical space. Narrow screens keep the scrollable button row below. Buttons remain narrower/taller and text keeps priority over buttons.
+
+**Reason:** User feedback after v3/v4: the separate button row wasted vertical space on the head unit.
+
+**Consequences:** Replaces D-035's wide-screen button-row-below arrangement. Layout/presentation-only change on branch `v0.3.0`; no protocol, scheduler, signal or presentation-contract changes.

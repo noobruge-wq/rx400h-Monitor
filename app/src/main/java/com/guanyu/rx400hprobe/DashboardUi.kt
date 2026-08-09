@@ -92,6 +92,27 @@ internal class DashboardUi(
         }
         top.addView(titleColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
+        // V0.3.0 header v5 (D-036): buttons live inside the header between the
+        // title and status columns on wide screens so no separate button row
+        // wastes vertical space; narrow screens keep the scrollable row below.
+        deviceButton = smallButton("设备", onSelectDevice, isWide)
+        connectButton = smallButton("连接", onConnectToggle, isWide)
+        liveButton = smallButton("开始实时", onLiveToggle, isWide)
+        exportButton = smallButton("结束并导出", onExport, isWide)
+
+        val controls = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(if (isWide) dp(6) else 0, dp(2), if (isWide) dp(6) else 0, dp(2))
+        }
+        controls.addView(deviceButton)
+        controls.addView(connectButton)
+        controls.addView(liveButton)
+        controls.addView(exportButton)
+        if (isWide) {
+            top.addView(controls)
+        }
+
         val statusColumn = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.END
@@ -117,33 +138,15 @@ internal class DashboardUi(
         statusColumn.addView(statusBleText)
         statusColumn.addView(statusProtoText)
         statusColumn.addView(statusDataText)
-        top.addView(statusColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        top.addView(statusColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 2f))
         rootLayout.addView(top)
         rootLayout.addView(separator())
 
-        // V0.3.0 header v3 (D-035): title/status text row first, then a full-width
-        // button row; buttons are narrower and taller and never squeeze the text.
-        deviceButton = smallButton("设备", onSelectDevice, isWide)
-        connectButton = smallButton("连接", onConnectToggle, isWide)
-        liveButton = smallButton("开始实时", onLiveToggle, isWide)
-        exportButton = smallButton("结束并导出", onExport, isWide)
-
-        val controls = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(if (isWide) dp(8) else 0, dp(6), if (isWide) dp(8) else 0, dp(6))
-        }
-        controls.addView(deviceButton)
-        controls.addView(connectButton)
-        controls.addView(liveButton)
-        controls.addView(exportButton)
         if (!isWide) {
             rootLayout.addView(HorizontalScrollView(activity).apply {
                 isHorizontalScrollBarEnabled = false
                 addView(controls)
             })
-        } else {
-            rootLayout.addView(controls)
         }
 
         val body = LinearLayout(activity).apply {
