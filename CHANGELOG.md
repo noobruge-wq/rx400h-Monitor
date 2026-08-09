@@ -32,6 +32,7 @@ This changelog records engineering baselines, not every chat turn. Major-version
 - Header v4 label/value ordering fix (HEAD `0f79111`): GitHub Actions run `31318586138` completed **success**; 17 unit tests passed; artifact `RX400hProtocolProbe-v0.3.0-header-v4-debug-signed`, APK SHA-256 `347841bdbd38c37bf2fb92e7823841016a19bcf17db02da095b878edf444d5dc`.
 - Header v5 buttons-in-header (HEAD `e971ded`): GitHub Actions run `31318832012` completed **success**; 17 unit tests passed; artifact `RX400hProtocolProbe-v0.3.0-header-v5-debug-signed`, APK SHA-256 `4dd73e132d543351f8cd8891055e6810096f30088fe85ee12dfdece2d0e8c349`.
 - Screen-proportional typography (HEAD `5cc6426`): GitHub Actions run `31319195137` completed **success**; 17 unit tests passed; artifact `RX400hProtocolProbe-v0.3.0-header-v6-debug-signed`, APK SHA-256 `f192a05600d00d455460f41261d0791eefe5657e07f48ddb7331a5cee0f6455d`.
+- All-elements proportional layout (HEAD `4df826c`): GitHub Actions run `31319464972` completed **success**; 17 unit tests passed; artifact `RX400hProtocolProbe-v0.3.0-header-v7-debug-signed`, APK SHA-256 `bb2b5fdc0034f626d647e25ed6a0b217efb63b446c42351b81cdb7cd6f940cf5`.
 - All APKs passed `apksigner verify` with the fixed project debug key (`CN=RX400h Protocol Probe Debug, O=Guanyu, C=NZ`).
 - Layout-only items; real-vehicle re-validation is not required.
 

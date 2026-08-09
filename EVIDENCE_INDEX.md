@@ -132,6 +132,18 @@ Unit tests: 17 passed
 
 Role: screen-proportional typography and controls (D-037) — fonts and button/header metrics scale with the screen's short side (reference 720dp, floor 0.5); factor is 1.0 on the target head unit. Layout-only.
 
+### V0.3.0 header v7 candidate (branch v0.3.0)
+
+```text
+Commit: 4df826cbae7de5c803372c22af6bb11d0d5c8ae1 (v0.3.0)
+GitHub Actions run: 31319464972 — success
+Artifact: RX400hProtocolProbe-v0.3.0-header-v7-debug-signed
+APK SHA-256: bb2b5fdc0034f626d647e25ed6a0b217efb63b446c42351b81cdb7cd6f940cf5
+Unit tests: 17 passed
+```
+
+Role: all layout elements scale with the same screen proportion (D-038) — root/card/button paddings, margins, separator, corner radius, header/button geometry, with a 1px floor; narrow fallbacks and ellipsis keep text inside the displayable area. Layout-only.
+
 ---
 
 ## B. Void source
