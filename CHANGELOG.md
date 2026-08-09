@@ -18,6 +18,7 @@ This changelog records engineering baselines, not every chat turn. Major-version
 - Domain cards use Chinese centered titles at the top (能量域 / 车辆域 / 动力域); each value has its own centered label line and value line (e.g. 电量 / `--.-%`).
 - All three-domain text is doubled (labels/values 40sp, titles 28sp) except battery MAX/MIN (26sp, dim) and the permanent gray 怠速检查, which turns the active green only while Idle Check is active.
 - `versionCode = 14`, `versionName = 0.3.0` on branch `v0.3.0` (candidate artifact `RX400hProtocolProbe-v0.3.0-header-v3-debug-signed`).
+- Fix (candidate v4): label/value pairs now alternate line by line (电量 / `--.-%`, 温度 / `--.-°C`, 最高 最低 / `--.-°C--.-°C`, …) instead of all labels stacking above all values. `versionCode = 15`, candidate artifact `RX400hProtocolProbe-v0.3.0-header-v4-debug-signed`.
 - Layout-only entry: no protocol, scheduler, signal or presentation-contract changes.
 
 ### Verification (2026-08-10)
