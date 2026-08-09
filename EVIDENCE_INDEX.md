@@ -60,6 +60,18 @@ Unit tests: 17 passed
 
 Role: head-unit UI adjustment after V0.2.0 closure — taller top bar, centered and enlarged control buttons. No protocol or scheduler changes.
 
+### V0.3.0 UI header candidate (branch v0.3.0)
+
+```text
+Commit: 8cd2e00f39ac0862467b32a42d1eeaf6f6ee2c9a (v0.3.0)
+GitHub Actions run: 31314095899 — success
+Artifact: RX400hProtocolProbe-v0.3.0-ui-header-debug-signed
+APK SHA-256: f94ae4aafb45e57bb254074541ebe44c37d934fc4de7dce327db3a7c218ba08c
+Unit tests: 17 passed
+```
+
+Role: first V0.3.0 development build — wide-screen header becomes a single row (title / buttons / status), narrow layouts keep the two-row fallback (D-033). Layout-only; no protocol or scheduler changes.
+
 ---
 
 ## B. Void source

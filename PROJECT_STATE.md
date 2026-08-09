@@ -500,5 +500,6 @@ Remaining real-vehicle-only items are tracked in V0.3.0: more natural Idle Check
 
 - Branch `v0.3.0` opened from main (`33dc9d6`); `versionCode = 12`, `versionName = 0.3.0`.
 - First item merged per user decision: wide-screen dashboard header becomes a single row (title / four buttons / status); narrow screens keep the two-row fallback (D-033).
+- CI run `31314095899` on branch `v0.3.0` (HEAD `8cd2e00`) passed; 17 unit tests, signed APK SHA-256 `f94ae4aa…` verified with the fixed project debug key.
 - Engineering baseline on `main` remains V0.2.0 until V0.3.0 closes.
 - Next V0.3.0 work per `ROADMAP.md`: deadline/priority scheduler, backpressure/skip policy, rate tiers, temporal coherence, extended performance metrics and staged frequency tests (≈0.36 Hz → HA ~5.5 Hz point → higher, with the head unit as the weak-hardware baseline).

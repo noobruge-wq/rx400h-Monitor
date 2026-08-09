@@ -18,6 +18,13 @@ This changelog records engineering baselines, not every chat turn. Major-version
 - `versionCode = 12`, `versionName = 0.3.0` on branch `v0.3.0`.
 - Layout-only entry: no protocol, scheduler, signal or presentation-contract changes.
 
+### Verification (2026-08-10)
+
+- GitHub Actions run `31314095899` (branch `v0.3.0`, HEAD `8cd2e00`) completed **success**; `:app:testDebugUnitTest` passed before the signed APK build.
+- Artifact: `RX400hProtocolProbe-v0.3.0-ui-header-debug-signed`, APK SHA-256 `f94ae4aafb45e57bb254074541ebe44c37d934fc4de7dce327db3a7c218ba08c`.
+- `apksigner verify` passed with the fixed project debug key (`CN=RX400h Protocol Probe Debug, O=Guanyu, C=NZ`).
+- Layout-only item; real-vehicle re-validation is not required for this change.
+
 ---
 
 ## [0.2.1] — Head-unit UI adjustment — 2026-08-09
