@@ -130,6 +130,12 @@ V0.2.0 起使用：
 RX400hProtocolProbe-v0.2.0-reactive-debug-signed
 ```
 
+V0.2.1 UI patch：
+
+```text
+RX400hProtocolProbe-v0.2.1-ui-debug-signed
+```
+
 版本进入正式 Monitor 阶段后可以调整命名，但必须保持“从 Artifact 名就能识别 app version / candidate”的原则。
 
 ### 构建失败时

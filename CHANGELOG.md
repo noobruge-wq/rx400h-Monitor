@@ -14,6 +14,20 @@ This changelog records engineering baselines, not every chat turn. Major-version
 
 ---
 
+## [0.2.1] — Head-unit UI adjustment — 2026-08-09
+
+### Changed
+
+- Top bar height doubled; title and status text enlarged.
+- Four control buttons moved to the center of the header area and enlarged (taller and wider) for easier reach on the target head unit.
+- `versionCode = 11`, `versionName = 0.2.1`.
+
+### Verification
+
+- Pending GitHub Actions signed-APK verification.
+
+---
+
 ## [0.2.0] — Reactive Core — 2026-08-09
 
 

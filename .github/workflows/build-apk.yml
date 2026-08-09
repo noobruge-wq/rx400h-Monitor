@@ -58,13 +58,13 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs "$APK_PATH" | tee dist/APK_SIGNATURE.txt
           "$APKSIGNER" verify "$APK_PATH"
 
-          cp "$APK_PATH" "dist/RX400hProtocolProbe-v0.2.0-reactive-debug-signed.apk"
-          sha256sum "dist/RX400hProtocolProbe-v0.2.0-reactive-debug-signed.apk" > dist/SHA256SUMS.txt
+          cp "$APK_PATH" "dist/RX400hProtocolProbe-v0.2.1-ui-debug-signed.apk"
+          sha256sum "dist/RX400hProtocolProbe-v0.2.1-ui-debug-signed.apk" > dist/SHA256SUMS.txt
 
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: RX400hProtocolProbe-v0.2.0-reactive-debug-signed
+          name: RX400hProtocolProbe-v0.2.1-ui-debug-signed
           path: dist/
           if-no-files-found: error
           retention-days: 30

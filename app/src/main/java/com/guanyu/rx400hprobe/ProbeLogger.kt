@@ -23,7 +23,7 @@ enum class SessionState { IDLE, ACTIVE, FINALIZING, FINALIZED, FINALIZE_FAILED }
 
 class ProbeLogger(private val context: Context) {
     companion object {
-        const val APP_VERSION = "0.2.0"
+        const val APP_VERSION = "0.2.1"
         const val PROFILE_VERSION = "rx400h_ha_hci_20260805_002"
         const val SCHEDULER_PROFILE = "v020_reactive_core_candidate"
     }

@@ -1,6 +1,6 @@
-# RX400h Monitor V0.2.0 — Reactive Core（已关闭基线）
+# RX400h Monitor V0.2.1 — Reactive Core（UI 调整版）
 
-> **状态：已关闭（2026-08-09）。** V0.1.10 为历史实车验证基线。V0.2.0 不改变车辆请求白名单，也不提高轮询频率；下一版本为 V0.3.0 High-Performance Scheduler。
+> **状态：V0.2.0 基线已关闭，V0.2.1 为头部栏/按钮 UI 调整。** V0.1.10 为历史实车验证基线。V0.2.x 不改变车辆请求白名单，也不提高轮询频率；下一版本为 V0.3.0 High-Performance Scheduler。
 
 ## V0.2.0 做什么
 

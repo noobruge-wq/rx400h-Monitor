@@ -58,15 +58,17 @@ internal class DashboardUi(
         val top = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(72)
+            setPadding(0, dp(8), 0, dp(8))
         }
         top.addView(TextView(activity).apply {
             text = "RX400h MONITOR"
-            textSize = if (isWide) 27f else 22f
+            textSize = if (isWide) 34f else 28f
             setTextColor(Color.rgb(125, 255, 175))
             typeface = android.graphics.Typeface.MONOSPACE
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         statusText = TextView(activity).apply {
-            textSize = 13f
+            textSize = if (isWide) 18f else 16f
             setTextColor(Color.rgb(110, 235, 205))
             gravity = Gravity.END
             setPadding(dp(8), 0, dp(8), 0)
@@ -77,7 +79,8 @@ internal class DashboardUi(
 
         val controls = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(0, dp(6), 0, dp(6))
         }
         deviceButton = smallButton("设备", onSelectDevice)
         connectButton = smallButton("连接", onConnectToggle)
@@ -247,11 +250,13 @@ internal class DashboardUi(
 
     private fun smallButton(label: String, action: () -> Unit): Button = Button(activity).apply {
         text = label
-        textSize = 12f
+        textSize = 17f
+        minHeight = dp(52)
+        minimumHeight = dp(52)
+        minWidth = dp(96)
+        minimumWidth = dp(96)
         setOnClickListener { action() }
-        minWidth = 0
-        minimumWidth = 0
-        setPadding(dp(12), dp(4), dp(12), dp(4))
+        setPadding(dp(20), dp(12), dp(20), dp(12))
     }
 
     private fun separator(): View = View(activity).apply {
