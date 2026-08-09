@@ -72,6 +72,18 @@ Unit tests: 17 passed
 
 Role: first V0.3.0 development build — wide-screen header becomes a single row (title / buttons / status), narrow layouts keep the two-row fallback (D-033). Layout-only; no protocol or scheduler changes.
 
+### V0.3.0 header v2 candidate (branch v0.3.0)
+
+```text
+Commit: e9479babbe2cd67711692c9970b7de116aad22cc (v0.3.0)
+GitHub Actions run: 31315386621 — success
+Artifact: RX400hProtocolProbe-v0.3.0-header-v2-debug-signed
+APK SHA-256: 27b013c68cc822c59d3f0ca5f320c7150a4c9ea5a71947fe60880ca21427f1d6
+Unit tests: 17 passed
+```
+
+Role: header v2 + Chinese display contract (D-034) — two-line fixed-size title/status text, centered buttons that do not squeeze the text zones, uniform value typography except battery MAX/MIN, POWER order 混动功率/引擎功率/转速 and permanent gray 怠速检查. Layout-only; no protocol or scheduler changes.
+
 ---
 
 ## B. Void source
