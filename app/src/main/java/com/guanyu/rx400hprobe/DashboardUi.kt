@@ -170,6 +170,7 @@ internal class DashboardUi(
 
         val body = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
+            gravity = Gravity.BOTTOM
             setPadding(0, dp(8), 0, 0)
         }
 
@@ -217,7 +218,7 @@ internal class DashboardUi(
         for (range in rowRanges) {
             val row = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.TOP
+                gravity = Gravity.FILL_VERTICAL
             }
             for (index in range) {
                 val card = when (index) {
@@ -225,12 +226,15 @@ internal class DashboardUi(
                     1 -> vehicleCard
                     else -> powerCard
                 }
-                row.addView(card, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).margin(dp(4)))
+                // Equal-height cards: every card in the row fills the row height
+                // (the tallest card), so all frames share one bottom edge.
+                row.addView(card, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).margin(dp(4)))
             }
             body.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         }
         val scroll = ScrollView(activity).apply {
             isVerticalScrollBarEnabled = true
+            isFillViewport = true
             addView(body)
         }
         rootLayout.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))

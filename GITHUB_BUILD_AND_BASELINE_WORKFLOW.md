@@ -139,7 +139,7 @@ RX400hProtocolProbe-v0.2.1-ui-debug-signed
 V0.3.0 开发分支候选：
 
 ```text
-RX400hProtocolProbe-v0.3.0-scheduler-debug-signed
+RX400hProtocolProbe-v0.3.0-bottom-align-debug-signed
 ```
 
 版本进入正式 Monitor 阶段后可以调整命名，但必须保持“从 Artifact 名就能识别 app version / candidate”的原则。

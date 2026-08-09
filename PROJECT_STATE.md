@@ -517,5 +517,6 @@ Remaining real-vehicle-only items are tracked in V0.3.0: more natural Idle Check
 - CI run `31320031870` on branch `v0.3.0` (HEAD `1cce730`) passed; 19 unit tests (incl. `ResponsiveLayoutTest`), signed APK SHA-256 `6d4873e0…` verified with the fixed project debug key.
 - Scheduler phase started (D-040): `DeadlineScheduler` core (independent periods, priority/header order, deadline skip/backpressure), `LatencyWindow` P50/P95/P99, scheduler metrics in `performance.csv`, `SCHEDULER_PROFILE = v030_deadline_001`; rates unchanged until ladder tests.
 - CI run `31320500825` on branch `v0.3.0` (HEAD `fd30240`) passed; 26 unit tests (incl. `DeadlineSchedulerTest` + `LatencyWindow`), signed APK SHA-256 `8cde4227…` verified with the fixed project debug key.
+- UI alignment: same-row cards are equal-height and the data area is bottom-anchored so all domain frames align to the screen bottom; `versionCode = 21`, candidate artifact `RX400hProtocolProbe-v0.3.0-bottom-align-debug-signed`.
 - Engineering baseline on `main` remains V0.2.0 until V0.3.0 closes.
 - Next V0.3.0 work per `ROADMAP.md`: deadline/priority scheduler, backpressure/skip policy, rate tiers, temporal coherence, extended performance metrics and staged frequency tests (≈0.36 Hz → HA ~5.5 Hz point → higher, with the head unit as the weak-hardware baseline).

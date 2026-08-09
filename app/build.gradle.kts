@@ -11,7 +11,7 @@ android {
         applicationId = "com.guanyu.rx400hprobe"
         minSdk = 26
         targetSdk = 35
-        versionCode = 20
+        versionCode = 21
         versionName = "0.3.0"
     }
 

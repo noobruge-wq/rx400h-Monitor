@@ -34,6 +34,7 @@ This changelog records engineering baselines, not every chat turn. Major-version
 - Live loop now executes due requests from the scheduler instead of the fixed `next*` timer cadence; per-request header switching is ordered to minimize `ATSH` changes.
 - Request/whitelist unchanged; rates stay at V0.2.0 periods until staged frequency tests.
 - `versionCode = 20`, candidate artifact `RX400hProtocolProbe-v0.3.0-scheduler-debug-signed`.
+- UI alignment fix: cards in the same row are equal-height (each fills the tallest card) and the data area is bottom-anchored (`fillViewport` + bottom gravity), so the three domain frames share one bottom edge aligned to the screen bottom. `versionCode = 21`, candidate artifact `RX400hProtocolProbe-v0.3.0-bottom-align-debug-signed`.
 
 ### Verification (2026-08-10)
 
