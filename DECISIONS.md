@@ -397,3 +397,15 @@ Required durable documents:
 **Reason:** Exit gate is met, CI signed build passes, and two natural real-vehicle sessions (phone + target head unit) ran with 0 errors and all signals present; first natural Idle Check activation was captured.
 
 **Consequences:** V0.2.0 is tagged `v0.2.0`; V0.1.10 becomes the historical real-vehicle-validated baseline; V0.3.0 owns further Idle Check observations, long-session memory trends and high-refresh ladder testing.
+
+---
+
+## D-031 — V0.3.0 multi-source cross-check policy
+
+**Status:** Accepted — 2026-08-09
+
+**Decision:** V0.3.0 development uses Hybrid Assistant APK, Dr Prius XAPK, Bluetooth HCI/RFCOMM capture, E1 real-vehicle logs and current source as complementary evidence. No single source blocks development; conflicting sources are resolved through `DECISIONS.md` entries rather than silent preference.
+
+**Reason:** Avoids development blockage from a single reverse-engineering source and prevents unverified semantics from entering the runtime model.
+
+**Consequences:** HA APK (`563a8b08…`) and Dr Prius XAPK (`7246dab1…`) hashes are re-verified and recorded as V0.3.0 cross-check material; any new protocol/field claim must cite at least one independent corroborating source or be marked hypothesis.

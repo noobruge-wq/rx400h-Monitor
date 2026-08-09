@@ -71,6 +71,7 @@ Determine the practical high-value sampling frontier of RX400h + OBDLink.
 
 ### Required outcomes
 
+- Multi-source cross-check: Hybrid Assistant APK + Dr Prius XAPK + HCI + E1 + current source are complementary; no single source blocks development (D-031).
 - Deadline/priority scheduler.
 - Independent fast/medium/slow request periods.
 - Backpressure and skip-overdue policy; no catch-up request avalanche.

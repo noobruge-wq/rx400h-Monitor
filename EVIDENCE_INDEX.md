@@ -220,6 +220,7 @@ Role:
 - Request-chain and field/static state reconstruction.
 - ICE torque / warmup / HSD / presentation reference evidence.
 - Must not be treated as permission to copy HA UI/code/resources; use interoperability facts and clean-room reconstruction only.
+- V0.3.0 cross-check material; SHA-256 verified 2026-08-09 against the user-provided copy.
 
 ---
 
@@ -231,6 +232,12 @@ SHA-256: 7246dab1747cce740cfaa5ce71a897ac2075f64b7170029d4053b1f8af42e2b3
 ```
 
 Role: independent cross-check for `21CF` temperature formula; do not add unrelated requests merely because they appear in another app.
+
+### V0.3.0 multi-source cross-check policy
+
+- Complementary sources: Hybrid Assistant APK, Dr Prius XAPK, Bluetooth HCI/RFCOMM capture, E1 real-vehicle logs and current source.
+- No single source blocks development. When sources conflict, record the decision in `DECISIONS.md` and do not promote unverified semantics to the runtime model.
+- Both APK/XAPK hashes were re-verified 2026-08-09 against the user-provided copies.
 
 ---
 

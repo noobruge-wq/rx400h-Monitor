@@ -6,7 +6,9 @@ This changelog records engineering baselines, not every chat turn. Major-version
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### V0.3.0 preparation
+
+- Registered Hybrid Assistant APK (`563a8b08…`) and Dr Prius XAPK (`7246dab1…`) as hash-verified multi-source cross-check material for V0.3.0 (D-031).
 
 ---
 
