@@ -481,3 +481,15 @@ Required durable documents:
 **Reason:** User feedback: fixed sp sizes do not adapt to different screens; the layout should occupy a consistent proportion of the screen regardless of device size/density.
 
 **Consequences:** On the 720dp target the factor is exactly 1.0, so v5 proportions are unchanged; smaller screens shrink proportionally and larger screens grow. Layout-only change on branch `v0.3.0`; no protocol, scheduler, signal or presentation-contract changes.
+
+---
+
+## D-038 — All layout elements scale; no text outside the displayable area
+
+**Status:** Accepted — 2026-08-10
+
+**Decision:** The screen-proportional factor applies to every layout metric, not only fonts: root/card/button paddings, margins, separator height, corner radius, header and button geometry all scale through the `dp` helper, which also enforces a 1px floor so strokes and padding never disappear. Combined with the narrow-screen fallbacks (scrollable button row) and single-line ellipsis on header text, no text is placed outside the displayable area.
+
+**Reason:** User feedback after v6: fonts alone were not enough; every element must auto-adapt and no text may be clipped outside the visible area.
+
+**Consequences:** On the 720dp target the factor remains 1.0, so v5/v6 proportions are unchanged. Layout-only change on branch `v0.3.0`; no protocol, scheduler, signal or presentation-contract changes.

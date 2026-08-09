@@ -91,7 +91,7 @@ internal class DashboardUi(
         val top = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp((72f * fontScale).toInt())
+            minimumHeight = dp(72)
             setPadding(0, dp(6), 0, dp(6))
         }
         top.addView(titleColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -331,15 +331,15 @@ internal class DashboardUi(
     private fun smallButton(label: String, action: () -> Unit, compact: Boolean): Button = Button(activity).apply {
         text = label
         textSize = (if (compact) 14f else 16f) * fontScale
-        val buttonHeight = dp((64f * fontScale).toInt())
+        val buttonHeight = dp(64)
         minHeight = buttonHeight
         minimumHeight = buttonHeight
-        val buttonWidth = dp(((if (compact) 56f else 72f) * fontScale).toInt())
+        val buttonWidth = dp(if (compact) 56 else 72)
         minWidth = buttonWidth
         minimumWidth = buttonWidth
         setOnClickListener { action() }
-        val padX = dp(((if (compact) 12f else 16f) * fontScale).toInt())
-        val padY = dp(((if (compact) 8f else 10f) * fontScale).toInt())
+        val padX = dp(if (compact) 12 else 16)
+        val padY = dp(if (compact) 8 else 10)
         setPadding(padX, padY, padX, padY)
     }
 
@@ -356,5 +356,8 @@ internal class DashboardUi(
     private fun weightedRow(weight: Float) = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, weight)
     private fun wrapRow() = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
     private fun LinearLayout.LayoutParams.margin(v: Int) = apply { setMargins(v, v, v, v) }
-    private fun dp(value: Int): Int = (value * activity.resources.displayMetrics.density).toInt()
+    // V0.3.0 v7 (D-038): every layout metric scales with the same screen
+    // proportion as typography; the 1px floor keeps strokes/padding visible.
+    private fun dp(value: Int): Int =
+        maxOf(1, (value * fontScale * activity.resources.displayMetrics.density).toInt())
 }
