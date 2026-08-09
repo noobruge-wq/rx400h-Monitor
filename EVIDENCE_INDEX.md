@@ -176,6 +176,8 @@ dumpstate(1).zip
 SHA-256: 1d657dc06b631a94aca0aad0012140c03045a66982fa03307065ea9940dc4f3d
 ```
 
+User-provided copy `dumpstate.zip` (2026-08-09) matches this hash; embedded `btsnoop_hci.log` / `btsnoop_hci.log.last` hashes were re-verified and are unchanged. Registered as V0.3.0 cross-check material.
+
 ### HCI snoop files
 
 ```text

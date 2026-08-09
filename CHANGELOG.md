@@ -9,6 +9,7 @@ This changelog records engineering baselines, not every chat turn. Major-version
 ### V0.3.0 preparation
 
 - Registered Hybrid Assistant APK (`563a8b08…`) and Dr Prius XAPK (`7246dab1…`) as hash-verified multi-source cross-check material for V0.3.0 (D-031).
+- Re-verified user-provided `dumpstate.zip` (`1d657dc0…`) and its embedded HCI btsnoop files (`205d6dd0…`, `c9c080e8…`) as V0.3.0 cross-check material.
 
 ---
 
