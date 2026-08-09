@@ -151,6 +151,20 @@ SHA-256: e6b0478f85d4d5bb2f24408fcacf94c0144d7c221a16b65be21c4047d12406ec
 - Weak-hardware stability evidence: PSS ~27–30 MB, Java heap ~1.7–3.3 MB, CPU ~10% of one core, render avg ~1.3 ms, logger write avg ~1.4 ms (max 46 ms spike).
 - Frame interval median 2.71 s; request latency avg ~133–157 ms.
 
+### V0.2.0 final closure validation — target head unit (30 min)
+
+```text
+RX400h_20260809_091230.zip
+SHA-256: 55216740f81f00e5269ff5b612aa8e6f767cdd1face4caf468d9fa512182694b
+```
+
+- Device: Spreadtrum sp7731e head unit, Android 8.1 / API 27, landscape 1280×720.
+- App `0.2.0`, decoder `rx400h-reactive-20260808-002`; ~30.0 min LIVE; 5105 transactions; 675 frames; 0 errors; evidence complete.
+- All signals present: speed 0–100 km/h, RPM 0–3127, ICE power −7.3 to 83.2 kW, SOC 38–63%, HV power −27.1 to 29.7 kW, ICE torque −256 to 254 Nm.
+- Memory stable across 30 minutes: PSS ~17.6–27.5 MB (mean 20.4), Java heap ~1.6–3.3 MB; no duration-proportional growth.
+- CPU ~9.9% of one core; render avg 1.5 ms; logger write avg 1.1 ms (max 43 ms).
+- Frame interval median 2.75 s (~0.375 Hz); request latency avg ~136–161 ms.
+
 ---
 
 ## D. Bluetooth HCI / RFCOMM evidence

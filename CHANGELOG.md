@@ -54,6 +54,7 @@ No unreleased changes yet.
 - Regression test added for the standard-block skip behavior.
 - `RX400h_20260808_234255` (Samsung SM-F946B, Android 16): decoder `002`, ~7.7 min, 1287 tx, 167 frames, 0 errors, all signals present. Captured the first natural real-vehicle Idle Check activation (4 frames at RPM 901.5–903, speed 9–13 km/h, ICE power 0 kW, warmup true).
 - `RX400h_20260809_045711` (Spreadtrum sp7731e head unit, Android 8.1): decoder `002`, ~19.8 min, 3404 tx, 450 frames, 0 errors, all signals present. Weak-hardware stability confirmed with low PSS/heap and ~10% one-core CPU.
+- `RX400h_20260809_091230` (target head unit, final closure run): decoder `002`, ~30.0 min, 5105 tx, 675 frames, 0 errors, all signals present; memory stable across the full session.
 - Added deterministic Idle Check replay test from the phone E1 session (unit suite now 17 tests).
 
 ### Closure audits (2026-08-09)

@@ -487,6 +487,7 @@ Real-vehicle validation status (decoder `002`):
 
 - Phone session `RX400h_20260808_234255`: all signals present, 0 errors, first natural Idle Check activation captured (4 frames at RPM 901.5–903, speed 9–13 km/h, ICE power 0 kW, warmup true).
 - Target head-unit session `RX400h_20260809_045711`: all signals present, 0 errors, ~19.8 min on Spreadtrum sp7731e with low memory footprint and ~10% one-core CPU.
+- Final closure session `RX400h_20260809_091230`: all signals present, 0 errors, ~30.0 min on the target head unit with stable PSS/heap across the full session.
 - Decoder regression fix (`0478756`) is included; CI signed build passed.
 
 The V0.2.0 exit gate remains: renderer replacement requires no Decoder/SignalStore semantic changes, and every typed Runtime field has a documented consumer.
