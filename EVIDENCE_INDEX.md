@@ -168,6 +168,18 @@ Unit tests: 26 passed (incl. DeadlineSchedulerTest + LatencyWindow)
 
 Role: V0.3.0 scheduler phase first candidate (D-040) — `DeadlineScheduler` (independent periods, priority/header order, deadline skip/backpressure), `LatencyWindow` P50/P95/P99, scheduler columns in `performance.csv`, `SCHEDULER_PROFILE = v030_deadline_001`. Rates still at V0.2.0 periods; real-vehicle ladder tests pending.
 
+### V0.3.0 bottom-align candidate (branch v0.3.0)
+
+```text
+Commit: 14125dd723570f2be0302074798a72d9050eaf79 (v0.3.0)
+GitHub Actions run: 31320956460 — success
+Artifact: RX400hProtocolProbe-v0.3.0-bottom-align-debug-signed
+APK SHA-256: 2b8c022c1af8b13ec8c17ce990991e0bfacb17f6db6ab672fd30b4fa28509fbb
+Unit tests: 26 passed
+```
+
+Role: equal-height cards per row (each fills the tallest card) with a bottom-anchored, viewport-filling data area so all domain frames share one bottom edge aligned to the screen bottom. UI-only.
+
 ---
 
 ## B. Void source

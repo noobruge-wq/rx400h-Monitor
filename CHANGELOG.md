@@ -47,6 +47,7 @@ This changelog records engineering baselines, not every chat turn. Major-version
 - All-elements proportional layout (HEAD `4df826c`): GitHub Actions run `31319464972` completed **success**; 17 unit tests passed; artifact `RX400hProtocolProbe-v0.3.0-header-v7-debug-signed`, APK SHA-256 `bb2b5fdc0034f626d647e25ed6a0b217efb63b446c42351b81cdb7cd6f940cf5`.
 - Responsive/adaptive UI (HEAD `1cce730`): GitHub Actions run `31320031870` completed **success**; 19 unit tests passed (includes new `ResponsiveLayoutTest`); artifact `RX400hProtocolProbe-v0.3.0-responsive-debug-signed`, APK SHA-256 `6d4873e02466d1fb492abf0c95b9cea53ffe3dd85f4401784025da9e203dff2f`.
 - Scheduler core (HEAD `fd30240`): GitHub Actions run `31320500825` completed **success**; 26 unit tests passed (includes new `DeadlineSchedulerTest` + `LatencyWindow`); artifact `RX400hProtocolProbe-v0.3.0-scheduler-debug-signed`, APK SHA-256 `8cde4227cdc1fd45efa7f133c152b1664678bd95f9b714f023ca28ab194019fe`.
+- Bottom-aligned equal-height cards (HEAD `14125dd`): GitHub Actions run `31320956460` completed **success**; 26 unit tests passed; artifact `RX400hProtocolProbe-v0.3.0-bottom-align-debug-signed`, APK SHA-256 `2b8c022c1af8b13ec8c17ce990991e0bfacb17f6db6ab672fd30b4fa28509fbb`.
 - All APKs passed `apksigner verify` with the fixed project debug key (`CN=RX400h Protocol Probe Debug, O=Guanyu, C=NZ`).
 - Layout-only items; real-vehicle re-validation is not required.
 
