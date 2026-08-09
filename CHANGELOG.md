@@ -11,6 +11,11 @@ This changelog records engineering baselines, not every chat turn. Major-version
 - `01040C0D0E10 2` decoder no longer stops at PID `04` (engine load) before reaching PID `0C` (RPM) and `0D` (speed). This restores speed, RPM and derived ICE power after the V0.2.0 regression observed in the `RX400h_20260808_043828` real-vehicle session.
 - Regression test added for the standard-block skip behavior (unit suite now 16 tests).
 
+### Validation
+
+- `RX400h_20260808_234255` (Samsung SM-F946B, Android 16): decoder `002`, ~7.7 min, 1287 tx, 167 frames, 0 errors, all signals present. Captured the first natural real-vehicle Idle Check activation (4 frames at RPM 901.5–903, speed 9–13 km/h, ICE power 0 kW, warmup true).
+- `RX400h_20260809_045711` (Spreadtrum sp7731e head unit, Android 8.1): decoder `002`, ~19.8 min, 3404 tx, 450 frames, 0 errors, all signals present. Weak-hardware stability confirmed with low PSS/heap and ~10% one-core CPU.
+
 ---
 
 ## [0.2.0] — Reactive Core — 2026-08-08

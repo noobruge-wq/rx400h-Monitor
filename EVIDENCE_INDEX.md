@@ -122,6 +122,30 @@ Recorded characteristics:
 - Speed, RPM and derived ICE power were missing because `decodeStandard` aborted at PID `04` (engine load) before reaching PID `0C`/`0D`.
 - Fix: decoder version `rx400h-reactive-20260808-002` restores full standard-block PID skipping; regression test added.
 
+### V0.2.0 decoder-002 real-vehicle validation — phone
+
+```text
+RX400h_20260808_234255.zip
+```
+
+- Device: Samsung SM-F946B (Galaxy Z Fold5), Android 16 / API 36, portrait.
+- App `0.2.0`, decoder `rx400h-reactive-20260808-002`; ~7.7 min LIVE; 1287 transactions; 167 frames; 0 errors; evidence complete.
+- All signals present after the decoder fix, including speed, RPM and ICE power.
+- First natural real-vehicle Idle Check capture: 4 consecutive frames active at RPM 901.5–903, speed 9–13 km/h, ICE power 0 kW, ICE torque 0 Nm, warmup true, coolant 74–75 °C; deactivated at RPM 889 (below 900) and warmup end. Direct E1 support for the minimal eligibility conditions.
+- Frame interval median 2.82 s; request latency avg ~150–175 ms.
+
+### V0.2.0 decoder-002 real-vehicle validation — target head unit
+
+```text
+RX400h_20260809_045711.zip
+```
+
+- Device: Spreadtrum sp7731e head unit, Android 8.1 / API 27, landscape 1280×720.
+- App `0.2.0`, decoder `rx400h-reactive-20260808-002`; ~19.8 min LIVE; 3404 transactions; 450 frames; 0 errors; evidence complete.
+- All signals present; warmup false for the whole session; no Idle Check trigger observed.
+- Weak-hardware stability evidence: PSS ~27–30 MB, Java heap ~1.7–3.3 MB, CPU ~10% of one core, render avg ~1.3 ms, logger write avg ~1.4 ms (max 46 ms spike).
+- Frame interval median 2.71 s; request latency avg ~133–157 ms.
+
 ---
 
 ## D. Bluetooth HCI / RFCOMM evidence

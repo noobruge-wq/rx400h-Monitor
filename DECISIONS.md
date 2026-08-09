@@ -318,13 +318,13 @@ Required durable documents:
 
 ## D-024 — Minimal IdleCheckEligibilityState (experimental until replay-validated)
 
-**Status:** Experimental — 2026-08-08
+**Status:** Experimental → partially validated by natural E1 — 2026-08-09
 
 **Decision:** V0.2.0 implements a minimal eligibility state: warmup active, 900 < RPM < 1100, ICE mechanical power ~0 kW (tolerance 0.05 kW for floating-point safety), speed <= 55 km/h, stable for ~1 s. State transitions are written to the session log. `IDLE CHECK` is displayed only while the state is active; otherwise the position is blank.
 
 **Reason:** Current V0.1.10 code contains no S0–S4 state machine, so there is no full reference implementation to delete; the recovered candidate conditions are the best available evidence.
 
-**Consequences:** This state remains experimental until deterministic replay against E1 logs and, when available, natural real-vehicle Idle Check observations confirm equivalence. Insufficient evidence means the field stays blank rather than guessing.
+**Consequences:** This state remains experimental until deterministic replay against E1 logs and more natural real-vehicle Idle Check observations confirm equivalence. The `RX400h_20260808_234255` phone session already captured a natural activation (4 frames at RPM 901.5–903, speed 9–13 km/h, ICE power 0 kW, warmup true), matching the candidate conditions. Insufficient evidence means the field stays blank rather than guessing.
 
 ---
 
