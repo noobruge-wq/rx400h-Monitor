@@ -144,6 +144,18 @@ Unit tests: 17 passed
 
 Role: all layout elements scale with the same screen proportion (D-038) — root/card/button paddings, margins, separator, corner radius, header/button geometry, with a 1px floor; narrow fallbacks and ellipsis keep text inside the displayable area. Layout-only.
 
+### V0.3.0 responsive UI candidate (branch v0.3.0)
+
+```text
+Commit: 1cce7304921e21e0ecbdab43f852877676b88b2d (v0.3.0)
+GitHub Actions run: 31320031870 — success
+Artifact: RX400hProtocolProbe-v0.3.0-responsive-debug-signed
+APK SHA-256: 6d4873e02466d1fb492abf0c95b9cea53ffe3dd85f4401784025da9e203dff2f
+Unit tests: 19 passed (incl. ResponsiveLayoutTest)
+```
+
+Role: size-independent responsive/adaptive UI (D-039) — window-size-driven dynamic card columns (240dp min, max 3), width-based header mode, vertical scroll instead of text shrinking, live resize re-layout by bucket. Layout-only; visual pass at multiple window sizes is pending user device testing.
+
 ---
 
 ## B. Void source
