@@ -28,6 +28,7 @@ This changelog records engineering baselines, not every chat turn. Major-version
 - Header v2 + Chinese display (HEAD `e9479ba`): GitHub Actions run `31315386621` completed **success**; 17 unit tests passed; artifact `RX400hProtocolProbe-v0.3.0-header-v2-debug-signed`, APK SHA-256 `27b013c68cc822c59d3f0ca5f320c7150a4c9ea5a71947fe60880ca21427f1d6`.
 - Header v3 + Chinese domain cards (HEAD `6a18f18`): GitHub Actions run `31316526865` completed **success**; 17 unit tests passed; artifact `RX400hProtocolProbe-v0.3.0-header-v3-debug-signed`, APK SHA-256 `399d268c3781324373b8392258c8393304c9d27ef12408cefa6879fef5d483c2`.
 - Header v4 label/value ordering fix (HEAD `0f79111`): GitHub Actions run `31318586138` completed **success**; 17 unit tests passed; artifact `RX400hProtocolProbe-v0.3.0-header-v4-debug-signed`, APK SHA-256 `347841bdbd38c37bf2fb92e7823841016a19bcf17db02da095b878edf444d5dc`.
+- Header v5 buttons-in-header (HEAD `e971ded`): GitHub Actions run `31318832012` completed **success**; 17 unit tests passed; artifact `RX400hProtocolProbe-v0.3.0-header-v5-debug-signed`, APK SHA-256 `4dd73e132d543351f8cd8891055e6810096f30088fe85ee12dfdece2d0e8c349`.
 - All APKs passed `apksigner verify` with the fixed project debug key (`CN=RX400h Protocol Probe Debug, O=Guanyu, C=NZ`).
 - Layout-only items; real-vehicle re-validation is not required.
 

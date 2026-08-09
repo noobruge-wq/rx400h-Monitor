@@ -508,5 +508,6 @@ Remaining real-vehicle-only items are tracked in V0.3.0: more natural Idle Check
 - Header v4 fix: label/value pairs alternate per line (labels were previously all added before values); `versionCode = 15`, candidate artifact `RX400hProtocolProbe-v0.3.0-header-v4-debug-signed`.
 - CI run `31318586138` on branch `v0.3.0` (HEAD `0f79111`) passed; 17 unit tests, signed APK SHA-256 `347841bd…` verified with the fixed project debug key.
 - Header v5 (D-036): buttons return inside the header row on wide screens (title / buttons / widened multi-line status), removing the separate button row; `versionCode = 16`, candidate artifact `RX400hProtocolProbe-v0.3.0-header-v5-debug-signed`.
+- CI run `31318832012` on branch `v0.3.0` (HEAD `e971ded`) passed; 17 unit tests, signed APK SHA-256 `4dd73e13…` verified with the fixed project debug key.
 - Engineering baseline on `main` remains V0.2.0 until V0.3.0 closes.
 - Next V0.3.0 work per `ROADMAP.md`: deadline/priority scheduler, backpressure/skip policy, rate tiers, temporal coherence, extended performance metrics and staged frequency tests (≈0.36 Hz → HA ~5.5 Hz point → higher, with the head unit as the weak-hardware baseline).

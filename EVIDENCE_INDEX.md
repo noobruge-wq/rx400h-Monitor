@@ -108,6 +108,18 @@ Unit tests: 17 passed
 
 Role: fixes domain card child ordering — each label is immediately followed by its value line (电量/`--.-%`, 温度/`--.-°C`, 最高 最低/`--.-°C--.-°C`), matching the user's example. Layout-only.
 
+### V0.3.0 header v5 candidate (branch v0.3.0)
+
+```text
+Commit: e971ded91823754750d1d74a716cc21a287ace53 (v0.3.0)
+GitHub Actions run: 31318832012 — success
+Artifact: RX400hProtocolProbe-v0.3.0-header-v5-debug-signed
+APK SHA-256: 4dd73e132d543351f8cd8891055e6810096f30088fe85ee12dfdece2d0e8c349
+Unit tests: 17 passed
+```
+
+Role: header v5 (D-036) — buttons return inside the header row on wide screens (title / buttons / widened multi-line status), removing the separate button row so vertical space is not wasted; narrow screens keep the scrollable button row. Layout-only.
+
 ---
 
 ## B. Void source
