@@ -409,3 +409,15 @@ Required durable documents:
 **Reason:** Avoids development blockage from a single reverse-engineering source and prevents unverified semantics from entering the runtime model.
 
 **Consequences:** HA APK (`563a8b08…`) and Dr Prius XAPK (`7246dab1…`) hashes are re-verified and recorded as V0.3.0 cross-check material; any new protocol/field claim must cite at least one independent corroborating source or be marked hypothesis.
+
+---
+
+## D-032 — HA/DP are reference-only; keep the implementation minimal
+
+**Status:** Accepted — 2026-08-09
+
+**Decision:** Hybrid Assistant and Dr Prius code/APK/resources are reference evidence only. Do not copy their implementation wholesale. Before new development requirements are added, keep the RX400h Monitor implementation as simple and efficient as possible.
+
+**Reason:** The project exists to build a lighter, RX400h-specific monitor, not a HA clone or a generalized platform. Copying third-party structure would reintroduce the complexity, dependencies and UI weight the project intentionally avoids.
+
+**Consequences:** New code is added only when a concrete consumer/requirement exists; reference apps are used for interoperability facts and cross-checking, not as an implementation template. Lean Core gates (dead-code/consumer/allocation/dependency/duplicate-state audits) remain mandatory.

@@ -110,6 +110,8 @@ arbitrary CAN/ELM command input
 - hot path 上 regex/split/substrings/临时 List；
 - session 时长越长 RAM 越大的结构。
 
+HA / Dr Prius 的代码和资源**仅作参考**，不得整体照搬；在开发需求没有增加前，保持实现尽可能简洁高效（D-032）。
+
 每个大版本收尾前执行：
 
 ```text
