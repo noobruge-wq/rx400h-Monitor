@@ -32,6 +32,7 @@ class MainActivity : Activity() {
     private val elm = Elm327Client()
     private lateinit var logger: ProbeLogger
     private lateinit var dashboard: DashboardUi
+    private var rebuildingUi = false
 
     private val busy = AtomicBoolean(false)
     private val liveMode = AtomicBoolean(false)
@@ -67,6 +68,7 @@ class MainActivity : Activity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         setContentView(buildDashboard())
+        refreshControls()
         renderDashboard()
     }
 
@@ -91,8 +93,26 @@ class MainActivity : Activity() {
         onSelectDevice = { startActivityForResult(Intent(this, DevicePickerActivity::class.java), REQUEST_DEVICE) },
         onConnectToggle = { if (elm.isConnected()) disconnect() else connectSelected() },
         onLiveToggle = { toggleLiveMode() },
-        onExport = { finishAndShareLogs() }
+        onExport = { finishAndShareLogs() },
+        onLayoutChange = { rebuildForLayout() }
     ).also { dashboard = it }.root
+
+    private fun rebuildForLayout() {
+        if (rebuildingUi) return
+        rebuildingUi = true
+        ui.post {
+            rebuildingUi = false
+            if (isFinishing || isDestroyed) return@post
+            setContentView(buildDashboard())
+            refreshControls()
+            renderDashboard()
+        }
+    }
+
+    private fun refreshControls() {
+        dashboard.setControlsEnabled(!busy.get(), liveMode.get())
+        dashboard.setLiveButton(liveMode.get())
+    }
 
     private fun loadSavedDevice() {
         val preferences = getSharedPreferences("probe", MODE_PRIVATE)

@@ -5,24 +5,29 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
+import android.view.ViewTreeObserver
 import android.widget.Button
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import java.util.Locale
 
 /**
- * V0.2.0 three-domain dashboard renderer.
+ * V0.3.0 responsive three-domain dashboard renderer.
  *
  * Consumes DashboardSnapshot only. Per-field versions make updates
- * change-driven: an unchanged signal does not reformat or setText.
+ * change-driven: an unchanged signal does not reformat or setText. Layout is
+ * derived from the current window size (D-039): cards reflow into a dynamic
+ * column grid and the data area scrolls instead of shrinking text.
  */
 internal class DashboardUi(
     private val activity: Activity,
     onSelectDevice: () -> Unit,
     onConnectToggle: () -> Unit,
     onLiveToggle: () -> Unit,
-    onExport: () -> Unit
+    onExport: () -> Unit,
+    onLayoutChange: () -> Unit
 ) {
     val root: View
     private val statusDeviceText: TextView
@@ -52,17 +57,27 @@ internal class DashboardUi(
     private val dimColor = Color.rgb(95, 205, 175)
     private val titleColor = Color.rgb(70, 215, 210)
     private val fontScale: Float
+    private var lastLayoutKey = -1
 
     init {
-        val metrics = activity.resources.displayMetrics
-        val widthDp = metrics.widthPixels / metrics.density
-        val heightDp = metrics.heightPixels / metrics.density
-        val isWide = widthDp >= 600f || widthDp > heightDp
-        // V0.3.0 v6 (D-037): fonts and control metrics scale with the screen's
-        // short side, normalized to the 720dp target head-unit reference.
+        // V0.3.0 responsive UI (D-039): derive everything from the actual app
+        // window (configuration screenWidthDp/HeightDp), so rotation,
+        // split-screen and freeform resizes reflow instead of assuming a fixed
+        // resolution or aspect ratio.
+        val config = activity.resources.configuration
+        var widthDp = config.screenWidthDp.toFloat()
+        var heightDp = config.screenHeightDp.toFloat()
+        if (widthDp <= 0f || heightDp <= 0f) {
+            val metrics = activity.resources.displayMetrics
+            widthDp = metrics.widthPixels / metrics.density
+            heightDp = metrics.heightPixels / metrics.density
+        }
         fontScale = (minOf(widthDp, heightDp) / 720f).coerceAtLeast(0.5f)
         val valueSp = 40f * fontScale
         val smallSp = 26f * fontScale
+        val columns = ResponsiveLayout.columnCount(widthDp.toInt())
+        val buttonsInHeader = widthDp >= 720f
+        val rowRanges = ResponsiveLayout.rowPlan(3, columns)
 
         val rootLayout = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -75,14 +90,14 @@ internal class DashboardUi(
         }
         titleColumn.addView(TextView(activity).apply {
             text = "RX400h"
-            textSize = (if (isWide) 30f else 26f) * fontScale
+            textSize = (if (buttonsInHeader) 30f else 26f) * fontScale
             setTextColor(Color.rgb(125, 255, 175))
             typeface = android.graphics.Typeface.MONOSPACE
             maxLines = 1
         })
         titleColumn.addView(TextView(activity).apply {
             text = "MONITOR"
-            textSize = (if (isWide) 17f else 15f) * fontScale
+            textSize = (if (buttonsInHeader) 17f else 15f) * fontScale
             setTextColor(Color.rgb(110, 235, 205))
             typeface = android.graphics.Typeface.MONOSPACE
             maxLines = 1
@@ -99,21 +114,21 @@ internal class DashboardUi(
         // V0.3.0 header v5 (D-036): buttons live inside the header between the
         // title and status columns on wide screens so no separate button row
         // wastes vertical space; narrow screens keep the scrollable row below.
-        deviceButton = smallButton("设备", onSelectDevice, isWide)
-        connectButton = smallButton("连接", onConnectToggle, isWide)
-        liveButton = smallButton("开始实时", onLiveToggle, isWide)
-        exportButton = smallButton("结束并导出", onExport, isWide)
+        deviceButton = smallButton("设备", onSelectDevice, buttonsInHeader)
+        connectButton = smallButton("连接", onConnectToggle, buttonsInHeader)
+        liveButton = smallButton("开始实时", onLiveToggle, buttonsInHeader)
+        exportButton = smallButton("结束并导出", onExport, buttonsInHeader)
 
         val controls = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(if (isWide) dp(6) else 0, dp(2), if (isWide) dp(6) else 0, dp(2))
+            setPadding(if (buttonsInHeader) dp(6) else 0, dp(2), if (buttonsInHeader) dp(6) else 0, dp(2))
         }
         controls.addView(deviceButton)
         controls.addView(connectButton)
         controls.addView(liveButton)
         controls.addView(exportButton)
-        if (isWide) {
+        if (buttonsInHeader) {
             top.addView(controls)
         }
 
@@ -122,14 +137,14 @@ internal class DashboardUi(
             gravity = Gravity.END
         }
         statusDeviceText = TextView(activity).apply {
-            textSize = (if (isWide) 17f else 15f) * fontScale
+            textSize = (if (buttonsInHeader) 17f else 15f) * fontScale
             setTextColor(Color.rgb(220, 235, 225))
             gravity = Gravity.END
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
         fun statusLine(): TextView = TextView(activity).apply {
-            textSize = (if (isWide) 14f else 12f) * fontScale
+            textSize = (if (buttonsInHeader) 14f else 12f) * fontScale
             setTextColor(Color.rgb(130, 160, 150))
             gravity = Gravity.END
             maxLines = 1
@@ -146,7 +161,7 @@ internal class DashboardUi(
         rootLayout.addView(top)
         rootLayout.addView(separator())
 
-        if (!isWide) {
+        if (!buttonsInHeader) {
             rootLayout.addView(HorizontalScrollView(activity).apply {
                 isHorizontalScrollBarEnabled = false
                 addView(controls)
@@ -156,9 +171,6 @@ internal class DashboardUi(
         val body = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(8), 0, 0)
-        }
-        val primary = LinearLayout(activity).apply {
-            orientation = if (isWide) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
         }
 
         val batteryCard = card("能量域")
@@ -198,18 +210,33 @@ internal class DashboardUi(
         }
         powerCard.addView(idleCheckValue)
 
-        if (isWide) {
-            primary.addView(batteryCard, weightedCard(0.34f))
-            primary.addView(vehicleCard, weightedCard(0.33f))
-            primary.addView(powerCard, weightedCard(0.33f))
-        } else {
-            primary.addView(batteryCard, fullCard())
-            primary.addView(vehicleCard, fullCard())
-            primary.addView(powerCard, fullCard())
+        // Responsive reflow (D-039): rows come from the computed column count;
+        // every card in a row shares the width equally. The whole data area is
+        // inside a vertical ScrollView, so a short window scrolls instead of
+        // forcing text to shrink.
+        for (range in rowRanges) {
+            val row = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.TOP
+            }
+            for (index in range) {
+                val card = when (index) {
+                    0 -> batteryCard
+                    1 -> vehicleCard
+                    else -> powerCard
+                }
+                row.addView(card, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).margin(dp(4)))
+            }
+            body.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         }
-        body.addView(primary, if (isWide) weightedRow(0.62f) else wrapRow())
-        rootLayout.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        val scroll = ScrollView(activity).apply {
+            isVerticalScrollBarEnabled = true
+            addView(body)
+        }
+        rootLayout.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         root = rootLayout
+        lastLayoutKey = layoutKey(widthDp.toInt(), heightDp.toInt(), columns, buttonsInHeader)
+        attachLayoutObserver(onLayoutChange)
     }
 
     fun render(snapshot: DashboardSnapshot) {
@@ -351,13 +378,41 @@ internal class DashboardUi(
         }
     }
 
-    private fun fullCard() = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).margin(dp(4))
-    private fun weightedCard(weight: Float) = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, weight).margin(dp(4))
-    private fun weightedRow(weight: Float) = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, weight)
-    private fun wrapRow() = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
     private fun LinearLayout.LayoutParams.margin(v: Int) = apply { setMargins(v, v, v, v) }
     // V0.3.0 v7 (D-038): every layout metric scales with the same screen
     // proportion as typography; the 1px floor keeps strokes/padding visible.
     private fun dp(value: Int): Int =
         maxOf(1, (value * fontScale * activity.resources.displayMetrics.density).toInt())
+
+    /**
+     * Coarse layout bucket so continuous window resizes rebuild only when the
+     * structure actually changes (columns, header mode or font scale bucket),
+     * which prevents flicker and rebuild storms.
+     */
+    private fun layoutKey(widthDp: Int, heightDp: Int, columns: Int, buttonsInHeader: Boolean): Int {
+        val fontBucket = ((minOf(widthDp.toFloat(), heightDp.toFloat()) / 720f).coerceAtLeast(0.5f) * 20).toInt()
+        return columns * 1000 + (if (buttonsInHeader) 500 else 0) + fontBucket
+    }
+
+    /**
+     * Watches the real laid-out window size and triggers [onLayoutChange] when
+     * the layout bucket changes (split-screen / freeform / rotation).
+     */
+    private fun attachLayoutObserver(onLayoutChange: () -> Unit) {
+        root.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                if (root.width == 0 || root.height == 0) return
+                val density = activity.resources.displayMetrics.density
+                val widthDp = (root.width / density).toInt()
+                val heightDp = (root.height / density).toInt()
+                val columns = ResponsiveLayout.columnCount(widthDp)
+                val buttonsInHeader = widthDp >= 720
+                val key = layoutKey(widthDp, heightDp, columns, buttonsInHeader)
+                if (key != lastLayoutKey) {
+                    lastLayoutKey = key
+                    root.post { onLayoutChange() }
+                }
+            }
+        })
+    }
 }

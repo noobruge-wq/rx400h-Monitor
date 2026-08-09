@@ -493,3 +493,15 @@ Required durable documents:
 **Reason:** User feedback after v6: fonts alone were not enough; every element must auto-adapt and no text may be clipped outside the visible area.
 
 **Consequences:** On the 720dp target the factor remains 1.0, so v5/v6 proportions are unchanged. Layout-only change on branch `v0.3.0`; no protocol, scheduler, signal or presentation-contract changes.
+
+---
+
+## D-039 — Size-independent responsive/adaptive UI
+
+**Status:** Accepted — 2026-08-10
+
+**Decision:** Replace fixed-aspect assumptions with a window-size-driven responsive layout. The actual app window (configuration `screenWidthDp`/`screenHeightDp`, plus the live laid-out root size) drives: font/control scale from the window short side (reference 720dp, floor 0.5), dynamic card column count (minimum card width 240dp, maximum 3 columns), and header mode (buttons inside the header only at ≥720dp width, otherwise a separate scrollable row). Cards reflow into computed rows; the data area always lives in a vertical ScrollView so reduced height scrolls instead of shrinking text. A coarse layout bucket (columns / header mode / font bucket) triggers a rebuild on window resize, with hysteresis to avoid flicker.
+
+**Reason:** User requirement: the UI must be size-independent, reflow rather than scale, keep critical data readable, never clip or overlap, and shrink text only as the last resort.
+
+**Consequences:** Layout is derived from the current window at build time and live-resize time; column/row math is unit-tested in `ResponsiveLayoutTest`. On the 720dp target the factor remains 1.0. Layout-only change on branch `v0.3.0`; no protocol, scheduler, signal or presentation-contract changes.
