@@ -426,7 +426,7 @@ Required durable documents:
 
 ## D-033 — V0.3.0 header UI: single-row wide layout
 
-**Status:** Accepted — 2026-08-10
+**Status:** Superseded by D-035 — 2026-08-10
 
 **Decision:** On wide screens the dashboard header is one row: title left, four control buttons centered, status right, per the user's head-unit mockup. Narrow screens keep the existing two-row fallback (title+status row, button row below) so the buttons cannot overflow.
 
@@ -445,3 +445,15 @@ Required durable documents:
 **Reason:** The user's text specification overrides the earlier vision-model description of the mockup. The goal is readable fixed-size text on the distant head-unit screen, with touch targets that never crowd the text zones.
 
 **Consequences:** Layout/presentation-only change on branch `v0.3.0`; no protocol, scheduler, signal or presentation-contract changes.
+
+---
+
+## D-035 — V0.3.0 header v3: text-first layout, Chinese domain cards, doubled fonts
+
+**Status:** Accepted — 2026-08-10
+
+**Decision:** Header layout is text-first: line 1/2 are the two-line title (`RX400h` / `MONITOR`) on the left and a widened status column on the right (device name line + 蓝牙/协议/数据 lines, allowed to stack vertically or use short words); the four buttons sit in their own full-width row below and are narrower and taller. Buttons are squeezed by text, never the reverse; when horizontal width is insufficient the layout changes (stacked text or scrollable button row). Domain cards get Chinese centered titles at the top of each frame (能量域 / 车辆域 / 动力域), every value has a centered label line followed by a centered value line, and all three-domain text is doubled from the previous build (labels/values 40sp, titles 28sp) except battery MAX/MIN (26sp, dim) and the permanent gray 怠速检查, which turns the active value color only during Idle Check.
+
+**Reason:** User's v3 text spec overrides the earlier mockup interpretation; buttons were still too wide and the previous single-line status squeezed the text zones. The distant head-unit screen needs the largest readable text and priority to text over buttons.
+
+**Consequences:** Supersedes D-033's "buttons inside the header row" decision and refines D-034. Layout/presentation-only change on branch `v0.3.0`; no protocol, scheduler, signal or presentation-contract changes.

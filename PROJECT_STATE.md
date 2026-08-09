@@ -503,5 +503,6 @@ Remaining real-vehicle-only items are tracked in V0.3.0: more natural Idle Check
 - CI run `31314095899` on branch `v0.3.0` (HEAD `8cd2e00`) passed; 17 unit tests, signed APK SHA-256 `f94ae4aa…` verified with the fixed project debug key.
 - Header v2 per the user's text spec (D-034): two-line Chinese title/status, centered buttons, uniform value typography except battery MAX/MIN, POWER order 混动功率/引擎功率/转速 and permanent gray 怠速检查; `versionCode = 13`.
 - CI run `31315386621` on branch `v0.3.0` (HEAD `e9479ba`) passed; 17 unit tests, signed APK SHA-256 `27b013c6…` verified with the fixed project debug key.
+- Header v3 per the user's text spec (D-035): text row (two-line title + widened multi-line status) above a full-width button row; buttons narrower/taller and squeezed by text, never the reverse; Chinese centered domain titles; label/value lines with doubled fonts (40sp, titles 28sp, MAX/MIN 26sp); `versionCode = 14`.
 - Engineering baseline on `main` remains V0.2.0 until V0.3.0 closes.
 - Next V0.3.0 work per `ROADMAP.md`: deadline/priority scheduler, backpressure/skip policy, rate tiers, temporal coherence, extended performance metrics and staged frequency tests (≈0.36 Hz → HA ~5.5 Hz point → higher, with the head unit as the weak-hardware baseline).

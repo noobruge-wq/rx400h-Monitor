@@ -62,7 +62,7 @@ A renderer can be replaced without modifying decoder/signal semantics, and every
 
 **Status:** In development — started 2026-08-10 (branch `v0.3.0`).
 
-First merged items: header UI (D-033/D-034) — wide header keeps title / buttons / status on one row with two-line Chinese title and status text, buttons centered without squeezing the text; narrow layouts keep the two-row fallback. All data values use one font size/color except battery MAX/MIN; POWER order and the permanent gray 怠速检查 follow the user's text spec. Layout-only; scheduler work below is the next phase.
+First merged items: header UI (D-033/D-034/D-035) — text row first (two-line title left, widened multi-line status right), then a full-width button row with narrower/taller buttons that are squeezed by text; Chinese centered domain titles (能量域/车辆域/动力域), label/value lines, doubled fonts, POWER order and the permanent gray 怠速检查 follow the user's text spec. Layout-only; scheduler work below is the next phase.
 
 ### Carried from V0.2.0 (real-vehicle-only)
 

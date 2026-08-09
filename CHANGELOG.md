@@ -14,10 +14,10 @@ This changelog records engineering baselines, not every chat turn. Major-version
 
 ### V0.3.0 — High-Performance Scheduler / Refresh Frontier (development started 2026-08-10)
 
-- Header v2 (D-033/D-034): wide header keeps title / buttons / status on one row, but title (`RX400h`/`MONITOR`) and status (device name + 蓝牙/协议/数据 line) are two-line fixed-size text so the buttons never squeeze the text zones; narrow layouts keep the two-row fallback.
-- All three domains use the same value font size and color except battery MAX/MIN (kept as B-level small text); labels and statuses are Chinese except card titles and number units.
-- POWER order is 混动功率 → 引擎功率 → 转速 → 怠速检查; 怠速检查 is permanent near-background gray and switches to the active value color only while Idle Check is active.
-- `versionCode = 13`, `versionName = 0.3.0` on branch `v0.3.0` (candidate artifact `RX400hProtocolProbe-v0.3.0-header-v2-debug-signed`).
+- Header v3 (D-035, supersedes D-033): text row first — two-line title left, widened status column right (device name + 蓝牙/协议/数据 lines that may stack vertically or use short words) — then a full-width button row; buttons are narrower and taller and are squeezed by text, never the reverse. Insufficient horizontal width falls back to a stacked/scrollable arrangement.
+- Domain cards use Chinese centered titles at the top (能量域 / 车辆域 / 动力域); each value has its own centered label line and value line (e.g. 电量 / `--.-%`).
+- All three-domain text is doubled (labels/values 40sp, titles 28sp) except battery MAX/MIN (26sp, dim) and the permanent gray 怠速检查, which turns the active green only while Idle Check is active.
+- `versionCode = 14`, `versionName = 0.3.0` on branch `v0.3.0` (candidate artifact `RX400hProtocolProbe-v0.3.0-header-v3-debug-signed`).
 - Layout-only entry: no protocol, scheduler, signal or presentation-contract changes.
 
 ### Verification (2026-08-10)
