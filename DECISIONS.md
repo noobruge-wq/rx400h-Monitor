@@ -433,3 +433,15 @@ Required durable documents:
 **Reason:** The target head-unit screen sits far from the driver; the user requested larger fonts and buttons plus the four buttons moved to the middle of the top bar. The mockup places the buttons inside the top bar, not on a separate row.
 
 **Consequences:** Layout-only change on branch `v0.3.0`; no protocol, scheduler, signal or presentation-contract changes. Narrow layouts retain the horizontal-scroll button row as a fallback.
+
+---
+
+## D-034 — V0.3.0 header v2 and Chinese display contract
+
+**Status:** Accepted — 2026-08-10
+
+**Decision:** The header uses two-line fixed-size text on both sides (title: `RX400h` / `MONITOR`; status: device name on line 1, 蓝牙连接/协议/测试数据 state line on line 2), buttons centered between them; text always reserves its space and buttons shrink only if the header would overflow. All three dashboard domains use the same value font size and color except battery MAX/MIN, which stays B-level small text. All labels/statuses are Chinese except card titles and number units. POWER order is 混动功率 → 引擎功率 → 转速 → 怠速检查; 怠速检查 is permanent near-background gray and turns the active value color only while Idle Check is active.
+
+**Reason:** The user's text specification overrides the earlier vision-model description of the mockup. The goal is readable fixed-size text on the distant head-unit screen, with touch targets that never crowd the text zones.
+
+**Consequences:** Layout/presentation-only change on branch `v0.3.0`; no protocol, scheduler, signal or presentation-contract changes.

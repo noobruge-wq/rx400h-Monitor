@@ -14,8 +14,10 @@ This changelog records engineering baselines, not every chat turn. Major-version
 
 ### V0.3.0 — High-Performance Scheduler / Refresh Frontier (development started 2026-08-10)
 
-- Wide-screen dashboard header is now a single row: title left / four buttons center / status right, matching the user's head-unit mockup (D-033). Narrow screens keep the two-row fallback (title+status row, button row below) so controls cannot overflow.
-- `versionCode = 12`, `versionName = 0.3.0` on branch `v0.3.0`.
+- Header v2 (D-033/D-034): wide header keeps title / buttons / status on one row, but title (`RX400h`/`MONITOR`) and status (device name + 蓝牙/协议/数据 line) are two-line fixed-size text so the buttons never squeeze the text zones; narrow layouts keep the two-row fallback.
+- All three domains use the same value font size and color except battery MAX/MIN (kept as B-level small text); labels and statuses are Chinese except card titles and number units.
+- POWER order is 混动功率 → 引擎功率 → 转速 → 怠速检查; 怠速检查 is permanent near-background gray and switches to the active value color only while Idle Check is active.
+- `versionCode = 13`, `versionName = 0.3.0` on branch `v0.3.0` (candidate artifact `RX400hProtocolProbe-v0.3.0-header-v2-debug-signed`).
 - Layout-only entry: no protocol, scheduler, signal or presentation-contract changes.
 
 ### Verification (2026-08-10)

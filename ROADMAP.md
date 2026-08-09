@@ -62,7 +62,7 @@ A renderer can be replaced without modifying decoder/signal semantics, and every
 
 **Status:** In development — started 2026-08-10 (branch `v0.3.0`).
 
-First merged item: wide-screen dashboard header is a single row (title / buttons / status) with a narrow two-row fallback (D-033). Layout-only; scheduler work below is the next phase.
+First merged items: header UI (D-033/D-034) — wide header keeps title / buttons / status on one row with two-line Chinese title and status text, buttons centered without squeezing the text; narrow layouts keep the two-row fallback. All data values use one font size/color except battery MAX/MIN; POWER order and the permanent gray 怠速检查 follow the user's text spec. Layout-only; scheduler work below is the next phase.
 
 ### Carried from V0.2.0 (real-vehicle-only)
 

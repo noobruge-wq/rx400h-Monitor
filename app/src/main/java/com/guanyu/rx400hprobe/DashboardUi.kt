@@ -25,7 +25,8 @@ internal class DashboardUi(
     onExport: () -> Unit
 ) {
     val root: View
-    private val statusText: TextView
+    private val statusDeviceText: TextView
+    private val statusLineText: TextView
     private val deviceButton: Button
     private val connectButton: Button
     private val liveButton: Button
@@ -44,6 +45,8 @@ internal class DashboardUi(
 
     private var lastSnapshot: DashboardSnapshot? = null
 
+    private val idleIdleColor = Color.rgb(90, 105, 95)
+
     init {
         val metrics = activity.resources.displayMetrics
         val widthDp = metrics.widthPixels / metrics.density
@@ -55,51 +58,76 @@ internal class DashboardUi(
             setBackgroundColor(Color.rgb(2, 8, 7))
             setPadding(dp(16), dp(12), dp(16), dp(12))
         }
+        val titleColumn = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        titleColumn.addView(TextView(activity).apply {
+            text = "RX400h"
+            textSize = if (isWide) 30f else 26f
+            setTextColor(Color.rgb(125, 255, 175))
+            typeface = android.graphics.Typeface.MONOSPACE
+            maxLines = 1
+        })
+        titleColumn.addView(TextView(activity).apply {
+            text = "MONITOR"
+            textSize = if (isWide) 17f else 15f
+            setTextColor(Color.rgb(110, 235, 205))
+            typeface = android.graphics.Typeface.MONOSPACE
+            maxLines = 1
+        })
+
         val top = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             minimumHeight = dp(72)
-            setPadding(0, dp(8), 0, dp(8))
+            setPadding(0, dp(6), 0, dp(6))
         }
-        top.addView(TextView(activity).apply {
-            text = "RX400h MONITOR"
-            textSize = if (isWide) 34f else 28f
-            setTextColor(Color.rgb(125, 255, 175))
-            typeface = android.graphics.Typeface.MONOSPACE
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        top.addView(titleColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
-        deviceButton = smallButton("设备", onSelectDevice)
-        connectButton = smallButton("连接", onConnectToggle)
-        liveButton = smallButton("开始实时", onLiveToggle)
-        exportButton = smallButton("结束并导出", onExport)
+        deviceButton = smallButton("设备", onSelectDevice, isWide)
+        connectButton = smallButton("连接", onConnectToggle, isWide)
+        liveButton = smallButton("开始实时", onLiveToggle, isWide)
+        exportButton = smallButton("结束并导出", onExport, isWide)
 
         val controls = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(if (isWide) dp(8) else 0, dp(6), if (isWide) dp(8) else 0, dp(6))
+            setPadding(if (isWide) dp(8) else 0, dp(4), if (isWide) dp(8) else 0, dp(4))
         }
         controls.addView(deviceButton)
         controls.addView(connectButton)
         controls.addView(liveButton)
         controls.addView(exportButton)
 
-        // V0.3.0: wide headers keep title / buttons / status on one row (user mockup);
-        // narrow layouts keep the buttons on their own row to avoid overflow.
+        // V0.3.0 header (D-033/D-034): wide keeps title / buttons / status on one
+        // row with two-line title and status text; narrow keeps buttons on their
+        // own row so the two-line text cannot be squeezed.
         if (isWide) {
             top.addView(controls)
         }
 
-        statusText = TextView(activity).apply {
-            textSize = if (isWide) 18f else 16f
-            setTextColor(Color.rgb(110, 235, 205))
+        val statusColumn = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.END
+        }
+        statusDeviceText = TextView(activity).apply {
+            textSize = if (isWide) 16f else 14f
+            setTextColor(Color.rgb(220, 235, 225))
             gravity = Gravity.END
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
-            setPadding(dp(8), 0, dp(8), 0)
         }
-        top.addView(statusText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        statusLineText = TextView(activity).apply {
+            textSize = if (isWide) 14f else 13f
+            setTextColor(Color.rgb(130, 160, 150))
+            gravity = Gravity.END
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        statusColumn.addView(statusDeviceText)
+        statusColumn.addView(statusLineText)
+        top.addView(statusColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         rootLayout.addView(top)
         rootLayout.addView(separator())
 
@@ -119,30 +147,32 @@ internal class DashboardUi(
         }
 
         val batteryCard = card("BATTERY")
-        socValue = bigValue("— %", if (isWide) 44f else 40f)
-        batteryAvgValue = mediumValue("AVG — °C")
-        batteryDetailValue = smallInfo("MAX —°   MIN —°")
+        socValue = valueLine("电量 — %")
+        batteryAvgValue = valueLine("平均温度 — °C")
+        batteryDetailValue = smallInfo("最高 —°  最低 —°")
         batteryCard.addView(socValue)
         batteryCard.addView(batteryAvgValue)
         batteryCard.addView(batteryDetailValue)
 
         val vehicleCard = card("VEHICLE STATUS")
-        speedValue = bigValue("— km/h", if (isWide) 44f else 40f)
-        coolantValue = mediumValue("COOLANT — °C")
-        voltageValue = mediumValue("12V OBD — V")
+        speedValue = valueLine("速度 — km/h")
+        coolantValue = valueLine("冷却液 — °C")
+        voltageValue = valueLine("12V 供电 — V")
         vehicleCard.addView(speedValue)
         vehicleCard.addView(coolantValue)
         vehicleCard.addView(voltageValue)
 
         val powerCard = card("POWER")
-        icePowerValue = bigValue("— kW", if (isWide) 44f else 40f)
-        rpmValue = mediumValue("— rpm")
-        idleCheckValue = mediumValue("")
-        hvPowerValue = mediumValue("HV — kW")
+        hvPowerValue = valueLine("混动功率 — kW")
+        icePowerValue = valueLine("引擎功率 — kW")
+        rpmValue = valueLine("转速 — rpm")
+        idleCheckValue = valueLine("怠速检查").apply {
+            setTextColor(idleIdleColor)
+        }
+        powerCard.addView(hvPowerValue)
         powerCard.addView(icePowerValue)
         powerCard.addView(rpmValue)
         powerCard.addView(idleCheckValue)
-        powerCard.addView(hvPowerValue)
 
         if (isWide) {
             primary.addView(batteryCard, weightedCard(0.34f))
@@ -161,43 +191,65 @@ internal class DashboardUi(
     fun render(snapshot: DashboardSnapshot) {
         val last = lastSnapshot
         if (last == null || snapshot.speedVersion != last.speedVersion) {
-            speedValue.text = valueWithUnit(snapshot.speedKph, snapshot.speedFresh, "km/h", 0)
+            speedValue.text = "速度 ${valueWithUnit(snapshot.speedKph, snapshot.speedFresh, "km/h", 0)}"
         }
         if (last == null || snapshot.socVersion != last.socVersion) {
-            socValue.text = valueWithUnit(snapshot.socPct, snapshot.socFresh, "%", 1)
+            socValue.text = "电量 ${valueWithUnit(snapshot.socPct, snapshot.socFresh, "%", 1)}"
         }
         if (last == null || snapshot.batteryTempVersion != last.batteryTempVersion) {
-            batteryAvgValue.text = "AVG ${value(snapshot.batteryTempAvgC, snapshot.batteryTempFresh, 1)} °C"
+            batteryAvgValue.text = "平均温度 ${value(snapshot.batteryTempAvgC, snapshot.batteryTempFresh, 1)} °C"
             batteryDetailValue.text =
-                "MAX ${value(snapshot.batteryTempMaxC, snapshot.batteryTempFresh, 1)}°   MIN ${value(snapshot.batteryTempMinC, snapshot.batteryTempFresh, 1)}°"
+                "最高 ${value(snapshot.batteryTempMaxC, snapshot.batteryTempFresh, 1)}°  最低 ${value(snapshot.batteryTempMinC, snapshot.batteryTempFresh, 1)}°"
         }
         if (last == null || snapshot.hvPowerVersion != last.hvPowerVersion) {
-            hvPowerValue.text = "HV ${valueWithUnit(snapshot.hvPowerKw, snapshot.hvPowerFresh, "kW", 1)}"
+            hvPowerValue.text = "混动功率 ${valueWithUnit(snapshot.hvPowerKw, snapshot.hvPowerFresh, "kW", 1)}"
         }
         if (last == null || snapshot.rpmVersion != last.rpmVersion) {
-            rpmValue.text = valueWithUnit(snapshot.rpm, snapshot.rpmFresh, "rpm", 0)
+            rpmValue.text = "转速 ${valueWithUnit(snapshot.rpm, snapshot.rpmFresh, "rpm", 0)}"
         }
         if (last == null || snapshot.coolantVersion != last.coolantVersion) {
-            coolantValue.text = "COOLANT ${value(snapshot.coolantC, snapshot.coolantFresh, 0)} °C"
+            coolantValue.text = "冷却液 ${value(snapshot.coolantC, snapshot.coolantFresh, 0)} °C"
         }
         if (last == null || snapshot.adapterVoltageVersion != last.adapterVoltageVersion) {
-            voltageValue.text = "12V OBD ${value(snapshot.adapterVoltageV, snapshot.adapterVoltageFresh, 1)} V"
+            voltageValue.text = "12V 供电 ${value(snapshot.adapterVoltageV, snapshot.adapterVoltageFresh, 1)} V"
         }
         if (last == null || snapshot.icePowerVersion != last.icePowerVersion) {
-            icePowerValue.text = valueWithUnit(snapshot.icePowerKw, snapshot.icePowerFresh, "kW", 1)
+            icePowerValue.text = "引擎功率 ${valueWithUnit(snapshot.icePowerKw, snapshot.icePowerFresh, "kW", 1)}"
         }
         if (last == null || snapshot.idleCheckVersion != last.idleCheckVersion) {
-            idleCheckValue.text = if (snapshot.idleCheckActive) "IDLE CHECK" else ""
+            idleCheckValue.text = "怠速检查"
+            idleCheckValue.setTextColor(
+                if (snapshot.idleCheckActive) Color.rgb(125, 255, 175) else idleIdleColor
+            )
         }
         lastSnapshot = snapshot
     }
 
     fun renderStatus(status: DashboardStatus) {
-        val reconnect = if (status.reconnectCount > 0) " · R${status.reconnectCount}" else ""
+        statusDeviceText.text = status.deviceName
+        val reconnect = if (status.reconnectCount > 0) " · 重连${status.reconnectCount}" else ""
         val error = status.error?.let { " · $it" } ?: ""
-        statusText.text = "${status.deviceName} · ${status.connection} · ${status.mode} · ${status.logging}$reconnect$error"
-        statusText.setTextColor(if (status.warning) Color.rgb(255, 185, 80) else if (status.connection == "CONNECTED") Color.rgb(105, 240, 195) else Color.rgb(130, 160, 150))
+        statusLineText.text = "蓝牙${connectionText(status.connection)} · 协议${modeText(status.mode)} · 数据${loggingText(status.logging)}$reconnect$error"
+        statusLineText.setTextColor(if (status.warning) Color.rgb(255, 185, 80) else if (status.connection == "CONNECTED") Color.rgb(105, 240, 195) else Color.rgb(130, 160, 150))
         connectButton.text = if (status.connection == "CONNECTED") "断开" else "连接"
+    }
+
+    private fun connectionText(connection: String): String =
+        if (connection == "CONNECTED") "已连接" else "未连接"
+
+    private fun modeText(mode: String): String = when (mode) {
+        "LIVE" -> "实时"
+        "BUSY" -> "忙"
+        else -> "空闲"
+    }
+
+    private fun loggingText(logging: String): String = when (logging) {
+        "LOG" -> "记录中"
+        "LOG!" -> "记录降级"
+        "PACKING" -> "打包中"
+        "SAVED" -> "已保存"
+        "LOG ERROR" -> "记录错误"
+        else -> "未记录"
     }
 
     fun setControlsEnabled(enabled: Boolean, live: Boolean) {
@@ -236,16 +288,7 @@ internal class DashboardUi(
         })
     }
 
-    private fun bigValue(initial: String, sizeSp: Float): TextView = TextView(activity).apply {
-        text = initial
-        textSize = sizeSp
-        gravity = Gravity.CENTER
-        setTextColor(Color.rgb(125, 255, 145))
-        typeface = android.graphics.Typeface.MONOSPACE
-        setPadding(0, dp(8), 0, dp(4))
-    }
-
-    private fun mediumValue(initial: String): TextView = TextView(activity).apply {
+    private fun valueLine(initial: String): TextView = TextView(activity).apply {
         text = initial
         textSize = 20f
         gravity = Gravity.CENTER
@@ -263,15 +306,20 @@ internal class DashboardUi(
         setPadding(0, dp(4), 0, dp(4))
     }
 
-    private fun smallButton(label: String, action: () -> Unit): Button = Button(activity).apply {
+    private fun smallButton(label: String, action: () -> Unit, compact: Boolean): Button = Button(activity).apply {
         text = label
-        textSize = 17f
+        textSize = if (compact) 15f else 17f
         minHeight = dp(52)
         minimumHeight = dp(52)
-        minWidth = dp(96)
-        minimumWidth = dp(96)
+        minWidth = if (compact) dp(88) else dp(96)
+        minimumWidth = if (compact) dp(88) else dp(96)
         setOnClickListener { action() }
-        setPadding(dp(20), dp(12), dp(20), dp(12))
+        setPadding(
+            if (compact) dp(14) else dp(20),
+            if (compact) dp(10) else dp(12),
+            if (compact) dp(14) else dp(20),
+            if (compact) dp(10) else dp(12)
+        )
     }
 
     private fun separator(): View = View(activity).apply {
