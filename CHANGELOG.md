@@ -42,9 +42,9 @@ No unreleased changes yet.
 
 ### Verification (2026-08-08)
 
-- Unit tests: 15 passed (`:app:testDebugUnitTest`), including parsers, SignalStore and Idle Check state.
-- GitHub Actions run `31194615369` (HEAD `a0ee1a9`) completed **success**; `:app:assembleDebug` signed APK verified with the fixed project debug key.
-- Artifact: `RX400hProtocolProbe-v0.2.0-reactive-debug-signed`, APK SHA-256 `f1c87bda96d1b4238488627300c40343768e809d251fbf154d41fd846960aa3e`.
+- Unit tests: 17 passed (`:app:testDebugUnitTest`), including parsers, SignalStore, Idle Check state and the natural E1 replay fixture.
+- GitHub Actions run `31299528505` (HEAD `8a7aef4`) completed **success**; `:app:assembleDebug` signed APK verified with the fixed project debug key.
+- Artifact: `RX400hProtocolProbe-v0.2.0-reactive-debug-signed`, APK SHA-256 `207f28409c89ad7b8650f1aaf92426be52c77abe14bf2a9d816d2772e119f7be`.
 - `versionCode = 10`, `versionName = 0.2.0`.
 - Idle Check eligibility has a natural E1 capture plus a deterministic replay test; further natural observations are tracked in V0.3.0.
 

@@ -471,7 +471,7 @@ A new Codex session is considered successfully migrated when it can:
 
 ## 18. V0.2.0 closure — 2026-08-09
 
-Closed as the current engineering baseline. Implementation is complete and verified by GitHub Actions (`a0ee1a9`, run `31194615369`, success):
+Closed as the current engineering baseline. Implementation is complete and verified by GitHub Actions (`8a7aef4`, run `31299528505`, success):
 
 1. Docs-first migration closure: install Codex handoff documents and refresh baseline manifest.
 2. Lightweight typed `SignalStore` with value/source timestamp/update timestamp/age/quality/version/source.

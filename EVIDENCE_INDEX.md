@@ -37,9 +37,10 @@ Role: phone-first/GitHub Actions package using the fixed debug-signing workflow.
 
 ```text
 Baseline: V0.2.0 (closed 2026-08-09), tag v0.2.0
-GitHub Actions run: 31298592420 — success (decoder 002 final)
+Closure commit: 8a7aef44f891985fcc41b0bf4a36ca7fba1e40ef
+GitHub Actions run: 31299528505 — success (decoder 002 final)
 Artifact: RX400hProtocolProbe-v0.2.0-reactive-debug-signed
-APK SHA-256: 133954f819931ffe8a98a8acee82178e86f0b50d2cd7e6cd03a58afb410c32ed
+APK SHA-256: 207f28409c89ad7b8650f1aaf92426be52c77abe14bf2a9d816d2772e119f7be
 Unit tests: 17 passed
 Source snapshot: RX400hProtocolProbe_v0.2.0_source.zip
 SHA-256: f431dd0107b9c6bb807f37bf6c71e1d9d52ebc1261995659baaefad4af35c5f2
