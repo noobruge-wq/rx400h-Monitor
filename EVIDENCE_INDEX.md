@@ -96,6 +96,18 @@ Unit tests: 17 passed
 
 Role: header v3 (D-035) — text row first (two-line title + widened multi-line status) above a full-width button row; buttons narrower/taller and squeezed by text; Chinese centered domain titles (能量域/车辆域/动力域), label/value lines and doubled fonts except battery MAX/MIN and the permanent gray 怠速检查. Layout-only; no protocol or scheduler changes.
 
+### V0.3.0 header v4 fix candidate (branch v0.3.0)
+
+```text
+Commit: 0f791110808dd62eb8b9553b95a4d0e8ee2aa79f (v0.3.0)
+GitHub Actions run: 31318586138 — success
+Artifact: RX400hProtocolProbe-v0.3.0-header-v4-debug-signed
+APK SHA-256: 347841bdbd38c37bf2fb92e7823841016a19bcf17db02da095b878edf444d5dc
+Unit tests: 17 passed
+```
+
+Role: fixes domain card child ordering — each label is immediately followed by its value line (电量/`--.-%`, 温度/`--.-°C`, 最高 最低/`--.-°C--.-°C`), matching the user's example. Layout-only.
+
 ---
 
 ## B. Void source
