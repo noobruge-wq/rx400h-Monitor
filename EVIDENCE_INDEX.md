@@ -84,6 +84,18 @@ Unit tests: 17 passed
 
 Role: header v2 + Chinese display contract (D-034) — two-line fixed-size title/status text, centered buttons that do not squeeze the text zones, uniform value typography except battery MAX/MIN, POWER order 混动功率/引擎功率/转速 and permanent gray 怠速检查. Layout-only; no protocol or scheduler changes.
 
+### V0.3.0 header v3 candidate (branch v0.3.0)
+
+```text
+Commit: 6a18f18217f5ff3995b6fbb51b86a50c124c0ef5 (v0.3.0)
+GitHub Actions run: 31316526865 — success
+Artifact: RX400hProtocolProbe-v0.3.0-header-v3-debug-signed
+APK SHA-256: 399d268c3781324373b8392258c8393304c9d27ef12408cefa6879fef5d483c2
+Unit tests: 17 passed
+```
+
+Role: header v3 (D-035) — text row first (two-line title + widened multi-line status) above a full-width button row; buttons narrower/taller and squeezed by text; Chinese centered domain titles (能量域/车辆域/动力域), label/value lines and doubled fonts except battery MAX/MIN and the permanent gray 怠速检查. Layout-only; no protocol or scheduler changes.
+
 ---
 
 ## B. Void source
