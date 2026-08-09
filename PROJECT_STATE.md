@@ -3,7 +3,7 @@
 **Baseline date:** 2026-08-09<br>
 **Current engineering baseline:** V0.2.0 — Reactive Core (closed 2026-08-09)<br>
 **Historical validated engineering baseline:** V0.1.10 cleanup / real-vehicle validated branch<br>
-**Next major milestone:** V0.3.0 — High-Performance Scheduler / Refresh Frontier
+**Next major milestone:** V0.3.0 — High-Performance Scheduler / Refresh Frontier (development started 2026-08-10 on branch `v0.3.0`)
 **Repository:** `noobruge-wq/rx400h-Monitor`
 
 > This file is the primary handoff document. Future development must update this document before code changes. A new AI/developer should be able to resume the project from this file + `DECISIONS.md` + `ROADMAP.md` + latest source without relying on chat history.
@@ -493,3 +493,12 @@ Real-vehicle validation status (decoder `002`):
 The V0.2.0 exit gate remains: renderer replacement requires no Decoder/SignalStore semantic changes, and every typed Runtime field has a documented consumer.
 
 Remaining real-vehicle-only items are tracked in V0.3.0: more natural Idle Check observations, long-session memory trend on the target head unit, and high-refresh ladder testing.
+
+---
+
+## 19. V0.3.0 development — 2026-08-10
+
+- Branch `v0.3.0` opened from main (`33dc9d6`); `versionCode = 12`, `versionName = 0.3.0`.
+- First item merged per user decision: wide-screen dashboard header becomes a single row (title / four buttons / status); narrow screens keep the two-row fallback (D-033).
+- Engineering baseline on `main` remains V0.2.0 until V0.3.0 closes.
+- Next V0.3.0 work per `ROADMAP.md`: deadline/priority scheduler, backpressure/skip policy, rate tiers, temporal coherence, extended performance metrics and staged frequency tests (≈0.36 Hz → HA ~5.5 Hz point → higher, with the head unit as the weak-hardware baseline).

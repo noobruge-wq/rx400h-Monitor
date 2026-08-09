@@ -12,6 +12,12 @@ This changelog records engineering baselines, not every chat turn. Major-version
 - Re-verified user-provided `dumpstate.zip` (`1d657dc0…`) and its embedded HCI btsnoop files (`205d6dd0…`, `c9c080e8…`) as V0.3.0 cross-check material.
 - Recorded D-032: HA/DP are reference-only; no wholesale copying; keep the implementation minimal until new requirements are added.
 
+### V0.3.0 — High-Performance Scheduler / Refresh Frontier (development started 2026-08-10)
+
+- Wide-screen dashboard header is now a single row: title left / four buttons center / status right, matching the user's head-unit mockup (D-033). Narrow screens keep the two-row fallback (title+status row, button row below) so controls cannot overflow.
+- `versionCode = 12`, `versionName = 0.3.0` on branch `v0.3.0`.
+- Layout-only entry: no protocol, scheduler, signal or presentation-contract changes.
+
 ---
 
 ## [0.2.1] — Head-unit UI adjustment — 2026-08-09

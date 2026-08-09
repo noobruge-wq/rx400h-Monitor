@@ -66,34 +66,49 @@ internal class DashboardUi(
             textSize = if (isWide) 34f else 28f
             setTextColor(Color.rgb(125, 255, 175))
             typeface = android.graphics.Typeface.MONOSPACE
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        statusText = TextView(activity).apply {
-            textSize = if (isWide) 18f else 16f
-            setTextColor(Color.rgb(110, 235, 205))
-            gravity = Gravity.END
-            setPadding(dp(8), 0, dp(8), 0)
-        }
-        top.addView(statusText)
-        rootLayout.addView(top)
-        rootLayout.addView(separator())
 
-        val controls = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(0, dp(6), 0, dp(6))
-        }
         deviceButton = smallButton("设备", onSelectDevice)
         connectButton = smallButton("连接", onConnectToggle)
         liveButton = smallButton("开始实时", onLiveToggle)
         exportButton = smallButton("结束并导出", onExport)
+
+        val controls = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(if (isWide) dp(8) else 0, dp(6), if (isWide) dp(8) else 0, dp(6))
+        }
         controls.addView(deviceButton)
         controls.addView(connectButton)
         controls.addView(liveButton)
         controls.addView(exportButton)
-        rootLayout.addView(HorizontalScrollView(activity).apply {
-            isHorizontalScrollBarEnabled = false
-            addView(controls)
-        })
+
+        // V0.3.0: wide headers keep title / buttons / status on one row (user mockup);
+        // narrow layouts keep the buttons on their own row to avoid overflow.
+        if (isWide) {
+            top.addView(controls)
+        }
+
+        statusText = TextView(activity).apply {
+            textSize = if (isWide) 18f else 16f
+            setTextColor(Color.rgb(110, 235, 205))
+            gravity = Gravity.END
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(8), 0, dp(8), 0)
+        }
+        top.addView(statusText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        rootLayout.addView(top)
+        rootLayout.addView(separator())
+
+        if (!isWide) {
+            rootLayout.addView(HorizontalScrollView(activity).apply {
+                isHorizontalScrollBarEnabled = false
+                addView(controls)
+            })
+        }
 
         val body = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL

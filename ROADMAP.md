@@ -60,6 +60,10 @@ A renderer can be replaced without modifying decoder/signal semantics, and every
 
 ## V0.3.0 — High-Performance Scheduler / Refresh Frontier
 
+**Status:** In development — started 2026-08-10 (branch `v0.3.0`).
+
+First merged item: wide-screen dashboard header is a single row (title / buttons / status) with a narrow two-row fallback (D-033). Layout-only; scheduler work below is the next phase.
+
 ### Carried from V0.2.0 (real-vehicle-only)
 
 - Continue natural Idle Check observations to strengthen eligibility equivalence.

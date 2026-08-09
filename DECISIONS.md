@@ -421,3 +421,15 @@ Required durable documents:
 **Reason:** The project exists to build a lighter, RX400h-specific monitor, not a HA clone or a generalized platform. Copying third-party structure would reintroduce the complexity, dependencies and UI weight the project intentionally avoids.
 
 **Consequences:** New code is added only when a concrete consumer/requirement exists; reference apps are used for interoperability facts and cross-checking, not as an implementation template. Lean Core gates (dead-code/consumer/allocation/dependency/duplicate-state audits) remain mandatory.
+
+---
+
+## D-033 — V0.3.0 header UI: single-row wide layout
+
+**Status:** Accepted — 2026-08-10
+
+**Decision:** On wide screens the dashboard header is one row: title left, four control buttons centered, status right, per the user's head-unit mockup. Narrow screens keep the existing two-row fallback (title+status row, button row below) so the buttons cannot overflow.
+
+**Reason:** The target head-unit screen sits far from the driver; the user requested larger fonts and buttons plus the four buttons moved to the middle of the top bar. The mockup places the buttons inside the top bar, not on a separate row.
+
+**Consequences:** Layout-only change on branch `v0.3.0`; no protocol, scheduler, signal or presentation-contract changes. Narrow layouts retain the horizontal-scroll button row as a fallback.
