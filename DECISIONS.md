@@ -573,3 +573,17 @@ After normal finalization or recovery, the archive is automatically published to
 **Reason:** Existing logs already stream to disk, but up to several seconds can remain in Java buffers, an interrupted session has no manifest/ZIP/recovery path, and app-specific `Android/data` is not reliably browseable on modern Android. The user has experienced interrupted runs that appeared to lose all evidence and requires file-manager-accessible, human-readable records.
 
 **Consequences:** Final archive construction remains `.tmp` → fsync/hash/ZIP validation → atomic promotion; exact build provenance is checkpointed with the session. Git provenance capture is fail-closed: an unavailable/failing Git executable or an invalid commit ID fails the build instead of silently claiming `unknown` and clean; GitHub Actions additionally asserts that the embedded commit equals `GITHUB_SHA` and that the checkout is clean. Process-wide gates serialize Activity replacement against session recovery and serialize public hash-deduplication/copy/receipt commit, so two Activity instances cannot concurrently finalize or publish the same run. Public copies are content-hash verified and publication receipts remain outside the immutable evidence ZIP. Flush/sync frequency and contention—including acquisition-side logger-lock wait, full serialization cost and telemetry/PSS sampling cost—must be measured on the Android 8.1 weak head unit before V0.3.x performance closure. Public publication is off the acquisition hot path and never replaces the canonical working copy until success is confirmed.
+
+---
+
+## D-045 — Route routine delivery through Chat and Work; reserve Codex for senior escalation
+
+**Status:** Accepted — 2026-08-12
+
+**Decision:** Adopt a project-specific `Chat → Work → Codex` collaboration model. Chat owns requirement clarification, scope, priority, evidence classification and task packets. Work owns normal implementation, build, APK/adb/logcat/GUI operations and defined regression testing. Codex is the senior repository engineer for architecture, high-risk refactoring, difficult multi-file root causes, concurrency/lifecycle/state machines, performance core, CAN/ISO-TP/ELM327/Bluetooth, protocol parsing and sufficiently investigated problems that Work cannot solve reliably.
+
+`CHAT_ROLE.md` and `WORK_ROLE.md` are standalone role entrypoints. Fast-changing version/commit/gate state remains canonical only in `PROJECT_STATE.md`; the cards point to it rather than becoming replacement state logs. `AGENTS.md` remains the Codex rule source.
+
+**Reason:** Routine GUI, file, build, install, screenshot, log collection and clearly specified small changes do not require the same repository-level reasoning as core communication, architecture and concurrency work. Separating them reduces repeated investigation and unnecessary Codex use while preserving early escalation when blind Work trial-and-error would be more expensive or risky.
+
+**Consequences:** Chat produces a project-specific `TASK_PACKET`; Work verifies remote/branch/HEAD before mutation and returns concrete commands, results, hashes and evidence. Work upgrades with the `CODEX_ESCALATION_PACKET` in `WORK_ROLE.md`. Codex begins from that local evidence, applies the smallest necessary core change, and returns a `WORK_FOLLOWUP` so Work can perform build/install/GUI regression. Frozen protocol/UI/evidence gates and explicit authorization for push/release/vehicle actions remain unchanged.

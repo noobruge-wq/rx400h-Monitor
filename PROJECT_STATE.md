@@ -545,4 +545,16 @@ User-approved scope (D-042 through D-044):
 - V0.3.1 must record exact build provenance in session metadata (`versionName`, `versionCode`, commit/dirty state, build type and APK identity) so evidence packages can distinguish candidates.
 - Vehicle request whitelist, decoder formulas, scheduler profile and target periods do not change in this work item.
 
-Local implementation is complete in the still-uncommitted working tree. Verification on 2026-08-12: 62 JVM unit tests passed with 0 failures; `lintDebug` passed with 0 errors / 9 non-blocking warnings; `assembleDebug` passed; APK Signature Scheme v2 verified with the fixed certificate SHA-256 `77ba84b1…c192`. The final local V0.3.1/v23 APK is 2,503,690 bytes and has SHA-256 `bd3b252e09f193f3754e8f7d0597ef72841ad8e964e431ba3fd85690d0ae14a3`; it embeds base commit `f1f7b2d3ab3d70fec519fc0ba4745f2981ac93e9` with `git_dirty=true`. Static manifest/build verification confirms `minSdk=26` (Android 8.0), `targetSdk=35`; Android 7 is not supported. API 26 emulator installation, cold launch, three-control states, DevicePicker, portrait/landscape reflow, scrolling and same-Activity rotation were exercised without a fatal crash. Exact-commit GitHub Actions publication, API 27 and paired-OBD connection/public-export/interruption-recovery smoke remain pending, so this is a local candidate, not a promoted baseline.
+Implementation was committed and pushed to `origin/v0.3.0` as `43a959b` on 2026-08-12. Pre-commit local verification: 62 JVM unit tests passed with 0 failures; `lintDebug` passed with 0 errors / 9 non-blocking warnings; `assembleDebug` passed; APK Signature Scheme v2 verified with the fixed certificate SHA-256 `77ba84b1…c192`. The local V0.3.1/v23 APK is 2,503,690 bytes and has SHA-256 `bd3b252e09f193f3754e8f7d0597ef72841ad8e964e431ba3fd85690d0ae14a3`; because it predates the commit it correctly embeds base commit `f1f7b2d3ab3d70fec519fc0ba4745f2981ac93e9` with `git_dirty=true` and is not the clean remote artifact. Static manifest/build verification confirms `minSdk=26` (Android 8.0), `targetSdk=35`; Android 7 is not supported. API 26 emulator installation, cold launch, three-control states, DevicePicker, portrait/landscape reflow, scrolling and same-Activity rotation were exercised without a fatal crash. Clean exact-commit GitHub Actions publication, API 27 and paired-OBD connection/public-export/interruption-recovery smoke remain pending, so V0.3.1 is not yet a promoted baseline.
+
+---
+
+## 21. Three-role collaboration — 2026-08-12
+
+The project now uses D-045 `Chat → Work → Codex` routing:
+
+- `CHAT_ROLE.md`: product/requirements/evidence coordination, task routing and the project `TASK_PACKET`.
+- `WORK_ROLE.md`: normal implementation, local machine operations, build/install/GUI verification and the `CODEX_ESCALATION_PACKET`.
+- `AGENTS.md`: Codex senior-engineering rules. Codex handles architecture, difficult multi-file root causes, concurrency/lifecycle/state machines, performance core and vehicle communication/protocol work, then returns routine verification to Work.
+
+This routing does not relax protocol safety, docs-first discipline, evidence grades, consumer traceability or authorization gates. Fast-changing state remains here in `PROJECT_STATE.md`; role cards should not accumulate per-build hashes or replace this document.

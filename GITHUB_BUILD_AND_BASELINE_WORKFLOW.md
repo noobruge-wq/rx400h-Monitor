@@ -241,6 +241,8 @@ Push 后 GitHub Actions 自动开始构建。
 
 ```text
 BASELINE_README.md
+CHAT_ROLE.md
+WORK_ROLE.md
 PROJECT_STATE.md
 CHANGELOG.md
 DECISIONS.md
@@ -288,6 +290,7 @@ cd ~/rx400h-Monitor
 sha256sum \
   AGENTS.md \
   BASELINE_README.md \
+  CHAT_ROLE.md \
   CHANGELOG.md \
   CODEX_HANDOFF.md \
   DECISIONS.md \
@@ -298,6 +301,7 @@ sha256sum \
   PROJECT_STATE.md \
   REPO_ACCESS_AND_AUTH.md \
   ROADMAP.md \
+  WORK_ROLE.md \
   > BASELINE_MANIFEST.sha256
 ```
 
@@ -356,6 +360,8 @@ sha256sum -c BASELINE_MANIFEST.sha256
 ```bash
 git add \
   BASELINE_README.md \
+  CHAT_ROLE.md \
+  WORK_ROLE.md \
   PROJECT_STATE.md \
   CHANGELOG.md \
   DECISIONS.md \
@@ -410,6 +416,7 @@ git rev-parse origin/main
 
 ```text
 GitHub repository + latest commit
+CHAT_ROLE.md or WORK_ROLE.md (according to the receiving role)
 PROJECT_STATE.md
 DECISIONS.md
 ROADMAP.md

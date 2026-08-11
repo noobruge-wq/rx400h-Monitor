@@ -349,12 +349,18 @@ Codex 必须先证明它已经能回答：
 
 ## 16. 当前 `v0.3.0` 分支 / V0.3.1 App 候选 — 2026-08-11
 
-- D-041 全尺寸响应式/自适应 UI 已在本地工作树实现，`versionCode = 22`；当前修改尚未 commit/push。
+- D-041 全尺寸响应式 UI、D-043 三按钮单-owner session 和 D-044 可恢复日志已作为 V0.3.1/v23 提交并推送到 `origin/v0.3.0`，代码提交为 `43a959b`。
 - 稳定 Android View 树从实际 inset-safe 窗口测量并 reflow；卡片/控制组件有显式尺寸合同，整页可滚，冻结 POWER / active-only Idle Check contract 已恢复。
-- 本地 38 个 unit tests、`lintDebug`（0 errors）、`assembleDebug`、固定签名 v2 校验和 API 37 连续尺寸矩阵均通过；APK SHA-256 为 `427a1c0e1950b4154a613e1a7173f9c3c8b5ea372460affec3444dd6863d0364`。
-- GitHub Actions 与远端 artifact 尚未生成；下一位代理不得把本地 hash 称为远端 baseline。提交/推送前先取得用户确认，并保留 protocol/scheduler/request table 不变。
+- Pre-commit local verification 为 62 tests、lint 0 errors / 9 warnings、assemble、固定 v2 签名和 API26 smoke；local APK `bd3b252e…14a3` 是诚实标记 dirty 的候选，不是 `43a959b` clean remote artifact。
+- Clean exact-commit GitHub Actions artifact 仍待生成；下一位代理不得把 local hash 称为远端 baseline。protocol/scheduler/request table 保持不变。
 - 用户已授权把下一可安装 App 候选推进为 `versionName = 0.3.1`, `versionCode = 23`，但 V0.3.0 Scheduler / Refresh Frontier 工程里程碑仍未关闭（D-042）。
 - V0.3.1 新合同（D-043）：控制固定为 `设备` / `开始` / `结束`；Start 自动执行连接、初始化、runtime 配置并在成功后进入 LIVE；End 由同一 session task 停止、关闭并保存，不再有独立连接/停止/导出按钮，也不强制分享 chooser。
 - V0.3.1 日志合同（D-044）：app-specific 工作目录持续流式 checkpoint；下次启动恢复 incomplete session；正常/恢复 ZIP 使用本地结束/最后持久化时间的人类可读名称，并发布到 `Download/RX400h Monitor`。不得申请 `MANAGE_EXTERNAL_STORAGE`。
-- V0.3.1 本地源码现已实现；62 个 JVM tests、`lintDebug`（0 errors / 9 warnings）、`assembleDebug` 与固定证书 v2 签名校验通过。最终未提交本地 APK 为 2,503,690 bytes，SHA-256 `bd3b252e09f193f3754e8f7d0597ef72841ad8e964e431ba3fd85690d0ae14a3`；内嵌 base commit `f1f7b2d3ab3d70fec519fc0ba4745f2981ac93e9`、`git_dirty=true`。
 - API 26（Android 8.0）模拟器已通过 clean install、冷启动、三按钮初始状态、DevicePicker 空状态、横竖屏 reflow/scroll 与保持同一 Activity 的旋转 smoke，未见 fatal crash。exact-commit GitHub artifact、API 27 以及带已配对 OBD 的连接→LIVE→结束→公共保存/异常恢复 smoke 尚未完成，不得把本地 hash 称为远端 baseline。Android 7 因 `minSdk=26` 不支持。候选 artifact 名为 `RX400hProtocolProbe-v0.3.1-resilient-logs-debug-signed`，protocol/request/scheduler profile 保持冻结。
+
+## 17. 三角色协作入口 — 2026-08-12
+
+- Chat 使用 `CHAT_ROLE.md`：澄清需求、分类证据、生成 TASK_PACKET、决定 Work/Codex 路由。
+- Work 使用 `WORK_ROLE.md`：普通实施、本机操作、build/install/GUI/log 收集；复杂问题用 CODEX_ESCALATION_PACKET 升级。
+- Codex 使用 `AGENTS.md`：作为高级架构/疑难问题专家，采用最小充分读取与修改，完成核心修复后输出 WORK_FOLLOWUP 交回 Work。
+- 动态版本和 gate 只以 `PROJECT_STATE.md` 为准；角色卡不替代 current-state 文档。
