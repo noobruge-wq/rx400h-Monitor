@@ -180,6 +180,41 @@ Unit tests: 26 passed
 
 Role: equal-height cards per row (each fills the tallest card) with a bottom-anchored, viewport-filling data area so all domain frames share one bottom edge aligned to the screen bottom. UI-only.
 
+### V0.3.0 fluid responsive UI local pre-CI candidate (branch v0.3.0)
+
+```text
+Base HEAD: f1f7b2d3ab3d70fec519fc0ba4745f2981ac93e9 (v0.3.0)
+Commit: pending — intentional uncommitted worktree
+GitHub Actions run: pending
+Candidate artifact: RX400hProtocolProbe-v0.3.0-fluid-ui-debug-signed
+Local APK: app/build/outputs/apk/debug/app-debug.apk
+Local APK SHA-256: 427a1c0e1950b4154a613e1a7173f9c3c8b5ea372460affec3444dd6863d0364
+Signature: APK Signature Scheme v2; fixed certificate SHA-256 77ba84b1f4f737a5d61b910bf4386df167548b9c6ce689ed25e994c37b2bc192
+Unit tests: 38 passed (14 ResponsiveLayoutTest)
+Lint: 0 errors / 10 non-blocking warnings
+```
+
+Role: D-041 local candidate — stable native View tree, exact policy/runtime row geometry, inset-safe whole-page scrolling, component-bounded card/control contracts, safe header hysteresis, and restored POWER / active-only Idle Check contract. API 37 View testing covered phone portrait/landscape, 4:3, 16:9, 16:10, tablet, split/freeform-sized, ultra-wide, extreme-wide/short, 200dp narrow with font scale 2.0, and bidirectional threshold sweeps without Activity replacement or crash. This record is local evidence only; do not promote it to a remote build baseline until a commit and GitHub Actions signed artifact exist.
+
+### V0.3.1 resilient controls/logs local candidate
+
+```text
+Branch: v0.3.0
+App version: 0.3.1
+versionCode: 23
+Candidate artifact: RX400hProtocolProbe-v0.3.1-resilient-logs-debug-signed
+Commit: pending
+GitHub Actions run: pending
+Local APK size: 2,503,690 bytes
+Local APK SHA-256: bd3b252e09f193f3754e8f7d0597ef72841ad8e964e431ba3fd85690d0ae14a3
+Signature: APK Signature Scheme v2; fixed certificate SHA-256 77ba84b1f4f737a5d61b910bf4386df167548b9c6ce689ed25e994c37b2bc192
+Unit tests: 53 passed / 0 failed / 0 skipped
+Lint: 0 errors / 9 non-blocking warnings
+Manifest identity: applicationId com.guanyu.rx400hprobe.debug; versionName 0.3.1-debug; versionCode 23; minSdk 26; targetSdk 35
+```
+
+Role: local, dirty-worktree evidence for D-041 responsive UI plus D-043 three-button, single-owner session flow and D-044 durable checkpoints/interrupted-session recovery/public archive publication. 62 JVM tests and compile/lint/assemble/signature checks passed using JDK 17 and checksum-verified Gradle 8.9. Build provenance records base commit `f1f7b2d3ab3d70fec519fc0ba4745f2981ac93e9` and `git_dirty=true`. API 26 (Android 8.0) emulator installation, cold launch, three-control states, DevicePicker empty state, portrait/landscape reflow, scroll reachability and same-Activity rotation were exercised without fatal crash. The emulator had no paired Bluetooth OBD adapter, so it did not validate the real connect→LIVE path, legacy public-Downloads grant/deny, completed archive publication or forced-interruption recovery. Do not treat this hash as a remote baseline: exact-commit GitHub Actions, API 27 and paired-device save/recovery smoke are still pending.
+
 ---
 
 ## B. Void source

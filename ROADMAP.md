@@ -12,7 +12,7 @@ Major engineering milestones use `0.x.0`.
 
 ## V0.1.10 — Validated cleanup baseline
 
-**Status:** Current / effectively complete as the transition baseline.
+**Status:** Historical real-vehicle-validated transition baseline; superseded as the engineering baseline by V0.2.0.
 
 ### Goal
 
@@ -62,9 +62,15 @@ A renderer can be replaced without modifying decoder/signal semantics, and every
 
 **Status:** In development — started 2026-08-10 (branch `v0.3.0`).
 
-First merged items: responsive/adaptive UI (D-033…D-039) — window-size-driven layout with dynamic card columns, width-based header modes, vertical scrolling instead of text shrinking, Chinese centered domain titles, label/value lines, proportional typography, POWER order and the permanent gray 怠速检查. Layout-only; scheduler work below is the next phase.
+The first UI candidates (D-033…D-039) established Chinese domain cards and initial window-width reflow, but retained short-side proportional scaling and a permanent inactive Idle Check label. D-041 supersedes that layout model with component-bounded, actual-window native reflow, wrapped/reachable controls, capped ultra-wide cards, height-aware whole-page scrolling and the frozen POWER/active-only Idle Check contract. Implementation, local tests/lint/signature verification and an API 37 continuous-resize matrix are complete; GitHub Actions candidate publication remains pending.
 
-Scheduler phase in progress (D-040): deadline/priority scheduler core with backpressure implemented; rates still at V0.2.0 periods pending staged frequency tests.
+Scheduler phase in progress (D-040): deadline/priority scheduler core with backpressure is implemented; rates still remain at V0.2.0 periods pending staged frequency tests.
+
+### Current installable candidate — V0.3.1
+
+V0.3.1 (D-042…D-044) combines D-041 with the user-approved three-button session flow and resilient logging. The dashboard controls become `设备` / `开始` / `结束`; one typed session owner performs connect → validate → LIVE → stop → save. Logs receive periodic durable checkpoints, interrupted-session recovery, human-readable end-time archive names and automatic publication to user-visible Downloads. This deliberately pulls a small, fixed subset of V0.4/V0.5 lifecycle/durability work forward because reliable evidence must precede the V0.3 rate ladder. It does not claim Activity-independent continuous background monitoring, complete durability closure or V0.3 performance closure.
+
+Immediate V0.3.1 gate: local implementation, 62 deterministic tests, lint/build and fixed-signature verification are complete. API 26 installation, cold launch, three-control states, DevicePicker and portrait/landscape resize/scroll smoke are also complete. Remaining gates are an exact-commit GitHub artifact, API 27 and paired-OBD connection→LIVE→End plus public-save/interruption-recovery smoke. Only then resume transport wait/rate tuning.
 
 ### Carried from V0.2.0 (real-vehicle-only)
 
@@ -117,6 +123,8 @@ Make the vehicle session independent of Activity lifetime.
 
 The UI can be destroyed/recreated while a valid runtime session remains correct and observable.
 
+V0.3.1 introduces an Activity-owned typed session state to make the three controls race-safe, but this does not satisfy V0.4: the vehicle session still requires a lifecycle-independent owner before V0.4 closes.
+
 ---
 
 ## V0.5.0 — Durability / Recovery
@@ -142,6 +150,8 @@ No dedicated expensive long-distance trip is required. Use daily driving + repla
 ### Exit criterion
 
 Long-equivalent replay/fault tests and accumulated normal driving show no structural memory/logger/session failure.
+
+V0.3.1 advances checkpointing and basic interrupted-session packaging/publication. Automatic MediaStore/legacy copies are hash-deduplicated; arbitrary SAF destinations are read-back verified but retain a documented external-write-to-receipt crash window. V0.5 still owns log rolling, disk guard, full fault matrix, SAF provisional-receipt recovery and long-equivalent durability closure.
 
 ---
 

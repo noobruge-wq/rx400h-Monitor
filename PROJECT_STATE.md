@@ -4,6 +4,7 @@
 **Current engineering baseline:** V0.2.0 — Reactive Core (closed 2026-08-09)<br>
 **Historical validated engineering baseline:** V0.1.10 cleanup / real-vehicle validated branch<br>
 **Next major milestone:** V0.3.0 — High-Performance Scheduler / Refresh Frontier (development started 2026-08-10 on branch `v0.3.0`)
+**Current app candidate:** V0.3.1 — three-button session flow + durable/recoverable logs (`versionCode = 23`, implementation started 2026-08-11)<br>
 **Repository:** `noobruge-wq/rx400h-Monitor`
 
 > This file is the primary handoff document. Future development must update this document before code changes. A new AI/developer should be able to resume the project from this file + `DECISIONS.md` + `ROADMAP.md` + latest source without relying on chat history.
@@ -259,7 +260,7 @@ Known remaining architectural debt:
 - No final ForegroundService runtime yet.
 - Scheduler is still the old slow V0.1.8-style timing and is the major UX/performance bottleneck.
 - Log rolling / disk guard / orphan-session recovery are not final.
-- Performance observability is designed but not yet implemented in the current baseline.
+- Historical V0.1.10 debt: performance observability was not yet implemented there. V0.2.0 closed this item with `performance.csv`; V0.3.0 is extending it with scheduler metrics.
 
 ---
 
@@ -352,7 +353,7 @@ Only questions that genuinely require the vehicle should consume real-vehicle te
 
 ---
 
-## 14. Next milestone — V0.2.0 Reactive Core
+## 14. Closed milestone — V0.2.0 Reactive Core
 
 **Status: closed — 2026-08-09.** Unit tests (17), the CI-signed APK build, and phone + head-unit real-vehicle sessions pass. The first natural Idle Check capture is recorded. V0.1.10 remains the historical real-vehicle-validated baseline; V0.2.0 is the current engineering baseline.
 
@@ -519,5 +520,29 @@ Remaining real-vehicle-only items are tracked in V0.3.0: more natural Idle Check
 - CI run `31320500825` on branch `v0.3.0` (HEAD `fd30240`) passed; 26 unit tests (incl. `DeadlineSchedulerTest` + `LatencyWindow`), signed APK SHA-256 `8cde4227…` verified with the fixed project debug key.
 - UI alignment: same-row cards are equal-height and the data area is bottom-anchored so all domain frames align to the screen bottom; `versionCode = 21`, candidate artifact `RX400hProtocolProbe-v0.3.0-bottom-align-debug-signed`.
 - CI run `31320956460` on branch `v0.3.0` (HEAD `14125dd`) passed; 26 unit tests, signed APK SHA-256 `2b8c022c…` verified with the fixed project debug key.
+- Full responsive/adaptive UI reset implemented locally (D-041): actual inset-safe View measurement replaces short-side whole-screen scaling and content-view rebuilds; cards use 240/320/480dp bounded width contracts and content-driven height, controls use safe inline/split/stacked wrapping, ultra-wide rows are capped/centered, and short windows scroll the whole page. The frozen POWER order and active-only Idle Check contract are restored. `versionCode = 22`, candidate artifact `RX400hProtocolProbe-v0.3.0-fluid-ui-debug-signed`.
+- Local verification: 38 unit tests passed; `lintDebug` passed with 0 errors; `assembleDebug` and fixed-key v2 signature verification passed; local APK SHA-256 `427a1c0e1950b4154a613e1a7173f9c3c8b5ea372460affec3444dd6863d0364`. API 37 View testing covered portrait, landscape, 4:3, 16:9, 16:10, tablet, split, ultra-wide, extreme-wide/short, 200dp narrow + font scale 2.0, and every structural threshold in both directions without PID/Activity replacement or crash. GitHub Actions and uploaded artifact verification remain pending, so this is not yet a promoted branch baseline.
 - Engineering baseline on `main` remains V0.2.0 until V0.3.0 closes.
-- Next V0.3.0 work per `ROADMAP.md`: deadline/priority scheduler, backpressure/skip policy, rate tiers, temporal coherence, extended performance metrics and staged frequency tests (≈0.36 Hz → HA ~5.5 Hz point → higher, with the head unit as the weak-hardware baseline).
+- Scheduler core/backpressure are already implemented on `v0.3.0`; remaining V0.3.0 work per `ROADMAP.md` is D-041 GitHub candidate verification, rate tiers, temporal coherence, extended performance metrics and staged frequency tests (≈0.36 Hz → HA ~5.5 Hz point → higher, with the head unit as the weak-hardware baseline).
+
+---
+
+## 20. V0.3.1 current work — 2026-08-11
+
+V0.3.1 is the current installable app candidate inside the still-open V0.3.x Scheduler / Refresh Frontier engineering milestone. Advancing the app version does not close the V0.3.0 performance exit gate.
+
+User-approved scope (D-042 through D-044):
+
+- Replace four dashboard controls with exactly three fixed controls: `设备` / `开始` / `结束`.
+- `设备` retains the paired-device picker behavior.
+- `开始` owns the complete connection path: capture the selected adapter, open a new evidence session, connect, initialize and validate the ELM/runtime profile, then enter LIVE automatically only after successful configuration.
+- `结束` requests one idempotent stop; the same session task exits LIVE, closes Bluetooth, finalizes all logs and saves the archive. It no longer requires a separate stop or export action and does not force a share chooser.
+- Use an explicit small session state instead of deriving control safety from independent `busy`, `liveMode`, connection and logger flags. Device selection and duplicate Start are blocked while a run owns the session; End remains available while connecting/initializing/LIVE and becomes disabled during final save.
+- Runtime evidence files continue streaming to the app-specific working directory. Bulk writers use a bounded time-based flush/durable-checkpoint policy instead of transaction-count coincidence; session metadata is checkpointed atomically.
+- On startup, incomplete prior session directories are detected, preserved, marked `interrupted`, packaged without claiming `evidence_complete`, and queued for public export.
+- Normal and recovered archives use a local, human-readable end/last-durable-record time, for example `RX400h Monitor log 2026-08-11 18-23-59.zip`; interrupted recovery archives are visibly marked as interrupted.
+- Completed archives are automatically copied to a user-visible `Download/RX400h Monitor` location where the platform permits. API 29+ uses MediaStore; API 26–28 uses the legacy public Downloads path only with the narrow legacy write permission. The canonical working directory remains permission-free and recoverable if public export is unavailable.
+- V0.3.1 must record exact build provenance in session metadata (`versionName`, `versionCode`, commit/dirty state, build type and APK identity) so evidence packages can distinguish candidates.
+- Vehicle request whitelist, decoder formulas, scheduler profile and target periods do not change in this work item.
+
+Local implementation is complete in the still-uncommitted working tree. Verification on 2026-08-12: 62 JVM unit tests passed with 0 failures; `lintDebug` passed with 0 errors / 9 non-blocking warnings; `assembleDebug` passed; APK Signature Scheme v2 verified with the fixed certificate SHA-256 `77ba84b1…c192`. The final local V0.3.1/v23 APK is 2,503,690 bytes and has SHA-256 `bd3b252e09f193f3754e8f7d0597ef72841ad8e964e431ba3fd85690d0ae14a3`; it embeds base commit `f1f7b2d3ab3d70fec519fc0ba4745f2981ac93e9` with `git_dirty=true`. Static manifest/build verification confirms `minSdk=26` (Android 8.0), `targetSdk=35`; Android 7 is not supported. API 26 emulator installation, cold launch, three-control states, DevicePicker, portrait/landscape reflow, scrolling and same-Activity rotation were exercised without a fatal crash. Exact-commit GitHub Actions publication, API 27 and paired-OBD connection/public-export/interruption-recovery smoke remain pending, so this is a local candidate, not a promoted baseline.

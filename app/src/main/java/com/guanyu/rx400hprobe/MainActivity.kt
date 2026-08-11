@@ -6,43 +6,54 @@ import android.bluetooth.BluetoothManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.WindowManager
-import androidx.core.content.FileProvider
 import java.io.IOException
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 class MainActivity : Activity() {
     companion object {
         private const val REQUEST_DEVICE = 100
-        private const val REQUEST_BLUETOOTH = 20
+        private const val REQUEST_SAVE_LOG = 101
+        private const val REQUEST_RUNTIME_PERMISSIONS = 20
         private const val RESPONSE_ENGINE = "7E8"
         private const val RESPONSE_HYBRID = "7EA"
+        private const val STORAGE_PERMISSION_ASKED = "storage_permission_asked"
+        private val PROCESS_VEHICLE_SESSION_LEASE = ExclusiveSessionLease()
     }
 
     private val worker = Executors.newSingleThreadExecutor()
+    private val connectionCancelWorker = Executors.newSingleThreadExecutor()
     private val ui = Handler(Looper.getMainLooper())
     private val elm = Elm327Client()
     private lateinit var logger: ProbeLogger
+    private lateinit var publicLogExporter: PublicLogExporter
     private lateinit var dashboard: DashboardUi
-    private var rebuildingUi = false
 
-    private val busy = AtomicBoolean(false)
+    private val phase = AtomicReference(MonitorSessionPhase.IDLE)
+    private val stopRequested = AtomicBoolean(false)
     private val liveMode = AtomicBoolean(false)
+    private val endRequestedFromLive = AtomicBoolean(false)
+    private val endRequestedAtWallMs = AtomicLong(0L)
+    private val pendingPermissionStart = AtomicBoolean(false)
+    private val destroying = AtomicBoolean(false)
     private val scheduler = DeadlineScheduler(
         RequestTable.requests.map { ScheduledSpec(it.id, it.header, it.targetPeriodMs, it.priority) }
     )
     private val latencyWindow = LatencyWindow(64)
-    private val publishCounter = AtomicLong()
+    private val signalUpdateCounter = AtomicLong()
     private val noDataCount = AtomicLong()
     private val timeoutCount = AtomicLong()
     private val busErrorCount = AtomicLong()
+    private val signalLock = Any()
 
     private var deviceAddress: String? = null
     private var deviceName: String? = null
@@ -56,34 +67,70 @@ class MainActivity : Activity() {
     private var reconnectCount = 0
     private var consecutiveErrors = 0
     private var lastError = "NONE"
+    private var lastNotice: String? = null
+    private var pendingArchive: PendingLogArchive? = null
+    private var pendingPublicationReceipt: PublicLogResult? = null
+    private var pendingManualArchive: PendingLogArchive? = null
+    private var retryCompletionKind = LogCompletionKind.COMPLETED
+    private var retryReason = "USER_END"
     @Volatile
     private var lastRenderDurationMs = 0L
-    private var lastLoggerWriteMs = 0L
+    private var lastFrameLogMs = 0L
     private var lastIdleCheckLogged: Boolean? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         logger = ProbeLogger(this)
+        publicLogExporter = PublicLogExporter(this)
         setContentView(buildDashboard())
         loadSavedDevice()
         renderDashboard()
         ui.post(refreshUiRunnable)
+        recoverPendingLogs()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (::logger.isInitialized && logger.state == SessionState.ACTIVE) {
+            logger.logEventAsync("ACTIVITY_START")
+        }
+    }
+
+    override fun onStop() {
+        if (::logger.isInitialized && logger.state == SessionState.ACTIVE) {
+            logger.logEventAsync("ACTIVITY_STOP")
+        }
+        super.onStop()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        setContentView(buildDashboard())
+        dashboard.onConfigurationChanged()
         refreshControls()
         renderDashboard()
     }
 
+    @Deprecated("Back is guarded while a vehicle/log session owns the Activity")
+    override fun onBackPressed() {
+        if (phase.get() !in setOf(MonitorSessionPhase.IDLE, MonitorSessionPhase.SAVE_FAILED)) {
+            lastError = "请先按结束并等待保存完成"
+            renderDashboard()
+            return
+        }
+        super.onBackPressed()
+    }
+
     override fun onDestroy() {
+        destroying.set(true)
+        pendingPermissionStart.set(false)
+        stopRequested.set(true)
         liveMode.set(false)
-        elm.close()
-        logger.stop()
+        closeElmAsync()
+        if (::logger.isInitialized) logger.shutdownAsync()
         ui.removeCallbacksAndMessages(null)
         worker.shutdownNow()
+        connectionCancelWorker.shutdown()
         super.onDestroy()
     }
 
@@ -96,28 +143,36 @@ class MainActivity : Activity() {
 
     private fun buildDashboard() = DashboardUi(
         activity = this,
-        onSelectDevice = { startActivityForResult(Intent(this, DevicePickerActivity::class.java), REQUEST_DEVICE) },
-        onConnectToggle = { if (elm.isConnected()) disconnect() else connectSelected() },
-        onLiveToggle = { toggleLiveMode() },
-        onExport = { finishAndShareLogs() },
-        onLayoutChange = { rebuildForLayout() }
+        onSelectDevice = {
+            if (phase.get() == MonitorSessionPhase.IDLE) {
+                startActivityForResult(Intent(this, DevicePickerActivity::class.java), REQUEST_DEVICE)
+            }
+        },
+        onStart = { requestStart() },
+        onEnd = { requestEnd() }
     ).also { dashboard = it }.root
 
-    private fun rebuildForLayout() {
-        if (rebuildingUi) return
-        rebuildingUi = true
-        ui.post {
-            rebuildingUi = false
-            if (isFinishing || isDestroyed) return@post
-            setContentView(buildDashboard())
-            refreshControls()
-            renderDashboard()
-        }
+    private fun refreshControls() {
+        dashboard.setControlState(MonitorSessionPolicy.controls(phase.get()))
     }
 
-    private fun refreshControls() {
-        dashboard.setControlsEnabled(!busy.get(), liveMode.get())
-        dashboard.setLiveButton(liveMode.get())
+    private fun setPhase(value: MonitorSessionPhase) {
+        phase.set(value)
+        notifyPhaseChanged()
+    }
+
+    private fun notifyPhaseChanged() {
+        if (destroying.get()) return
+        ui.post { if (::dashboard.isInitialized) refreshControls() }
+        renderDashboard()
+    }
+
+    private fun advancePhase(expected: MonitorSessionPhase, next: MonitorSessionPhase) {
+        if (stopRequested.get() || !phase.compareAndSet(expected, next)) {
+            throw SessionCancelledException()
+        }
+        if (destroying.get()) throw SessionCancelledException()
+        notifyPhaseChanged()
     }
 
     private fun loadSavedDevice() {
@@ -126,148 +181,321 @@ class MainActivity : Activity() {
         deviceName = preferences.getString("name", null)
     }
 
-    @Deprecated("Deprecated in Android framework; kept to avoid adding another activity dependency during protocol freeze")
+    @Deprecated("Deprecated in Android framework; retained to avoid another runtime dependency")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_DEVICE && resultCode == RESULT_OK) {
-            deviceName = data?.getStringExtra("name")
-            deviceAddress = data?.getStringExtra("address")
-            getSharedPreferences("probe", MODE_PRIVATE).edit()
-                .putString("name", deviceName)
-                .putString("address", deviceAddress)
-                .apply()
-            renderDashboard()
-        }
-    }
-
-    private fun ensurePermission(): Boolean {
-        if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN), REQUEST_BLUETOOTH)
-            return false
-        }
-        return true
-    }
-
-    private fun bluetoothManager(): BluetoothManager = getSystemService(BluetoothManager::class.java)
-
-    private fun connectSelected() {
-        if (!ensurePermission() || busy.get()) return
-        val address = deviceAddress ?: run {
-            lastError = "NO DEVICE SELECTED"
-            renderDashboard()
-            return
-        }
-        busy.set(true)
-        setControlsEnabled(false)
-        worker.execute {
-            try {
-                establishConnection(address, newSession = logger.state != SessionState.ACTIVE)
+        when (requestCode) {
+            REQUEST_DEVICE -> if (resultCode == RESULT_OK && phase.get() == MonitorSessionPhase.IDLE) {
+                deviceName = data?.getStringExtra("name")
+                deviceAddress = data?.getStringExtra("address")
+                getSharedPreferences("probe", MODE_PRIVATE).edit()
+                    .putString("name", deviceName)
+                    .putString("address", deviceAddress)
+                    .apply()
                 lastError = "NONE"
-            } catch (e: Exception) {
-                safeLogError("CONNECT_ERROR", e)
-                lastError = "CONNECT: ${e.message}"
-                elm.close()
-            } finally {
-                busy.set(false)
-                setControlsEnabled(true)
+                lastNotice = "已选择 ${deviceName ?: "OBD"}"
                 renderDashboard()
+            }
+            REQUEST_SAVE_LOG -> {
+                val archive = pendingManualArchive
+                pendingManualArchive = null
+                val destination = data?.data
+                if (resultCode == RESULT_OK && archive != null && destination != null) {
+                    saveToChosenDestination(archive, destination)
+                } else if (archive != null) {
+                    pendingArchive = archive
+                    lastError = "公共保存已取消；内部 ZIP 仍保留"
+                    setPhase(MonitorSessionPhase.SAVE_FAILED)
+                }
             }
         }
     }
 
-    private fun establishConnection(address: String, newSession: Boolean) {
-        val adapter = bluetoothManager().adapter ?: error("Bluetooth unavailable")
-        val device = adapter.getRemoteDevice(address)
-        elm.connect(device)
-        if (newSession || logger.currentSessionDir() == null || logger.state != SessionState.ACTIVE) {
-            logger.start(deviceName ?: "Unknown", address)
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_RUNTIME_PERMISSIONS || !pendingPermissionStart.compareAndSet(true, false)) return
+        if (phase.get() != MonitorSessionPhase.WAITING_PERMISSION || stopRequested.get()) {
+            setPhase(MonitorSessionPhase.IDLE)
+            return
         }
-        logger.logConnection("BLUETOOTH_CONNECTED name=${deviceName ?: "Unknown"}")
-        elm.initialize().forEach { record(null, it) }
-        for (command in listOf("ATI", "STI", "AT@1", "ATDP", "ATDPN", "ATRV")) {
-            val result = elm.command(command, 6000, 300)
-            record(null, result)
-            if (command == "ATRV") updateAdapterVoltage(result)
+        if (!hasBluetoothPermission()) {
+            lastError = "缺少蓝牙连接权限"
+            setPhase(MonitorSessionPhase.IDLE)
+            return
         }
-        currentHeader = null
+        beginSession(MonitorSessionPhase.WAITING_PERMISSION)
     }
 
-    private fun disconnect() {
-        liveMode.set(false)
-        logger.logEvent("DISCONNECT_REQUEST")
-        logger.logConnection("DISCONNECT_REQUEST")
-        elm.close()
+    private fun requestStart() {
+        if (phase.get() != MonitorSessionPhase.IDLE) return
+        if (deviceAddress == null) {
+            lastError = "请先选择 OBD 设备"
+            lastNotice = null
+            renderDashboard()
+            return
+        }
+        stopRequested.set(false)
+        val missing = missingStartPermissions()
+        if (missing.isNotEmpty()) {
+            if (!phase.compareAndSet(MonitorSessionPhase.IDLE, MonitorSessionPhase.WAITING_PERMISSION)) return
+            pendingPermissionStart.set(true)
+            if (missing.contains(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                getSharedPreferences("probe", MODE_PRIVATE).edit()
+                    .putBoolean(STORAGE_PERMISSION_ASKED, true)
+                    .apply()
+            }
+            refreshControls()
+            renderDashboard()
+            requestPermissions(missing.toTypedArray(), REQUEST_RUNTIME_PERMISSIONS)
+            return
+        }
+        beginSession(MonitorSessionPhase.IDLE)
+    }
+
+    private fun beginSession(expected: MonitorSessionPhase) {
+        endRequestedFromLive.set(false)
+        endRequestedAtWallMs.set(0L)
+        if (!phase.compareAndSet(expected, MonitorSessionPhase.CONNECTING)) return
+        val address = deviceAddress ?: run {
+            setPhase(MonitorSessionPhase.IDLE)
+            return
+        }
+        val name = deviceName ?: "Unknown"
+        stopRequested.set(false)
+        lastError = "NONE"
+        lastNotice = null
+        refreshControls()
+        renderDashboard()
+        worker.execute { runOwnedSession(name, address) }
+    }
+
+    private fun requestEnd() {
+        while (true) {
+            val current = phase.get()
+            when (current) {
+                MonitorSessionPhase.WAITING_PERMISSION -> {
+                    if (!phase.compareAndSet(current, MonitorSessionPhase.IDLE)) continue
+                    pendingPermissionStart.set(false)
+                    stopRequested.set(true)
+                    lastNotice = "已取消开始"
+                    notifyPhaseChanged()
+                    return
+                }
+                MonitorSessionPhase.CONNECTING,
+                MonitorSessionPhase.INITIALIZING,
+                MonitorSessionPhase.LIVE -> {
+                    if (!phase.compareAndSet(current, MonitorSessionPhase.STOPPING)) continue
+                    if (current == MonitorSessionPhase.LIVE) endRequestedFromLive.set(true)
+                    endRequestedAtWallMs.compareAndSet(0L, System.currentTimeMillis())
+                    stopRequested.set(true)
+                    liveMode.set(false)
+                    notifyPhaseChanged()
+                    closeElmAsync()
+                    return
+                }
+                MonitorSessionPhase.SAVE_FAILED -> {
+                    retrySave()
+                    return
+                }
+                else -> return
+            }
+        }
+    }
+
+    private fun closeElmAsync() {
+        runCatching {
+            connectionCancelWorker.execute { runCatching { elm.close() } }
+        }
+    }
+
+    private fun runOwnedSession(sessionDeviceName: String, sessionDeviceAddress: String) {
+        val ran = PROCESS_VEHICLE_SESSION_LEASE.withCancellableLease(
+            shouldContinue = { !stopRequested.get() && !destroying.get() }
+        ) {
+            try {
+                runOwnedSessionWithLease(sessionDeviceName, sessionDeviceAddress)
+            } finally {
+                runCatching { elm.close() }
+            }
+        }
+        if (!ran && !destroying.get()) {
+            lastNotice = "已取消开始"
+            setPhase(MonitorSessionPhase.IDLE)
+        }
+    }
+
+    private fun runOwnedSessionWithLease(sessionDeviceName: String, sessionDeviceAddress: String) {
+        var enteredLive = false
+        var completionKind = LogCompletionKind.COMPLETED
+        var completionReason = "USER_END"
+        try {
+            resetSessionRuntime()
+            logger.start(sessionDeviceName, sessionDeviceAddress)
+            logger.logEvent("START_REQUEST")
+            requireContinue()
+
+            establishConnection(sessionDeviceAddress, sessionDeviceName)
+            requireContinue()
+
+            advancePhase(MonitorSessionPhase.CONNECTING, MonitorSessionPhase.INITIALIZING)
+            configureRuntimeAdapter()
+            requireContinue()
+
+            advancePhase(MonitorSessionPhase.INITIALIZING, MonitorSessionPhase.LIVE)
+            enteredLive = true
+            liveMode.set(true)
+            logger.logEvent("LIVE_START")
+            requireContinue()
+            runLiveScheduler(sessionDeviceAddress, sessionDeviceName)
+            if (stopRequested.get()) {
+                completionReason = "USER_END"
+            } else {
+                completionKind = LogCompletionKind.INTERRUPTED
+                completionReason = "LIVE_ENDED_UNEXPECTEDLY"
+                lastError = "实时监控意外结束；日志将作为中断记录保存"
+            }
+        } catch (_: SessionCancelledException) {
+            val reachedLive = enteredLive || endRequestedFromLive.get()
+            if (!reachedLive) completionKind = LogCompletionKind.INTERRUPTED
+            completionReason = if (reachedLive) "USER_END" else "USER_END_BEFORE_LIVE"
+        } catch (e: Exception) {
+            val reachedLive = enteredLive || endRequestedFromLive.get()
+            if (stopRequested.get()) {
+                if (!reachedLive) completionKind = LogCompletionKind.INTERRUPTED
+                completionReason = if (reachedLive) "USER_END" else "USER_END_BEFORE_LIVE"
+            } else {
+                safeLogError(if (reachedLive) "LIVE_MODE_ERROR" else "START_ERROR", e)
+                lastError = if (reachedLive) "实时监控中断: ${e.message}" else "开始失败: ${e.message}"
+                completionKind = if (reachedLive) LogCompletionKind.INTERRUPTED else LogCompletionKind.START_FAILED
+                completionReason = if (reachedLive) "LIVE_ERROR" else "START_FAILED"
+            }
+        } finally {
+            liveMode.set(false)
+            elm.close()
+            currentHeader = null
+            if (destroying.get()) return
+            val reachedLive = enteredLive || endRequestedFromLive.get()
+            if (logger.state == SessionState.ACTIVE || logger.state == SessionState.FINALIZE_FAILED) {
+                setPhase(MonitorSessionPhase.SAVING)
+                retryCompletionKind = completionKind
+                retryReason = completionReason
+                try {
+                    if (logger.state == SessionState.ACTIVE) {
+                        endRequestedAtWallMs.get().takeIf { it > 0L }?.let {
+                            logger.logEvent("END_REQUEST", "wall_time_ms=$it")
+                        }
+                        if (reachedLive) logger.logEvent("LIVE_STOP", completionReason)
+                        logger.logEvent("SESSION_END", completionReason)
+                    }
+                    val archive = logger.finalizeAndZip(completionKind, completionReason)
+                    publishArchive(archive, offerUserDestinationOnFailure = true)
+                } catch (e: Exception) {
+                    lastError = "保存失败: ${e.message}"
+                    pendingArchive = null
+                    setPhase(MonitorSessionPhase.SAVE_FAILED)
+                }
+            } else {
+                setPhase(MonitorSessionPhase.IDLE)
+            }
+        }
+    }
+
+    private fun resetSessionRuntime() {
+        synchronized(signalLock) {
+            store.clear()
+            idleCheckState.reset()
+            lastIdleCheckLogged = null
+        }
+        scheduler.startRun(SystemClock.elapsedRealtime())
+        latencyWindow.clear()
+        signalUpdateCounter.set(0L)
+        noDataCount.set(0L)
+        timeoutCount.set(0L)
+        busErrorCount.set(0L)
+        performanceTracker.reset()
+        reconnectCount = 0
+        consecutiveErrors = 0
         currentHeader = null
-        ui.post { dashboard.setLiveButton(false) }
         renderDashboard()
     }
 
-    private fun toggleLiveMode() {
-        if (liveMode.get()) {
-            liveMode.set(false)
-            logger.logEvent("LIVE_STOP_REQUEST")
-            ui.post { dashboard.setLiveButton(false) }
-            return
+    private fun establishConnection(address: String, name: String) {
+        val adapter = bluetoothManager().adapter ?: error("Bluetooth unavailable")
+        val device = adapter.getRemoteDevice(address)
+        elm.connect(device) { !stopRequested.get() && !destroying.get() }
+        requireContinue()
+        logger.logConnection("BLUETOOTH_CONNECTED name=$name")
+
+        val initialization = elm.initialize { !stopRequested.get() }
+        for (result in initialization) {
+            record(null, result)
+            requireOk(result, "adapter initialization")
+            requireContinue()
         }
-        if (!elm.isConnected()) {
-            lastError = "OBD NOT CONNECTED"
-            renderDashboard()
-            return
-        }
-        if (!busy.compareAndSet(false, true)) return
-        liveMode.set(true)
-        logger.logEvent("LIVE_START")
-        ui.post { dashboard.setLiveButton(true) }
-        worker.execute {
-            try {
-                configureRuntimeAdapter()
-                runLiveScheduler()
-            } catch (e: Exception) {
-                safeLogError("LIVE_MODE_ERROR", e)
-                lastError = "LIVE: ${e.message}"
-            } finally {
-                liveMode.set(false)
-                busy.set(false)
-                ui.post { dashboard.setLiveButton(false) }
-                setControlsEnabled(true)
-                renderDashboard()
+        if (initialization.size != 8) requireContinue()
+
+        for (command in listOf("ATI", "STI", "AT@1", "ATDP", "ATDPN", "ATRV")) {
+            requireContinue()
+            val result = elm.command(command, 6000, 300)
+            record(null, result)
+            if (command == "ATRV") updateAdapterVoltage(result)
+            if (result.status != TransactionStatus.OK) {
+                logger.logConnection("IDENTITY_QUERY_WARNING command=$command status=${result.status}")
             }
         }
+        currentHeader = null
     }
 
     private fun configureRuntimeAdapter() {
         for (command in listOf("ATSP6", "ATAT1", "ATH1", "ATL0", "ATS0", "ATCAF1", "ATAL")) {
+            requireContinue()
             val result = elm.command(command, 5000, 250)
             record(null, result)
-            if (result.status == TransactionStatus.COMMAND_ERROR || result.status == TransactionStatus.TIMEOUT) {
-                error("Adapter rejected $command (${result.status})")
-            }
+            requireOk(result, "runtime profile")
         }
         currentHeader = null
         logger.logConnection("RUNTIME_PROFILE_CONFIGURED profile=${ProbeLogger.PROFILE_VERSION}")
+        logger.forceCheckpoint("RUNTIME_PROFILE_READY")
     }
 
-    private fun runLiveScheduler() {
+    private fun requireOk(result: CommandResult, stage: String) {
+        if (result.status != TransactionStatus.OK) {
+            error("$stage rejected ${result.command} (${result.status})")
+        }
+    }
+
+    private fun requireContinue() {
+        if (stopRequested.get() || destroying.get()) throw SessionCancelledException()
+    }
+
+    private fun runLiveScheduler(sessionAddress: String, sessionName: String) {
         logger.logConnection("LIVE_MODE_START scheduler=${ProbeLogger.SCHEDULER_PROFILE}")
-        scheduler.reset(SystemClock.elapsedRealtime())
+        scheduler.startRun(SystemClock.elapsedRealtime())
+        latencyWindow.clear()
+        performanceTracker.reset()
         var nextFrameLog = 0L
-        var lastMetricSampleMs = 0L
+        var lastMetricSampleMs = SystemClock.elapsedRealtime()
         var lastExecutions = 0L
-        var lastPublish = 0L
+        var lastSignalUpdates = 0L
         val due = IntArray(RequestTable.requests.size)
 
-        while (liveMode.get()) {
+        while (liveMode.get() && !stopRequested.get()) {
             if (!elm.isConnected()) {
-                if (!attemptReconnect()) break
+                if (!attemptReconnect(sessionAddress, sessionName)) break
                 scheduler.reset(SystemClock.elapsedRealtime())
                 nextFrameLog = 0L
             }
             val cycleStart = SystemClock.elapsedRealtime()
             try {
-                store.refreshStaleStates(SystemClock.elapsedRealtime())
+                synchronized(signalLock) { store.refreshStaleStates(SystemClock.elapsedRealtime()) }
                 val now = SystemClock.elapsedRealtime()
                 val dueCount = scheduler.dueRequests(now, due)
                 for (i in 0 until dueCount) {
+                    requireContinue()
                     val request = RequestTable.requests[due[i]]
                     val requestStart = SystemClock.elapsedRealtime()
                     val result = executeScheduled(request)
@@ -276,34 +504,41 @@ class MainActivity : Activity() {
                         TransactionStatus.NO_DATA -> noDataCount.incrementAndGet()
                         TransactionStatus.TIMEOUT -> timeoutCount.incrementAndGet()
                         TransactionStatus.BUS_ERROR -> busErrorCount.incrementAndGet()
-                        else -> {}
+                        else -> Unit
                     }
                     scheduler.markExecuted(due[i], SystemClock.elapsedRealtime())
+                    if (result.status == TransactionStatus.TIMEOUT || result.status == TransactionStatus.BUS_ERROR) {
+                        throw IOException("${request.header} ${request.command} ${result.status}")
+                    }
                 }
+                updateIdleCheckState()
                 val nowAfter = SystemClock.elapsedRealtime()
                 if (nowAfter >= nextFrameLog) {
                     val logStart = SystemClock.elapsedRealtime()
-                    logger.logFrame(baseline, hybrid)
-                    lastLoggerWriteMs = SystemClock.elapsedRealtime() - logStart
+                    synchronized(signalLock) { logger.logFrame(baseline, hybrid) }
+                    lastFrameLogMs = SystemClock.elapsedRealtime() - logStart
                     nextFrameLog = nowAfter + 1000L
                 }
-                updateIdleCheckState()
                 consecutiveErrors = 0
+            } catch (_: SessionCancelledException) {
+                break
             } catch (e: Exception) {
+                if (stopRequested.get() || !liveMode.get()) break
                 consecutiveErrors++
                 lastError = "POLL: ${e.message}"
                 safeLogError("LIVE_POLL_ERROR count=$consecutiveErrors", e)
                 if (consecutiveErrors >= 3) elm.close()
             }
+            if (!liveMode.get() || stopRequested.get()) break
             val cycleDuration = SystemClock.elapsedRealtime() - cycleStart
             val nowAfterCycle = SystemClock.elapsedRealtime()
             if (nowAfterCycle - lastMetricSampleMs >= 5000L) {
                 val deltaMs = (nowAfterCycle - lastMetricSampleMs).coerceAtLeast(1L)
                 val executions = scheduler.executions
-                val publish = publishCounter.get()
+                val signalUpdates = signalUpdateCounter.get()
                 val metrics = PerformanceTracker.SchedulerMetrics(
                     requestHz = (executions - lastExecutions) * 1000.0 / deltaMs,
-                    publishHz = (publish - lastPublish) * 1000.0 / deltaMs,
+                    signalUpdateHz = (signalUpdates - lastSignalUpdates) * 1000.0 / deltaMs,
                     deadlineMisses = scheduler.deadlineMisses,
                     skippedOverdue = scheduler.skippedOverdue,
                     latencyP50Ms = latencyWindow.percentile(0.50),
@@ -313,34 +548,46 @@ class MainActivity : Activity() {
                     timeout = timeoutCount.get(),
                     busError = busErrorCount.get()
                 )
-                logger.logPerformance(performanceTracker.sample(cycleDuration, lastRenderDurationMs, lastLoggerWriteMs, metrics))
+                logger.logPerformance(
+                    performanceTracker.sample(
+                        cycleDuration,
+                        lastRenderDurationMs,
+                        lastFrameLogMs,
+                        metrics,
+                        logger.takeTimingSample()
+                    )
+                )
                 lastMetricSampleMs = nowAfterCycle
                 lastExecutions = executions
-                lastPublish = publish
+                lastSignalUpdates = signalUpdates
             }
             val wakeMs = scheduler.nextWakeMs(SystemClock.elapsedRealtime())
-            Thread.sleep((wakeMs - SystemClock.elapsedRealtime()).coerceIn(5L, 250L))
+            sleepWhileRunning((wakeMs - SystemClock.elapsedRealtime()).coerceIn(5L, 250L))
         }
         logger.logConnection("LIVE_MODE_STOP")
-        logger.logEvent("LIVE_STOP")
     }
 
     private fun ensureHeader(header: String) {
         if (currentHeader == header) return
         val result = elm.command("ATSH$header", 4000, 120, 80)
         record(null, result)
-        if (result.status != TransactionStatus.OK) error("Header $header failed: ${result.status}")
+        requireOk(result, "header $header")
         currentHeader = header
     }
 
     private fun executeScheduled(request: ScheduledRequest): CommandResult {
         request.header?.let { ensureHeader(it) }
-        val result = elm.command(request.command, request.timeoutMs, request.minimumGapMs, request.quietWindowMs, request.preDrainMs)
+        val result = elm.command(
+            request.command,
+            request.timeoutMs,
+            request.minimumGapMs,
+            request.quietWindowMs,
+            request.preDrainMs
+        )
         record(request.header, result)
-        if (result.status == TransactionStatus.TIMEOUT || result.status == TransactionStatus.BUS_ERROR) {
-            throw IOException("${request.header} ${request.command} ${result.status}")
+        if (result.status != TransactionStatus.TIMEOUT && result.status != TransactionStatus.BUS_ERROR) {
+            decodeScheduled(request, result)
         }
-        decodeScheduled(request, result)
         return result
     }
 
@@ -358,7 +605,14 @@ class MainActivity : Activity() {
                 val decoded = ObdParsers.decodeStandard(result.rawLines, RESPONSE_ENGINE)
                 updateSignal(baseline.coolantC, decoded?.coolantC, request.command, result)
                 decoded?.coolantC?.let {
-                    logger.logDecoded("coolant_c", it, "C", request.command, payloadHex(result, RESPONSE_ENGINE), ObdParsers.DECODER_VERSION)
+                    logger.logDecoded(
+                        "coolant_c",
+                        it,
+                        "C",
+                        request.command,
+                        payloadHex(result, RESPONSE_ENGINE),
+                        ObdParsers.DECODER_VERSION
+                    )
                 }
             }
             "cd_f3" -> {
@@ -368,12 +622,23 @@ class MainActivity : Activity() {
                     return
                 }
                 updateSignal(hybrid.iceTorqueNm, decoded.iceTorqueNm, request.command, result)
-                logger.logDecoded("ice_torque_nm", decoded.iceTorqueNm, "Nm", request.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+                logger.logDecoded(
+                    "ice_torque_nm",
+                    decoded.iceTorqueNm,
+                    "Nm",
+                    request.command,
+                    decoded.rawDataHex,
+                    ObdParsers.DECODER_VERSION
+                )
             }
             "c3" -> {
                 val decoded = ObdParsers.decode21C3(result.rawLines)
                 if (decoded == null) {
-                    markDecodeFailure(listOf(hybrid.socPct, hybrid.hvVoltageV, hybrid.hvCurrentA, hybrid.hvPowerKw), request.command, result)
+                    markDecodeFailure(
+                        listOf(hybrid.socPct, hybrid.hvVoltageV, hybrid.hvCurrentA, hybrid.hvPowerKw),
+                        request.command,
+                        result
+                    )
                     return
                 }
                 applyC3(request.command, result, decoded)
@@ -385,22 +650,69 @@ class MainActivity : Activity() {
                     return
                 }
                 updateSignal(hybrid.warmupActive, decoded.warmupActive, request.command, result)
-                logger.logDecoded("warmup_active", decoded.warmupActive, null, request.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+                logger.logDecoded(
+                    "warmup_active",
+                    decoded.warmupActive,
+                    null,
+                    request.command,
+                    decoded.rawDataHex,
+                    ObdParsers.DECODER_VERSION
+                )
             }
             "cf" -> {
                 val decoded = ObdParsers.decode21CF(result.rawLines)
                 if (decoded == null) {
-                    markDecodeFailure(listOf(hybrid.batteryTempsC, hybrid.batteryTempMinC, hybrid.batteryTempMaxC, hybrid.batteryTempAvgC), request.command, result)
+                    markDecodeFailure(
+                        listOf(
+                            hybrid.batteryTempsC,
+                            hybrid.batteryTempMinC,
+                            hybrid.batteryTempMaxC,
+                            hybrid.batteryTempAvgC
+                        ),
+                        request.command,
+                        result
+                    )
                     return
                 }
-                updateSignal(hybrid.batteryTempsC, decoded.batteryTempsC, request.command, result)
-                updateSignal(hybrid.batteryTempMinC, decoded.batteryTempMinC, request.command, result)
-                updateSignal(hybrid.batteryTempMaxC, decoded.batteryTempMaxC, request.command, result)
-                updateSignal(hybrid.batteryTempAvgC, decoded.batteryTempAvgC, request.command, result)
-                logger.logDecoded("battery_temps_c", decoded.batteryTempsC, "C", request.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
-                logger.logDecoded("battery_temp_min_c", decoded.batteryTempMinC, "C", request.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
-                logger.logDecoded("battery_temp_max_c", decoded.batteryTempMaxC, "C", request.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
-                logger.logDecoded("battery_temp_avg_c", decoded.batteryTempAvgC, "C", request.command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+                synchronized(signalLock) {
+                    store.update(hybrid.batteryTempsC, decoded.batteryTempsC, request.command, result)
+                    store.update(hybrid.batteryTempMinC, decoded.batteryTempMinC, request.command, result)
+                    store.update(hybrid.batteryTempMaxC, decoded.batteryTempMaxC, request.command, result)
+                    store.update(hybrid.batteryTempAvgC, decoded.batteryTempAvgC, request.command, result)
+                    signalUpdateCounter.addAndGet(4L)
+                }
+                logger.logDecoded(
+                    "battery_temps_c",
+                    decoded.batteryTempsC,
+                    "C",
+                    request.command,
+                    decoded.rawDataHex,
+                    ObdParsers.DECODER_VERSION
+                )
+                logger.logDecoded(
+                    "battery_temp_min_c",
+                    decoded.batteryTempMinC,
+                    "C",
+                    request.command,
+                    decoded.rawDataHex,
+                    ObdParsers.DECODER_VERSION
+                )
+                logger.logDecoded(
+                    "battery_temp_max_c",
+                    decoded.batteryTempMaxC,
+                    "C",
+                    request.command,
+                    decoded.rawDataHex,
+                    ObdParsers.DECODER_VERSION
+                )
+                logger.logDecoded(
+                    "battery_temp_avg_c",
+                    decoded.batteryTempAvgC,
+                    "C",
+                    request.command,
+                    decoded.rawDataHex,
+                    ObdParsers.DECODER_VERSION
+                )
             }
             "atrv" -> updateAdapterVoltage(result)
         }
@@ -408,59 +720,105 @@ class MainActivity : Activity() {
 
     private fun applyStandard(command: String, result: CommandResult, decoded: StandardDecoded) {
         val raw = payloadHex(result, RESPONSE_ENGINE)
-        decoded.rpm?.let { updateSignal(baseline.rpm, it, command, result); logger.logDecoded("rpm", it, "rpm", command, raw, ObdParsers.DECODER_VERSION) }
-        decoded.speedKph?.let { updateSignal(baseline.speedKph, it, command, result); logger.logDecoded("speed_kph", it, "km/h", command, raw, ObdParsers.DECODER_VERSION) }
-        decoded.coolantC?.let { updateSignal(baseline.coolantC, it, command, result); logger.logDecoded("coolant_c", it, "C", command, raw, ObdParsers.DECODER_VERSION) }
+        var updates = 0L
+        synchronized(signalLock) {
+            decoded.rpm?.let { store.update(baseline.rpm, it, command, result); updates++ }
+            decoded.speedKph?.let { store.update(baseline.speedKph, it, command, result); updates++ }
+            decoded.coolantC?.let { store.update(baseline.coolantC, it, command, result); updates++ }
+            signalUpdateCounter.addAndGet(updates)
+        }
+        decoded.rpm?.let {
+            logger.logDecoded("rpm", it, "rpm", command, raw, ObdParsers.DECODER_VERSION)
+        }
+        decoded.speedKph?.let {
+            logger.logDecoded("speed_kph", it, "km/h", command, raw, ObdParsers.DECODER_VERSION)
+        }
+        decoded.coolantC?.let {
+            logger.logDecoded("coolant_c", it, "C", command, raw, ObdParsers.DECODER_VERSION)
+        }
     }
 
     private fun applyC3(command: String, result: CommandResult, decoded: ToyotaC3Decoded) {
-        updateSignal(hybrid.socPct, decoded.socPct, command, result)
-        updateSignal(hybrid.hvVoltageV, decoded.hvVoltageV, command, result)
-        updateSignal(hybrid.hvCurrentA, decoded.hvCurrentA, command, result)
-        updateSignal(hybrid.hvPowerKw, decoded.hvPowerKw, command, result)
-        val values = listOf(
-            Triple("soc_pct", decoded.socPct, "%"), Triple("hv_voltage_v", decoded.hvVoltageV, "V"),
-            Triple("hv_current_a", decoded.hvCurrentA, "A"), Triple("hv_power_kw", decoded.hvPowerKw, "kW")
+        synchronized(signalLock) {
+            store.update(hybrid.socPct, decoded.socPct, command, result)
+            store.update(hybrid.hvVoltageV, decoded.hvVoltageV, command, result)
+            store.update(hybrid.hvCurrentA, decoded.hvCurrentA, command, result)
+            store.update(hybrid.hvPowerKw, decoded.hvPowerKw, command, result)
+            signalUpdateCounter.addAndGet(4L)
+        }
+        logger.logDecoded("soc_pct", decoded.socPct, "%", command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+        logger.logDecoded(
+            "hv_voltage_v",
+            decoded.hvVoltageV,
+            "V",
+            command,
+            decoded.rawDataHex,
+            ObdParsers.DECODER_VERSION
         )
-        for ((name, value, unit) in values) logger.logDecoded(name, value, unit, command, decoded.rawDataHex, ObdParsers.DECODER_VERSION)
+        logger.logDecoded(
+            "hv_current_a",
+            decoded.hvCurrentA,
+            "A",
+            command,
+            decoded.rawDataHex,
+            ObdParsers.DECODER_VERSION
+        )
+        logger.logDecoded(
+            "hv_power_kw",
+            decoded.hvPowerKw,
+            "kW",
+            command,
+            decoded.rawDataHex,
+            ObdParsers.DECODER_VERSION
+        )
     }
 
     private fun updateAdapterVoltage(result: CommandResult) {
         val value = ObdParsers.adapterVoltage(result.rawLines)
         updateSignal(baseline.adapterVoltageV, value, "ATRV", result)
-        value?.let { logger.logDecoded("adapter_12v_v", it, "V", "ATRV", result.rawLines.joinToString(" | "), ObdParsers.DECODER_VERSION) }
+        value?.let {
+            logger.logDecoded(
+                "adapter_12v_v",
+                it,
+                "V",
+                "ATRV",
+                result.rawLines.joinToString(" | "),
+                ObdParsers.DECODER_VERSION
+            )
+        }
     }
 
     private fun <T> updateSignal(signal: SignalValue<T>, value: T?, command: String, result: CommandResult) {
-        store.update(signal, value, command, result)
-        publishCounter.incrementAndGet()
+        synchronized(signalLock) { store.update(signal, value, command, result) }
+        signalUpdateCounter.incrementAndGet()
     }
 
     private fun markDecodeFailure(signals: List<SignalValue<*>>, command: String, result: CommandResult) {
-        store.markDecodeFailure(signals, command, result)
+        synchronized(signalLock) { store.markDecodeFailure(signals, command, result) }
     }
 
     private fun payloadHex(result: CommandResult, canId: String): String =
         ObdParsers.isoTpMessage(result.rawLines, canId)?.payloadHex ?: result.normalizedHex
 
-    private fun attemptReconnect(): Boolean {
-        val address = deviceAddress ?: return false
+    private fun attemptReconnect(sessionAddress: String, sessionName: String): Boolean {
         val delays = longArrayOf(1000, 2000, 5000, 10_000, 30_000)
         var attempt = 0
-        while (liveMode.get()) {
+        while (liveMode.get() && !stopRequested.get()) {
             reconnectCount++
             val wait = delays[attempt.coerceAtMost(delays.lastIndex)]
             logger.logConnection("RECONNECT_WAIT count=$reconnectCount delay_ms=$wait")
-            Thread.sleep(wait)
-            if (!liveMode.get()) return false
+            if (!sleepWhileRunning(wait)) return false
             try {
-                establishConnection(address, newSession = false)
+                establishConnection(sessionAddress, sessionName)
                 configureRuntimeAdapter()
                 consecutiveErrors = 0
                 logger.logConnection("RECONNECT_SUCCESS total_attempts=$reconnectCount")
                 logger.logEvent("RECONNECT_SUCCESS", reconnectCount.toString())
                 return true
+            } catch (_: SessionCancelledException) {
+                return false
             } catch (e: Exception) {
+                if (stopRequested.get() || !liveMode.get()) return false
                 safeLogError("RECONNECT_FAILED attempt=${attempt + 1}", e)
                 elm.close()
                 attempt++
@@ -469,89 +827,223 @@ class MainActivity : Activity() {
         return false
     }
 
-    private fun finishAndShareLogs() {
-        val session = logger.currentSessionDir() ?: run {
-            lastError = "NO ACTIVE SESSION"
-            renderDashboard()
+    private fun sleepWhileRunning(durationMs: Long): Boolean {
+        val end = SystemClock.elapsedRealtime() + durationMs.coerceAtLeast(0L)
+        while (liveMode.get() && !stopRequested.get()) {
+            val remaining = end - SystemClock.elapsedRealtime()
+            if (remaining <= 0L) return true
+            try {
+                Thread.sleep(remaining.coerceAtMost(100L))
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+        }
+        return false
+    }
+
+    private fun publishArchive(archive: PendingLogArchive, offerUserDestinationOnFailure: Boolean) {
+        val commit = logger.publishAndMark(archive) { publicLogExporter.publish(archive) }
+        val result = commit.result
+        if (result.success && commit.receiptWritten) {
+            completePublishedArchive(result)
             return
         }
-        liveMode.set(false)
-        setControlsEnabled(false)
-        worker.execute {
-            try {
-                logger.logEvent("SESSION_END")
-                logger.logConnection("END_AND_SHARE_CLICKED dir=${session.name}")
-                val zip = logger.finalizeAndZip()
-                elm.close()
-                currentHeader = null
-                val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", zip)
-                val share = Intent(Intent.ACTION_SEND).apply {
-                    type = "application/zip"
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    putExtra(Intent.EXTRA_SUBJECT, "RX400h Monitor research logs ${zip.name}")
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        if (result.success) {
+            pendingArchive = archive
+            pendingPublicationReceipt = result
+            lastError = "公共日志已保存，但内部保存回执失败；请按结束重试"
+            lastNotice = "已保存 ${result.displayName}"
+            setPhase(MonitorSessionPhase.SAVE_FAILED)
+            return
+        }
+        pendingArchive = archive
+        pendingPublicationReceipt = null
+        lastError = "公共保存失败: ${result.error}; 内部 ZIP 已保留"
+        setPhase(MonitorSessionPhase.SAVE_FAILED)
+        if (offerUserDestinationOnFailure && result.needsUserDestination) {
+            ui.post { launchSaveDocument(archive) }
+        }
+    }
+
+    private fun retrySave() {
+        val archive = pendingArchive
+        val receipt = pendingPublicationReceipt
+        if (archive != null && receipt != null) {
+            setPhase(MonitorSessionPhase.SAVING)
+            worker.execute {
+                val commit = logger.publishAndMark(archive) { receipt }
+                if (commit.result.success && commit.receiptWritten) {
+                    completePublishedArchive(commit.result)
+                } else {
+                    pendingArchive = archive
+                    pendingPublicationReceipt = receipt
+                    lastError = "公共日志已保存，但内部保存回执失败；请按结束重试"
+                    setPhase(MonitorSessionPhase.SAVE_FAILED)
                 }
-                ui.post { setControlsEnabled(true); startActivity(Intent.createChooser(share, "发送全部测试日志")) }
-            } catch (e: Exception) {
-                lastError = "EXPORT: ${e.message}"
-                ui.post { setControlsEnabled(true); renderDashboard() }
+            }
+            return
+        }
+        if (archive != null) {
+            setPhase(MonitorSessionPhase.SAVING)
+            worker.execute { publishArchive(archive, offerUserDestinationOnFailure = true) }
+            return
+        }
+        if (logger.state == SessionState.FINALIZE_FAILED) {
+            setPhase(MonitorSessionPhase.SAVING)
+            worker.execute {
+                try {
+                    val rebuilt = logger.finalizeAndZip(retryCompletionKind, retryReason)
+                    publishArchive(rebuilt, offerUserDestinationOnFailure = true)
+                } catch (e: Exception) {
+                    lastError = "保存重试失败: ${e.message}"
+                    setPhase(MonitorSessionPhase.SAVE_FAILED)
+                }
             }
         }
     }
 
+    private fun launchSaveDocument(archive: PendingLogArchive) {
+        if (destroying.get()) return
+        pendingManualArchive = archive
+        try {
+            startActivityForResult(
+                Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "application/zip"
+                    putExtra(Intent.EXTRA_TITLE, archive.displayName)
+                },
+                REQUEST_SAVE_LOG
+            )
+        } catch (e: Exception) {
+            pendingManualArchive = null
+            pendingArchive = archive
+            lastError = "无法打开系统保存位置: ${e.message}"
+            setPhase(MonitorSessionPhase.SAVE_FAILED)
+        }
+    }
+
+    private fun saveToChosenDestination(archive: PendingLogArchive, destination: Uri) {
+        setPhase(MonitorSessionPhase.SAVING)
+        worker.execute {
+            val commit = logger.publishAndMark(archive) {
+                publicLogExporter.publishToUri(archive, destination)
+            }
+            val result = commit.result
+            if (result.success && commit.receiptWritten) {
+                completePublishedArchive(result)
+            } else if (result.success) {
+                pendingArchive = archive
+                pendingPublicationReceipt = result
+                lastError = "日志已保存，但内部保存回执失败"
+                setPhase(MonitorSessionPhase.SAVE_FAILED)
+            } else {
+                pendingArchive = archive
+                pendingPublicationReceipt = null
+                lastError = "所选位置保存失败: ${result.error}"
+                setPhase(MonitorSessionPhase.SAVE_FAILED)
+            }
+        }
+    }
+
+    private fun recoverPendingLogs() {
+        setPhase(MonitorSessionPhase.SAVING)
+        worker.execute {
+            try {
+                val archives = logger.recoverInterruptedSessions()
+                if (archives.isEmpty()) {
+                    setPhase(MonitorSessionPhase.IDLE)
+                    return@execute
+                }
+                var failed: PendingLogArchive? = null
+                var recovered = 0
+                for (archive in archives) {
+                    val commit = logger.publishAndMark(archive) { publicLogExporter.publish(archive) }
+                    val result = commit.result
+                    if (result.success && commit.receiptWritten) {
+                        recovered++
+                    } else if (result.success && failed == null) {
+                        failed = archive
+                        pendingPublicationReceipt = result
+                        lastError = "日志已保存，但内部保存回执失败"
+                    } else if (failed == null) {
+                        failed = archive
+                        pendingPublicationReceipt = null
+                        lastError = "恢复日志公共保存失败: ${result.error}"
+                    }
+                }
+                if (failed != null) {
+                    pendingArchive = failed
+                    setPhase(MonitorSessionPhase.SAVE_FAILED)
+                } else {
+                    lastNotice = "已恢复并保存 $recovered 份日志"
+                    lastError = "NONE"
+                    setPhase(MonitorSessionPhase.IDLE)
+                }
+            } catch (e: Exception) {
+                lastError = "日志恢复失败: ${e.message}"
+                setPhase(MonitorSessionPhase.IDLE)
+            }
+        }
+    }
+
+    private fun completePublishedArchive(result: PublicLogResult) {
+        pendingArchive = null
+        pendingPublicationReceipt = null
+        lastError = "NONE"
+        lastNotice = "已保存 ${result.displayName}"
+        setPhase(MonitorSessionPhase.IDLE)
+    }
+
     private fun record(header: String?, result: CommandResult) = logger.logTransaction(header, result)
-    private fun safeLogError(message: String, throwable: Throwable) { try { logger.logError(message, throwable) } catch (_: Exception) {} }
+
+    private fun safeLogError(message: String, throwable: Throwable) {
+        runCatching { logger.logError(message, throwable) }
+    }
 
     private fun renderDashboard() = ui.post {
+        if (destroying.get()) return@post
+        if (!::dashboard.isInitialized) return@post
         val renderStart = SystemClock.elapsedRealtime()
-        val rpmFresh = baseline.rpm.status == SignalStatus.VALID
-        val socFresh = hybrid.socPct.status == SignalStatus.VALID
-        val batteryTempFresh = hybrid.batteryTempAvgC.status == SignalStatus.VALID
-        val hvPowerFresh = hybrid.hvPowerKw.status == SignalStatus.VALID
-        val coolantFresh = baseline.coolantC.status == SignalStatus.VALID
-        val voltageFresh = baseline.adapterVoltageV.status == SignalStatus.VALID
-        val icePower = mechanicalPowerKw(baseline.rpm.value, hybrid.iceTorqueNm.value)
-        val icePowerFresh = rpmFresh && hybrid.iceTorqueNm.status == SignalStatus.VALID
-        val icePowerVersion = maxOf(baseline.rpm.version, hybrid.iceTorqueNm.version)
-        val batteryTempVersion = maxOf(
-            hybrid.batteryTempMinC.version,
-            hybrid.batteryTempMaxC.version,
-            hybrid.batteryTempAvgC.version
-        )
-        dashboard.render(
+        val snapshot = synchronized(signalLock) {
+            val rpmFresh = baseline.rpm.status == SignalStatus.VALID
+            val batteryTempFresh = hybrid.batteryTempAvgC.status == SignalStatus.VALID
+            val icePower = mechanicalPowerKw(baseline.rpm.value, hybrid.iceTorqueNm.value)
             DashboardSnapshot(
                 speedKph = baseline.speedKph.value,
                 speedFresh = baseline.speedKph.status == SignalStatus.VALID,
                 speedVersion = baseline.speedKph.version,
                 socPct = hybrid.socPct.value,
-                socFresh = socFresh,
+                socFresh = hybrid.socPct.status == SignalStatus.VALID,
                 socVersion = hybrid.socPct.version,
                 batteryTempMinC = hybrid.batteryTempMinC.value,
                 batteryTempMaxC = hybrid.batteryTempMaxC.value,
                 batteryTempAvgC = hybrid.batteryTempAvgC.value,
                 batteryTempFresh = batteryTempFresh,
-                batteryTempVersion = batteryTempVersion,
+                batteryTempVersion = hybrid.batteryTempMinC.version +
+                    hybrid.batteryTempMaxC.version + hybrid.batteryTempAvgC.version,
                 hvPowerKw = hybrid.hvPowerKw.value,
-                hvPowerFresh = hvPowerFresh,
+                hvPowerFresh = hybrid.hvPowerKw.status == SignalStatus.VALID,
                 hvPowerVersion = hybrid.hvPowerKw.version,
                 rpm = baseline.rpm.value,
                 rpmFresh = rpmFresh,
                 rpmVersion = baseline.rpm.version,
                 coolantC = baseline.coolantC.value,
-                coolantFresh = coolantFresh,
+                coolantFresh = baseline.coolantC.status == SignalStatus.VALID,
                 coolantVersion = baseline.coolantC.version,
                 adapterVoltageV = baseline.adapterVoltageV.value,
-                adapterVoltageFresh = voltageFresh,
+                adapterVoltageFresh = baseline.adapterVoltageV.status == SignalStatus.VALID,
                 adapterVoltageVersion = baseline.adapterVoltageV.version,
                 icePowerKw = icePower,
-                icePowerFresh = icePowerFresh,
-                icePowerVersion = icePowerVersion,
+                icePowerFresh = rpmFresh && hybrid.iceTorqueNm.status == SignalStatus.VALID,
+                icePowerVersion = baseline.rpm.version + hybrid.iceTorqueNm.version,
                 idleCheckActive = hybrid.idleCheckActive.value == true,
                 idleCheckVersion = hybrid.idleCheckActive.version
             )
-        )
+        }
+        dashboard.render(snapshot)
+        dashboard.setControlState(MonitorSessionPolicy.controls(phase.get()))
         val connection = if (elm.isConnected()) "CONNECTED" else "OFFLINE"
-        val mode = when { liveMode.get() -> "LIVE"; busy.get() -> "BUSY"; else -> "IDLE" }
         val logging = when (logger.state) {
             SessionState.ACTIVE -> if (logger.isDegraded()) "LOG!" else "LOG"
             SessionState.FINALIZING -> "PACKING"
@@ -561,8 +1053,14 @@ class MainActivity : Activity() {
         }
         dashboard.renderStatus(
             DashboardStatus(
-                deviceName ?: "OBD", connection, mode, logging, reconnectCount,
-                lastError.takeUnless { it == "NONE" }, logger.isDegraded() || lastError != "NONE"
+                deviceName = deviceName ?: "OBD",
+                connection = connection,
+                mode = MonitorSessionPolicy.modeCode(phase.get()),
+                logging = logging,
+                reconnectCount = reconnectCount,
+                notice = lastNotice,
+                error = lastError.takeUnless { it == "NONE" },
+                warning = logger.isDegraded() || lastError != "NONE"
             )
         )
         lastRenderDurationMs = SystemClock.elapsedRealtime() - renderStart
@@ -574,29 +1072,68 @@ class MainActivity : Activity() {
     }
 
     private fun updateIdleCheckState() {
-        val rpm = baseline.rpm
-        val torque = hybrid.iceTorqueNm
-        val warmup = hybrid.warmupActive
-        val speed = baseline.speedKph
-        val fresh = rpm.status == SignalStatus.VALID &&
-            torque.status == SignalStatus.VALID &&
-            warmup.status == SignalStatus.VALID &&
-            speed.status == SignalStatus.VALID
-        if (!fresh) {
-            idleCheckState.reset()
-            store.setDerived(hybrid.idleCheckActive, null, "IDLE_CHECK")
-            return
+        var transition: Boolean? = null
+        synchronized(signalLock) {
+            val rpm = baseline.rpm
+            val torque = hybrid.iceTorqueNm
+            val warmup = hybrid.warmupActive
+            val speed = baseline.speedKph
+            val fresh = rpm.status == SignalStatus.VALID &&
+                torque.status == SignalStatus.VALID &&
+                warmup.status == SignalStatus.VALID &&
+                speed.status == SignalStatus.VALID
+            if (!fresh) {
+                idleCheckState.reset()
+                store.setDerived(hybrid.idleCheckActive, null, "IDLE_CHECK")
+                return@synchronized
+            }
+            val icePower = mechanicalPowerKw(rpm.value, torque.value)
+            idleCheckState.update(
+                warmup.value,
+                rpm.value,
+                icePower,
+                speed.value,
+                SystemClock.elapsedRealtime()
+            )
+            val active = idleCheckState.active
+            store.setDerived(hybrid.idleCheckActive, active, "IDLE_CHECK")
+            if (lastIdleCheckLogged != active) {
+                lastIdleCheckLogged = active
+                transition = active
+            }
         }
-        val icePower = mechanicalPowerKw(rpm.value, torque.value)
-        idleCheckState.update(warmup.value, rpm.value, icePower, speed.value, SystemClock.elapsedRealtime())
-        val active = idleCheckState.active
-        store.setDerived(hybrid.idleCheckActive, active, "IDLE_CHECK")
-        if (lastIdleCheckLogged != active) {
-            logger.logDecoded("idle_check_active", active, null, "IDLE_CHECK", "", ObdParsers.DECODER_VERSION)
+        transition?.let { active ->
+            logger.logDecoded(
+                "idle_check_active",
+                active,
+                null,
+                "IDLE_CHECK",
+                "",
+                ObdParsers.DECODER_VERSION
+            )
             logger.logEvent(if (active) "IDLE_CHECK_ACTIVE" else "IDLE_CHECK_INACTIVE")
-            lastIdleCheckLogged = active
         }
     }
 
-    private fun setControlsEnabled(enabled: Boolean) = ui.post { dashboard.setControlsEnabled(enabled, liveMode.get()) }
+    private fun missingStartPermissions(): List<String> {
+        val missing = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasBluetoothPermission()) {
+            missing += Manifest.permission.BLUETOOTH_CONNECT
+        }
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
+            checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED &&
+            !getSharedPreferences("probe", MODE_PRIVATE).getBoolean(STORAGE_PERMISSION_ASKED, false)
+        ) {
+            missing += Manifest.permission.WRITE_EXTERNAL_STORAGE
+        }
+        return missing
+    }
+
+    private fun hasBluetoothPermission(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+
+    private fun bluetoothManager(): BluetoothManager = getSystemService(BluetoothManager::class.java)
+
+    private class SessionCancelledException : Exception()
 }

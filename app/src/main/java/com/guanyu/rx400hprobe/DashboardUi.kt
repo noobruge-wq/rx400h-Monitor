@@ -2,245 +2,139 @@ package com.guanyu.rx400hprobe
 
 import android.app.Activity
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.text.TextUtils
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
-import android.view.ViewTreeObserver
+import android.view.ViewGroup
 import android.widget.Button
-import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import java.util.Locale
 
 /**
- * V0.3.0 responsive three-domain dashboard renderer.
+ * V0.3.1 size-independent three-domain dashboard (D-041/D-043).
  *
- * Consumes DashboardSnapshot only. Per-field versions make updates
- * change-driven: an unchanged signal does not reformat or setText. Layout is
- * derived from the current window size (D-039): cards reflow into a dynamic
- * column grid and the data area scrolls instead of shrinking text.
+ * This renderer consumes [DashboardSnapshot] only. The View tree is created
+ * once; native measurement reflows the header, controls and cards from the
+ * actual inset-safe window on every resize. Height overflow scrolls the whole
+ * page, while typography and touch targets stay inside explicit readable
+ * bounds instead of following a whole-screen scale factor.
  */
 internal class DashboardUi(
     private val activity: Activity,
     onSelectDevice: () -> Unit,
-    onConnectToggle: () -> Unit,
-    onLiveToggle: () -> Unit,
-    onExport: () -> Unit,
-    onLayoutChange: () -> Unit
+    onStart: () -> Unit,
+    onEnd: () -> Unit
 ) {
     val root: View
-    private val statusDeviceText: TextView
-    private val statusBleText: TextView
-    private val statusProtoText: TextView
-    private val statusDataText: TextView
-    private val deviceButton: Button
-    private val connectButton: Button
-    private val liveButton: Button
-    private val exportButton: Button
 
-    private val speedValue: TextView
-    private val socValue: TextView
-    private val batteryAvgValue: TextView
-    private val batteryDetailValue: TextView
-    private val coolantValue: TextView
-    private val voltageValue: TextView
-    private val icePowerValue: TextView
-    private val rpmValue: TextView
-    private val idleCheckValue: TextView
-    private val hvPowerValue: TextView
+    private lateinit var contentLayout: LinearLayout
+    private lateinit var cardGrid: ResponsiveCardGrid
+    private lateinit var separatorView: View
 
+    private lateinit var statusDeviceText: TextView
+    private lateinit var statusBleText: TextView
+    private lateinit var statusProtoText: TextView
+    private lateinit var statusDataText: TextView
+    private lateinit var deviceButton: Button
+    private lateinit var startButton: Button
+    private lateinit var endButton: Button
+
+    private lateinit var speedValue: TextView
+    private lateinit var socValue: TextView
+    private lateinit var batteryAvgValue: TextView
+    private lateinit var batteryDetailValue: TextView
+    private lateinit var coolantValue: TextView
+    private lateinit var voltageValue: TextView
+    private lateinit var icePowerValue: TextView
+    private lateinit var rpmValue: TextView
+    private lateinit var idleCheckValue: TextView
+    private lateinit var hvPowerValue: TextView
+
+    private val cards = mutableListOf<LinearLayout>()
+    private val cardTitles = mutableListOf<TextView>()
+    private val metricBlocks = mutableListOf<LinearLayout>()
+    private val autoSizeTargets = mutableListOf<AutoSizeTarget>()
     private var lastSnapshot: DashboardSnapshot? = null
 
-    private val idleIdleColor = Color.rgb(90, 105, 95)
     private val valueColor = Color.rgb(125, 255, 175)
     private val dimColor = Color.rgb(95, 205, 175)
     private val titleColor = Color.rgb(70, 215, 210)
-    private val fontScale: Float
-    private var lastLayoutKey = -1
+
+    private var insetLeftPx = 0
+    private var insetTopPx = 0
+    private var insetRightPx = 0
+    private var insetBottomPx = 0
+    private var lastWindowToken: WindowToken? = null
+    private var lastDensityDpi = activity.resources.configuration.densityDpi
+    private var lastFontScale = activity.resources.configuration.fontScale
 
     init {
-        // V0.3.0 responsive UI (D-039): derive everything from the actual app
-        // window (configuration screenWidthDp/HeightDp), so rotation,
-        // split-screen and freeform resizes reflow instead of assuming a fixed
-        // resolution or aspect ratio.
-        val config = activity.resources.configuration
-        var widthDp = config.screenWidthDp.toFloat()
-        var heightDp = config.screenHeightDp.toFloat()
-        if (widthDp <= 0f || heightDp <= 0f) {
-            val metrics = activity.resources.displayMetrics
-            widthDp = metrics.widthPixels / metrics.density
-            heightDp = metrics.heightPixels / metrics.density
-        }
-        fontScale = (minOf(widthDp, heightDp) / 720f).coerceAtLeast(0.5f)
-        val valueSp = 40f * fontScale
-        val smallSp = 26f * fontScale
-        val columns = ResponsiveLayout.columnCount(widthDp.toInt())
-        val buttonsInHeader = widthDp >= 720f
-        val rowRanges = ResponsiveLayout.rowPlan(3, columns)
+        val titleColumn = buildTitleColumn()
+        val statusColumn = buildStatusColumn()
 
-        val rootLayout = LinearLayout(activity).apply {
+        deviceButton = controlButton("设备", onSelectDevice)
+        startButton = controlButton("开始", onStart)
+        endButton = controlButton("结束", onEnd)
+        val header = ResponsiveHeaderLayout(
+            context = activity,
+            titleView = titleColumn,
+            statusView = statusColumn,
+            controls = listOf(deviceButton, startButton, endButton)
+        )
+
+        cardGrid = ResponsiveCardGrid(activity)
+        buildDomainCards().forEach { cardGrid.addView(it) }
+
+        separatorView = View(activity).apply {
+            setBackgroundColor(Color.rgb(20, 125, 115))
+        }
+        contentLayout = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.rgb(2, 8, 7))
-            setPadding(dp(16), dp(12), dp(16), dp(12))
-        }
-        val titleColumn = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        titleColumn.addView(TextView(activity).apply {
-            text = "RX400h"
-            textSize = (if (buttonsInHeader) 30f else 26f) * fontScale
-            setTextColor(Color.rgb(125, 255, 175))
-            typeface = android.graphics.Typeface.MONOSPACE
-            maxLines = 1
-        })
-        titleColumn.addView(TextView(activity).apply {
-            text = "MONITOR"
-            textSize = (if (buttonsInHeader) 17f else 15f) * fontScale
-            setTextColor(Color.rgb(110, 235, 205))
-            typeface = android.graphics.Typeface.MONOSPACE
-            maxLines = 1
-        })
-
-        val top = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp(72)
-            setPadding(0, dp(6), 0, dp(6))
-        }
-        top.addView(titleColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-
-        // V0.3.0 header v5 (D-036): buttons live inside the header between the
-        // title and status columns on wide screens so no separate button row
-        // wastes vertical space; narrow screens keep the scrollable row below.
-        deviceButton = smallButton("设备", onSelectDevice, buttonsInHeader)
-        connectButton = smallButton("连接", onConnectToggle, buttonsInHeader)
-        liveButton = smallButton("开始实时", onLiveToggle, buttonsInHeader)
-        exportButton = smallButton("结束并导出", onExport, buttonsInHeader)
-
-        val controls = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(if (buttonsInHeader) dp(6) else 0, dp(2), if (buttonsInHeader) dp(6) else 0, dp(2))
-        }
-        controls.addView(deviceButton)
-        controls.addView(connectButton)
-        controls.addView(liveButton)
-        controls.addView(exportButton)
-        if (buttonsInHeader) {
-            top.addView(controls)
-        }
-
-        val statusColumn = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.END
-        }
-        statusDeviceText = TextView(activity).apply {
-            textSize = (if (buttonsInHeader) 17f else 15f) * fontScale
-            setTextColor(Color.rgb(220, 235, 225))
-            gravity = Gravity.END
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-        }
-        fun statusLine(): TextView = TextView(activity).apply {
-            textSize = (if (buttonsInHeader) 14f else 12f) * fontScale
-            setTextColor(Color.rgb(130, 160, 150))
-            gravity = Gravity.END
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-        }
-        statusBleText = statusLine()
-        statusProtoText = statusLine()
-        statusDataText = statusLine()
-        statusColumn.addView(statusDeviceText)
-        statusColumn.addView(statusBleText)
-        statusColumn.addView(statusProtoText)
-        statusColumn.addView(statusDataText)
-        top.addView(statusColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 2f))
-        rootLayout.addView(top)
-        rootLayout.addView(separator())
-
-        if (!buttonsInHeader) {
-            rootLayout.addView(HorizontalScrollView(activity).apply {
-                isHorizontalScrollBarEnabled = false
-                addView(controls)
-            })
-        }
-
-        val body = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.BOTTOM
-            setPadding(0, dp(8), 0, 0)
-        }
-
-        val batteryCard = card("能量域")
-        batteryCard.addView(domainText("电量", valueSp, valueColor))
-        socValue = domainText("— %", valueSp, valueColor)
-        batteryCard.addView(socValue)
-        batteryCard.addView(domainText("温度", valueSp, valueColor))
-        batteryAvgValue = domainText("— °C", valueSp, valueColor)
-        batteryCard.addView(batteryAvgValue)
-        batteryCard.addView(domainText("最高 最低", smallSp, dimColor))
-        batteryDetailValue = domainText("—°  —°", smallSp, dimColor)
-        batteryCard.addView(batteryDetailValue)
-
-        val vehicleCard = card("车辆域")
-        vehicleCard.addView(domainText("速度", valueSp, valueColor))
-        speedValue = domainText("— km/h", valueSp, valueColor)
-        vehicleCard.addView(speedValue)
-        vehicleCard.addView(domainText("冷却液", valueSp, valueColor))
-        coolantValue = domainText("— °C", valueSp, valueColor)
-        vehicleCard.addView(coolantValue)
-        vehicleCard.addView(domainText("12V 供电", valueSp, valueColor))
-        voltageValue = domainText("— V", valueSp, valueColor)
-        vehicleCard.addView(voltageValue)
-
-        val powerCard = card("动力域")
-        powerCard.addView(domainText("混动功率", valueSp, valueColor))
-        hvPowerValue = domainText("— kW", valueSp, valueColor)
-        powerCard.addView(hvPowerValue)
-        powerCard.addView(domainText("引擎功率", valueSp, valueColor))
-        icePowerValue = domainText("— kW", valueSp, valueColor)
-        powerCard.addView(icePowerValue)
-        powerCard.addView(domainText("转速", valueSp, valueColor))
-        rpmValue = domainText("— rpm", valueSp, valueColor)
-        powerCard.addView(rpmValue)
-        idleCheckValue = domainText("怠速检查", valueSp, idleIdleColor).apply {
-            setTextColor(idleIdleColor)
-        }
-        powerCard.addView(idleCheckValue)
-
-        // Responsive reflow (D-039): rows come from the computed column count;
-        // every card in a row shares the width equally. The whole data area is
-        // inside a vertical ScrollView, so a short window scrolls instead of
-        // forcing text to shrink.
-        for (range in rowRanges) {
-            val row = LinearLayout(activity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.FILL_VERTICAL
-            }
-            for (index in range) {
-                val card = when (index) {
-                    0 -> batteryCard
-                    1 -> vehicleCard
-                    else -> powerCard
-                }
-                // Equal-height cards: every card in the row fills the row height
-                // (the tallest card), so all frames share one bottom edge.
-                row.addView(card, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).margin(dp(4)))
-            }
-            body.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(
+                header,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+            addView(separatorView)
+            addView(
+                cardGrid,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
         }
         val scroll = ScrollView(activity).apply {
-            isVerticalScrollBarEnabled = true
+            setBackgroundColor(Color.rgb(2, 8, 7))
             isFillViewport = true
-            addView(body)
+            isVerticalScrollBarEnabled = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            addView(
+                contentLayout,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
         }
-        rootLayout.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        root = rootLayout
-        lastLayoutKey = layoutKey(widthDp.toInt(), heightDp.toInt(), columns, buttonsInHeader)
-        attachLayoutObserver(onLayoutChange)
+        root = scroll
+
+        applyPhysicalMetrics()
+        applyWindowLayout(
+            widthPx = activity.resources.displayMetrics.widthPixels,
+            heightPx = activity.resources.displayMetrics.heightPixels
+        )
+        attachInsetsAndResizeHandling()
     }
 
     fun render(snapshot: DashboardSnapshot) {
@@ -272,26 +166,330 @@ internal class DashboardUi(
             icePowerValue.text = valueWithUnit(snapshot.icePowerKw, snapshot.icePowerFresh, "kW", 1)
         }
         if (last == null || snapshot.idleCheckVersion != last.idleCheckVersion) {
-            idleCheckValue.text = "怠速检查"
-            idleCheckValue.setTextColor(
-                if (snapshot.idleCheckActive) valueColor else idleIdleColor
-            )
+            val active = snapshot.idleCheckActive
+            idleCheckValue.visibility = if (active) View.VISIBLE else View.INVISIBLE
+            idleCheckValue.contentDescription = if (active) "Idle Check active" else null
         }
         lastSnapshot = snapshot
     }
 
     fun renderStatus(status: DashboardStatus) {
-        statusDeviceText.text = status.deviceName
+        statusDeviceText.setStatusText(status.deviceName)
         val reconnect = if (status.reconnectCount > 0) "·重连${status.reconnectCount}" else ""
+        val notice = status.notice?.let { "·$it" } ?: ""
         val error = status.error?.let { "·$it" } ?: ""
-        statusBleText.text = "蓝牙${connectionText(status.connection)}"
-        statusProtoText.text = "协议${modeText(status.mode)}"
-        statusDataText.text = "数据${loggingText(status.logging)}$reconnect$error"
-        val stateColor = if (status.warning) Color.rgb(255, 185, 80) else if (status.connection == "CONNECTED") Color.rgb(105, 240, 195) else Color.rgb(130, 160, 150)
+        statusBleText.setStatusText("蓝牙${connectionText(status.connection)}")
+        statusProtoText.setStatusText("协议${modeText(status.mode)}")
+        statusDataText.setStatusText("数据${loggingText(status.logging)}$reconnect$notice$error")
+        val stateColor = when {
+            status.warning -> Color.rgb(255, 185, 80)
+            status.connection == "CONNECTED" -> Color.rgb(105, 240, 195)
+            else -> Color.rgb(130, 160, 150)
+        }
         statusBleText.setTextColor(stateColor)
         statusProtoText.setTextColor(stateColor)
         statusDataText.setTextColor(stateColor)
-        connectButton.text = if (status.connection == "CONNECTED") "断开" else "连接"
+    }
+
+    fun setControlState(state: MonitorControlState) {
+        deviceButton.isEnabled = state.deviceEnabled
+        startButton.isEnabled = state.startEnabled
+        endButton.isEnabled = state.endEnabled
+    }
+
+    /** Existing views survive rotation, split-screen and freeform changes. */
+    fun onConfigurationChanged() {
+        val configuration = activity.resources.configuration
+        val metricsChanged =
+            configuration.densityDpi != lastDensityDpi || configuration.fontScale != lastFontScale
+        if (metricsChanged) {
+            lastDensityDpi = configuration.densityDpi
+            lastFontScale = configuration.fontScale
+            applyAutoSizeTargets()
+            applyPhysicalMetrics()
+            lastWindowToken = null
+            root.requestLayout()
+        }
+        ViewCompat.requestApplyInsets(root)
+    }
+
+    private fun buildTitleColumn(): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.START or Gravity.CENTER_VERTICAL
+        addView(styledText("RX400h", 1).apply {
+            setTextColor(valueColor)
+            autoSize(
+                ResponsiveLayout.TypographyBounds().headerTitleMinSp,
+                ResponsiveLayout.TypographyBounds().headerTitleMaxSp
+            )
+        })
+        addView(styledText("MONITOR", 1).apply {
+            setTextColor(Color.rgb(110, 235, 205))
+            autoSize(
+                ResponsiveLayout.TypographyBounds().headerSubtitleMinSp,
+                ResponsiveLayout.TypographyBounds().headerSubtitleMaxSp
+            )
+        })
+    }
+
+    private fun buildStatusColumn(): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        statusDeviceText = styledText("未选择设备", 2).apply {
+            gravity = Gravity.END
+            ellipsize = TextUtils.TruncateAt.END
+            setTextColor(Color.rgb(220, 235, 225))
+            autoSize(14, 18)
+        }
+        fun statusLine(): TextView = styledText("", 2).apply {
+            gravity = Gravity.END
+            ellipsize = TextUtils.TruncateAt.END
+            setTextColor(Color.rgb(130, 160, 150))
+            autoSize(
+                ResponsiveLayout.TypographyBounds().statusMinSp,
+                ResponsiveLayout.TypographyBounds().statusMaxSp
+            )
+        }
+        statusBleText = statusLine()
+        statusProtoText = statusLine()
+        statusDataText = statusLine().apply { maxLines = 3 }
+        addView(statusDeviceText)
+        addView(statusBleText)
+        addView(statusProtoText)
+        addView(statusDataText)
+    }
+
+    private fun buildDomainCards(): List<LinearLayout> {
+        val batteryCard = card("电池")
+        socValue = addMetric(batteryCard, "电量", "— %")
+        batteryAvgValue = addMetric(batteryCard, "高压电池平均温度", "— °C")
+        batteryDetailValue = addMetric(batteryCard, "最高 / 最低", "—°  —°", detail = true)
+
+        val vehicleCard = card("车辆状态")
+        speedValue = addMetric(vehicleCard, "速度", "— km/h")
+        coolantValue = addMetric(vehicleCard, "冷却液温度", "— °C")
+        voltageValue = addMetric(vehicleCard, "12V OBD", "— V")
+
+        val powerCard = card("动力")
+        icePowerValue = addMetric(powerCard, "引擎机械功率", "— kW")
+        rpmValue = addMetric(powerCard, "引擎转速", "— rpm")
+        idleCheckValue = valueText("IDLE CHECK", detail = true).apply {
+            setTextColor(valueColor)
+            visibility = View.INVISIBLE
+            maxLines = 2
+        }
+        powerCard.addView(
+            idleCheckValue,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+        hvPowerValue = addMetric(powerCard, "高压电池功率", "— kW")
+
+        return listOf(batteryCard, vehicleCard, powerCard)
+    }
+
+    private fun card(title: String): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_HORIZONTAL
+        val titleView = styledText(title, 2).apply {
+            gravity = Gravity.CENTER
+            setTextColor(titleColor)
+            autoSize(
+                ResponsiveLayout.TypographyBounds().cardTitleMinSp,
+                ResponsiveLayout.TypographyBounds().cardTitleMaxSp
+            )
+            ViewCompat.setAccessibilityHeading(this, true)
+        }
+        addView(
+            titleView,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+        cards.add(this)
+        cardTitles.add(titleView)
+    }
+
+    private fun addMetric(
+        card: LinearLayout,
+        label: String,
+        initialValue: String,
+        detail: Boolean = false
+    ): TextView {
+        val block = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+        }
+        val labelView = styledText(label, Int.MAX_VALUE).apply {
+            gravity = Gravity.CENTER
+            setTextColor(if (detail) dimColor else valueColor)
+            if (detail) {
+                autoSize(
+                    ResponsiveLayout.TypographyBounds().detailMinSp,
+                    ResponsiveLayout.TypographyBounds().detailMaxSp
+                )
+            } else {
+                autoSize(
+                    ResponsiveLayout.TypographyBounds().labelMinSp,
+                    ResponsiveLayout.TypographyBounds().labelMaxSp
+                )
+            }
+        }
+        val valueView = valueText(initialValue, detail)
+        block.addView(
+            labelView,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+        block.addView(
+            valueView,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+        card.addView(
+            block,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+        metricBlocks.add(block)
+        return valueView
+    }
+
+    private fun valueText(initial: String, detail: Boolean): TextView = styledText(initial, Int.MAX_VALUE).apply {
+        gravity = Gravity.CENTER
+        setTextColor(if (detail) dimColor else valueColor)
+        val bounds = ResponsiveLayout.TypographyBounds()
+        if (detail) autoSize(bounds.detailMinSp, bounds.detailMaxSp)
+        else autoSize(bounds.valueMinSp, bounds.valueMaxSp)
+    }
+
+    private fun styledText(initial: String, lines: Int): TextView = TextView(activity).apply {
+        text = initial
+        maxLines = lines
+        typeface = Typeface.MONOSPACE
+        includeFontPadding = true
+        setHorizontallyScrolling(false)
+    }
+
+    private fun controlButton(label: String, action: () -> Unit): Button = Button(activity).apply {
+        text = label
+        maxLines = 3
+        gravity = Gravity.CENTER
+        isAllCaps = false
+        setHorizontallyScrolling(false)
+        autoSize(
+            ResponsiveLayout.TypographyBounds().buttonMinSp,
+            ResponsiveLayout.TypographyBounds().buttonMaxSp
+        )
+        setOnClickListener { action() }
+    }
+
+    private fun TextView.autoSize(minSp: Int, maxSp: Int) {
+        val target = AutoSizeTarget(this, minSp, maxSp)
+        autoSizeTargets.add(target)
+        applyAutoSize(target)
+    }
+
+    private fun applyAutoSizeTargets() {
+        autoSizeTargets.forEach(::applyAutoSize)
+    }
+
+    private fun applyAutoSize(target: AutoSizeTarget) {
+        target.view.setAutoSizeTextTypeWithDefaults(TextView.AUTO_SIZE_TEXT_TYPE_NONE)
+        target.view.setAutoSizeTextTypeUniformWithConfiguration(
+            target.minSp,
+            target.maxSp,
+            1,
+            TypedValue.COMPLEX_UNIT_SP
+        )
+    }
+
+    private fun attachInsetsAndResizeHandling() {
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val safe = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            insetLeftPx = safe.left
+            insetTopPx = safe.top
+            insetRightPx = safe.right
+            insetBottomPx = safe.bottom
+            applyWindowLayout(root.width, root.height)
+            insets
+        }
+        root.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            val width = right - left
+            val height = bottom - top
+            if (width != oldRight - oldLeft || height != oldBottom - oldTop) {
+                applyWindowLayout(width, height)
+            }
+        }
+        root.post { ViewCompat.requestApplyInsets(root) }
+    }
+
+    private fun applyWindowLayout(widthPx: Int, heightPx: Int) {
+        if (widthPx <= 0 || heightPx <= 0) return
+        val density = activity.resources.displayMetrics.density.coerceAtLeast(0.1f)
+        val spacing = ResponsiveLayout.verticalSpacingUnits(
+            windowHeight = heightPx,
+            insetTop = insetTopPx,
+            insetBottom = insetBottomPx,
+            density = density
+        )
+        val token = WindowToken(
+            insetLeftPx = insetLeftPx,
+            insetTopPx = insetTopPx,
+            insetRightPx = insetRightPx,
+            insetBottomPx = insetBottomPx,
+            compactHeight = spacing.compactHeight
+        )
+        if (token == lastWindowToken) return
+        lastWindowToken = token
+
+        val horizontal = dp(ResponsiveLayout.OUTER_HORIZONTAL_DP)
+        val vertical = dp(spacing.outerVerticalDp)
+        root.setPadding(insetLeftPx, insetTopPx, insetRightPx, insetBottomPx)
+        contentLayout.setPadding(horizontal, vertical, horizontal, vertical)
+        val sectionGap = dp(spacing.sectionGapDp)
+        separatorView.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(1)
+        ).apply {
+            topMargin = sectionGap
+            bottomMargin = sectionGap
+        }
+        cardGrid.setPadding(0, 0, 0, sectionGap)
+        contentLayout.requestLayout()
+    }
+
+    private fun applyPhysicalMetrics() {
+        val cardPadding = dp(ResponsiveLayout.CARD_PADDING_DP)
+        cards.forEach { card ->
+            card.minimumHeight = dp(ResponsiveLayout.CARD_MIN_HEIGHT_DP)
+            card.setPadding(cardPadding, cardPadding, cardPadding, cardPadding)
+            card.background = GradientDrawable().apply {
+                setColor(Color.rgb(3, 14, 12))
+                setStroke(dp(1), Color.rgb(30, 205, 175))
+                cornerRadius = dp(8).toFloat()
+            }
+        }
+        cardTitles.forEach { it.setPadding(0, 0, 0, dp(8)) }
+        metricBlocks.forEach { it.setPadding(0, dp(3), 0, dp(3)) }
+        listOf(deviceButton, startButton, endButton).forEach { button ->
+            button.minHeight = dp(ResponsiveLayout.CONTROL_MIN_HEIGHT_DP)
+            button.minimumHeight = dp(ResponsiveLayout.CONTROL_MIN_HEIGHT_DP)
+            button.minWidth = dp(ResponsiveLayout.CONTROL_MIN_WIDTH_DP)
+            button.minimumWidth = dp(ResponsiveLayout.CONTROL_MIN_WIDTH_DP)
+            button.setPadding(dp(10), dp(8), dp(10), dp(8))
+        }
     }
 
     private fun connectionText(connection: String): String =
@@ -299,7 +497,12 @@ internal class DashboardUi(
 
     private fun modeText(mode: String): String = when (mode) {
         "LIVE" -> "实时"
-        "BUSY" -> "忙"
+        "PERMISSION" -> "等待授权"
+        "CONNECTING" -> "连接中"
+        "INITIALIZING" -> "初始化"
+        "STOPPING" -> "停止中"
+        "SAVING" -> "保存中"
+        "SAVE_FAILED" -> "保存失败"
         else -> "空闲"
     }
 
@@ -312,17 +515,6 @@ internal class DashboardUi(
         else -> "未记录"
     }
 
-    fun setControlsEnabled(enabled: Boolean, live: Boolean) {
-        deviceButton.isEnabled = enabled && !live
-        connectButton.isEnabled = enabled && !live
-        exportButton.isEnabled = enabled
-        liveButton.isEnabled = enabled || live
-    }
-
-    fun setLiveButton(live: Boolean) {
-        liveButton.text = if (live) "停止实时" else "开始实时"
-    }
-
     private fun valueWithUnit(v: Double?, fresh: Boolean, unit: String, digits: Int): String =
         "${value(v, fresh, digits)} $unit"
 
@@ -331,92 +523,25 @@ internal class DashboardUi(
         return if (fresh) text else "$text·"
     }
 
-    private fun card(title: String): LinearLayout = LinearLayout(activity).apply {
-        orientation = LinearLayout.VERTICAL
-        gravity = Gravity.CENTER_HORIZONTAL
-        setPadding(dp(12), dp(12), dp(12), dp(12))
-        background = GradientDrawable().apply {
-            setColor(Color.rgb(3, 14, 12))
-            setStroke(dp(1), Color.rgb(30, 205, 175))
-            cornerRadius = dp(8).toFloat()
-        }
-        addView(TextView(activity).apply {
-            text = title
-            textSize = 28f * fontScale
-            setTextColor(titleColor)
-            typeface = android.graphics.Typeface.MONOSPACE
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(8))
-        })
+    private fun TextView.setTextIfDifferent(value: String) {
+        if (text != value) text = value
     }
 
-    private fun domainText(initial: String, sizeSp: Float, color: Int): TextView = TextView(activity).apply {
-        text = initial
-        textSize = sizeSp
-        gravity = Gravity.CENTER
-        setTextColor(color)
-        typeface = android.graphics.Typeface.MONOSPACE
-        setPadding(0, dp(2), 0, dp(2))
+    private fun TextView.setStatusText(value: String) {
+        setTextIfDifferent(value)
+        if (contentDescription?.toString() != value) contentDescription = value
     }
 
-    private fun smallButton(label: String, action: () -> Unit, compact: Boolean): Button = Button(activity).apply {
-        text = label
-        textSize = (if (compact) 14f else 16f) * fontScale
-        val buttonHeight = dp(64)
-        minHeight = buttonHeight
-        minimumHeight = buttonHeight
-        val buttonWidth = dp(if (compact) 56 else 72)
-        minWidth = buttonWidth
-        minimumWidth = buttonWidth
-        setOnClickListener { action() }
-        val padX = dp(if (compact) 12 else 16)
-        val padY = dp(if (compact) 8 else 10)
-        setPadding(padX, padY, padX, padY)
-    }
-
-    private fun separator(): View = View(activity).apply {
-        setBackgroundColor(Color.rgb(20, 125, 115))
-        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply {
-            topMargin = dp(6)
-            bottomMargin = dp(6)
-        }
-    }
-
-    private fun LinearLayout.LayoutParams.margin(v: Int) = apply { setMargins(v, v, v, v) }
-    // V0.3.0 v7 (D-038): every layout metric scales with the same screen
-    // proportion as typography; the 1px floor keeps strokes/padding visible.
     private fun dp(value: Int): Int =
-        maxOf(1, (value * fontScale * activity.resources.displayMetrics.density).toInt())
+        (value * activity.resources.displayMetrics.density + 0.5f).toInt().coerceAtLeast(if (value > 0) 1 else 0)
 
-    /**
-     * Coarse layout bucket so continuous window resizes rebuild only when the
-     * structure actually changes (columns, header mode or font scale bucket),
-     * which prevents flicker and rebuild storms.
-     */
-    private fun layoutKey(widthDp: Int, heightDp: Int, columns: Int, buttonsInHeader: Boolean): Int {
-        val fontBucket = ((minOf(widthDp.toFloat(), heightDp.toFloat()) / 720f).coerceAtLeast(0.5f) * 20).toInt()
-        return columns * 1000 + (if (buttonsInHeader) 500 else 0) + fontBucket
-    }
+    private data class AutoSizeTarget(val view: TextView, val minSp: Int, val maxSp: Int)
 
-    /**
-     * Watches the real laid-out window size and triggers [onLayoutChange] when
-     * the layout bucket changes (split-screen / freeform / rotation).
-     */
-    private fun attachLayoutObserver(onLayoutChange: () -> Unit) {
-        root.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
-            override fun onGlobalLayout() {
-                if (root.width == 0 || root.height == 0) return
-                val density = activity.resources.displayMetrics.density
-                val widthDp = (root.width / density).toInt()
-                val heightDp = (root.height / density).toInt()
-                val columns = ResponsiveLayout.columnCount(widthDp)
-                val buttonsInHeader = widthDp >= 720
-                val key = layoutKey(widthDp, heightDp, columns, buttonsInHeader)
-                if (key != lastLayoutKey) {
-                    lastLayoutKey = key
-                    root.post { onLayoutChange() }
-                }
-            }
-        })
-    }
+    private data class WindowToken(
+        val insetLeftPx: Int,
+        val insetTopPx: Int,
+        val insetRightPx: Int,
+        val insetBottomPx: Int,
+        val compactHeight: Boolean
+    )
 }

@@ -18,22 +18,59 @@ class Elm327Client {
     private var socket: BluetoothSocket? = null
     private var input: BufferedInputStream? = null
     private var output: BufferedOutputStream? = null
+    private val connectionLock = Any()
     private val connected = AtomicBoolean(false)
     private var lastCommandFinishedAtMs = 0L
 
     @Throws(IOException::class, SecurityException::class)
-    fun connect(device: BluetoothDevice) {
+    fun connect(device: BluetoothDevice, shouldContinue: () -> Boolean = { true }) {
         close()
+        if (!shouldContinue()) throw IOException("OBD connection was cancelled")
         val s = device.createRfcommSocketToServiceRecord(SPP_UUID)
-        s.connect()
-        socket = s
-        input = BufferedInputStream(s.inputStream)
-        output = BufferedOutputStream(s.outputStream)
-        connected.set(true)
-        drainInput(400)
+        synchronized(connectionLock) {
+            socket = s
+            input = null
+            output = null
+            connected.set(false)
+        }
+        var openedInput: BufferedInputStream? = null
+        var openedOutput: BufferedOutputStream? = null
+        try {
+            if (!shouldContinue()) throw IOException("OBD connection was cancelled")
+            s.connect()
+            openedInput = BufferedInputStream(s.inputStream)
+            openedOutput = BufferedOutputStream(s.outputStream)
+            val accepted = synchronized(connectionLock) {
+                if (socket !== s || !shouldContinue()) {
+                    false
+                } else {
+                    input = openedInput
+                    output = openedOutput
+                    connected.set(true)
+                    true
+                }
+            }
+            if (!accepted) throw IOException("OBD connection was cancelled")
+            drainInput(400, openedInput ?: throw IOException("OBD input stream is unavailable"))
+        } catch (e: Exception) {
+            synchronized(connectionLock) {
+                if (socket === s) {
+                    socket = null
+                    input = null
+                    output = null
+                    connected.set(false)
+                }
+            }
+            runCatching { openedInput?.close() }
+            runCatching { openedOutput?.close() }
+            runCatching { s.close() }
+            throw e
+        }
     }
 
-    fun isConnected(): Boolean = connected.get() && socket?.isConnected == true
+    fun isConnected(): Boolean = synchronized(connectionLock) {
+        connected.get() && socket?.isConnected == true
+    }
 
     @Synchronized
     @Throws(IOException::class)
@@ -44,16 +81,22 @@ class Elm327Client {
         quietWindowMs: Long = 120,
         preDrainMs: Long = 80
     ): CommandResult {
-        check(isConnected()) { "OBD device is not connected" }
+        lateinit var activeInput: BufferedInputStream
+        lateinit var activeOutput: BufferedOutputStream
+        synchronized(connectionLock) {
+            check(connected.get() && socket?.isConnected == true) { "OBD device is not connected" }
+            activeInput = input ?: error("OBD input stream is unavailable")
+            activeOutput = output ?: error("OBD output stream is unavailable")
+        }
         val now = SystemClock.elapsedRealtime()
         val gap = now - lastCommandFinishedAtMs
         if (gap < minimumGapMs) Thread.sleep(minimumGapMs - gap)
-        if (preDrainMs > 0L) drainInput(preDrainMs)
+        if (preDrainMs > 0L) drainInput(preDrainMs, activeInput)
 
         val clean = command.trim().uppercase()
         val startNs = System.nanoTime()
-        output!!.write((clean + "\r").toByteArray(Charsets.US_ASCII))
-        output!!.flush()
+        activeOutput.write((clean + "\r").toByteArray(Charsets.US_ASCII))
+        activeOutput.flush()
 
         val response = StringBuilder()
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
@@ -62,8 +105,8 @@ class Elm327Client {
         var promptMs: Long? = null
 
         while (SystemClock.elapsedRealtime() < deadline) {
-            if (input!!.available() > 0) {
-                val v = input!!.read()
+            if (activeInput.available() > 0) {
+                val v = activeInput.read()
                 if (v < 0) break
                 if (firstByteMs == null) firstByteMs = (System.nanoTime() - startNs) / 1_000_000
                 val ch = v.toChar()
@@ -81,8 +124,8 @@ class Elm327Client {
         if (promptSeen && quietWindowMs > 0) {
             val quietEnd = SystemClock.elapsedRealtime() + quietWindowMs
             while (SystemClock.elapsedRealtime() < quietEnd) {
-                if (input!!.available() > 0) {
-                    val v = input!!.read()
+                if (activeInput.available() > 0) {
+                    val v = activeInput.read()
                     if (v >= 0 && v.toChar() != '>') response.append(v.toChar())
                 } else {
                     Thread.sleep(8)
@@ -150,16 +193,24 @@ class Elm327Client {
         else -> TransactionStatus.UNKNOWN
     }
 
-    fun initialize(): List<CommandResult> = listOf(
-        command("ATZ", 10_000, 500),
-        command("ATE0", 3000, 300),
-        command("ATL0", 3000, 250),
-        command("ATS0", 3000, 250),
-        command("ATH1", 3000, 250),
-        command("ATCAF1", 3000, 250),
-        command("ATAT1", 3000, 250),
-        command("ATAL", 3000, 250)
-    )
+    fun initialize(shouldContinue: () -> Boolean = { true }): List<CommandResult> {
+        val commands = listOf(
+            InitCommand("ATZ", 10_000, 500),
+            InitCommand("ATE0", 3000, 300),
+            InitCommand("ATL0", 3000, 250),
+            InitCommand("ATS0", 3000, 250),
+            InitCommand("ATH1", 3000, 250),
+            InitCommand("ATCAF1", 3000, 250),
+            InitCommand("ATAT1", 3000, 250),
+            InitCommand("ATAL", 3000, 250)
+        )
+        val results = ArrayList<CommandResult>(commands.size)
+        for (spec in commands) {
+            if (!shouldContinue()) break
+            results += command(spec.command, spec.timeoutMs, spec.minimumGapMs)
+        }
+        return results
+    }
 
     private fun requestService(command: String): Int? {
         if (command.startsWith("AT")) return null
@@ -187,11 +238,11 @@ class Elm327Client {
         }
     }
 
-    private fun drainInput(durationMs: Long) {
+    private fun drainInput(durationMs: Long, source: BufferedInputStream) {
         val end = SystemClock.elapsedRealtime() + durationMs
         while (SystemClock.elapsedRealtime() < end) {
             try {
-                if ((input?.available() ?: 0) > 0) input?.read() else Thread.sleep(5)
+                if (source.available() > 0) source.read() else Thread.sleep(5)
             } catch (_: Exception) {
                 break
             }
@@ -199,12 +250,22 @@ class Elm327Client {
     }
 
     fun close() {
-        connected.set(false)
-        try { input?.close() } catch (_: Exception) {}
-        try { output?.close() } catch (_: Exception) {}
-        try { socket?.close() } catch (_: Exception) {}
-        input = null
-        output = null
-        socket = null
+        val detached = synchronized(connectionLock) {
+            connected.set(false)
+            val handles = Triple(socket, input, output)
+            socket = null
+            input = null
+            output = null
+            handles
+        }
+        try { detached.first?.close() } catch (_: Exception) {}
+        try { detached.second?.close() } catch (_: Exception) {}
+        try { detached.third?.close() } catch (_: Exception) {}
     }
+
+    private data class InitCommand(
+        val command: String,
+        val timeoutMs: Long,
+        val minimumGapMs: Long
+    )
 }

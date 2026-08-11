@@ -75,6 +75,14 @@ internal class DeadlineScheduler(
         for (i in specs.indices) nextDueAt[i] = timeMs
     }
 
+    /** Starts a new evidence run with fresh counters and all requests due. */
+    fun startRun(timeMs: Long) {
+        executions = 0
+        deadlineMisses = 0
+        skippedOverdue = 0
+        reset(timeMs)
+    }
+
     private fun headerGroupRank(header: String?): Int = when (header) {
         "7E0" -> 0
         "7E2" -> 1

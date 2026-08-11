@@ -206,4 +206,6 @@ local git
 
 下一大版本：**V0.3.0 High-Performance Scheduler / Refresh Frontier**。
 
-V0.2.0 已由用户授权开始；按 `DEVELOPMENT_PROTOCOL.md` 的 docs-first 顺序执行，不得在文档/基线更新前改源码。
+V0.3.0 已由用户授权并在分支 `v0.3.0` 开始；按 `DEVELOPMENT_PROTOCOL.md` 的 docs-first 顺序执行，不得在文档/基线更新前改源码。V0.2.0 已关闭，不得把历史“开始 V0.2.0”提示当作当前任务。
+
+当前可安装 App 候选已由用户授权推进为 **V0.3.1 / versionCode 23**，但它仍属于未关闭的 V0.3.0 Scheduler / Refresh Frontier 工程里程碑（D-042）。当前工作合同是 D-041 响应式 UI + D-043 三按钮 session ownership + D-044 可恢复日志；协议白名单、decoder 与 scheduler profile 不变。本地源码/test/lint/build/signature 已通过，API 26（Android 8.0）模拟器 clean-install、冷启动、三按钮、设备页、旋转与响应式布局 smoke 已通过；exact-commit CI、API 27 以及带真实 OBD 的连接/公开保存/异常恢复 smoke 尚未完成，只能称 local candidate，不得称为已验证 baseline。

@@ -25,7 +25,8 @@
 - project memory lives in Git docs, not chat;
 - V0.1.9 = VOID;
 - current baseline = V0.2.0 Reactive Core (closed 2026-08-09; historical validated baseline = V0.1.10);
-- next milestone = V0.3.0 High-Performance Scheduler;
+- active engineering milestone = V0.3.0 High-Performance Scheduler / Refresh Frontier;
+- current local installable candidate = V0.3.1 / versionCode 23 (API 26 clean-install/UI smoke passed; exact-commit CI, API 27 and real-OBD save/recovery smoke pending);
 - protocol is whitelist/evidence-driven;
 - Lean Core + high useful refresh are first-class objectives;
 - no expensive dedicated long-trip release gate;

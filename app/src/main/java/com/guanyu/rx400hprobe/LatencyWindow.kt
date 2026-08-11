@@ -25,4 +25,9 @@ internal class LatencyWindow(private val capacity: Int = 64) {
     }
 
     fun size(): Int = size
+
+    fun clear() {
+        head = 0
+        size = 0
+    }
 }

@@ -44,6 +44,7 @@ Gradle: 8.9
 Android compile/target SDK: 35（除非后续版本文档明确修改）
 Build task: :app:assembleDebug
 Unit tests: :app:testDebugUnitTest (before assembleDebug)
+Static analysis: :app:lintDebug
 APK verification: apksigner verify
 ```
 
@@ -112,6 +113,7 @@ Keystore file historical SHA-256:
 ```text
 Gradle build PASS
 :app:testDebugUnitTest PASS
+:app:lintDebug PASS
 :app:assembleDebug PASS
 APK exists
 apksigner verify PASS
@@ -141,6 +143,16 @@ V0.3.0 开发分支候选：
 ```text
 RX400hProtocolProbe-v0.3.0-bottom-align-debug-signed
 ```
+
+当前 V0.3.1 三按钮/可恢复日志候选：
+
+```text
+RX400hProtocolProbe-v0.3.1-resilient-logs-debug-signed
+```
+
+V0.3.1 是仍处于 V0.3.0 Scheduler / Refresh Frontier 工程里程碑内的 App 版本；Artifact、Gradle `versionName/versionCode` 与 session build provenance 必须指向同一 exact commit。
+
+Gradle 的 Git provenance 采集必须 fail closed：Git 不可执行、命令失败或 commit ID 非 40 位十六进制时，构建直接失败。GitHub Actions 还必须在上传前检查生成的 `BuildConfig`：`GIT_COMMIT == GITHUB_SHA` 且 `GIT_DIRTY == false`。
 
 版本进入正式 Monitor 阶段后可以调整命名，但必须保持“从 Artifact 名就能识别 app version / candidate”的原则。
 
@@ -274,14 +286,18 @@ BASELINE_MANIFEST.sha256
 cd ~/rx400h-Monitor
 
 sha256sum \
+  AGENTS.md \
   BASELINE_README.md \
-  PROJECT_STATE.md \
   CHANGELOG.md \
+  CODEX_HANDOFF.md \
   DECISIONS.md \
-  ROADMAP.md \
   DEVELOPMENT_PROTOCOL.md \
   EVIDENCE_INDEX.md \
+  FULL_PROJECT_CONTEXT.md \
   GITHUB_BUILD_AND_BASELINE_WORKFLOW.md \
+  PROJECT_STATE.md \
+  REPO_ACCESS_AND_AUTH.md \
+  ROADMAP.md \
   > BASELINE_MANIFEST.sha256
 ```
 

@@ -24,7 +24,11 @@ class SignalStore(
             signal.version++
             signal.status = SignalStatus.VALID
         } else {
-            signal.status = resultToSignalStatus(result)
+            val newStatus = resultToSignalStatus(result)
+            if (signal.status != newStatus) {
+                signal.status = newStatus
+                signal.version++
+            }
         }
     }
 
@@ -71,6 +75,33 @@ class SignalStore(
         ).forEach { markStale(it, now, 5000L) }
         listOf(hybrid.batteryTempsC, hybrid.batteryTempMinC, hybrid.batteryTempMaxC, hybrid.batteryTempAvgC)
             .forEach { markStale(it, now, 12_000L) }
+    }
+
+    fun clear() {
+        clearSignal(baseline.rpm)
+        clearSignal(baseline.speedKph)
+        clearSignal(baseline.coolantC)
+        clearSignal(baseline.adapterVoltageV)
+        clearSignal(hybrid.socPct)
+        clearSignal(hybrid.hvVoltageV)
+        clearSignal(hybrid.hvCurrentA)
+        clearSignal(hybrid.hvPowerKw)
+        clearSignal(hybrid.batteryTempsC)
+        clearSignal(hybrid.batteryTempMinC)
+        clearSignal(hybrid.batteryTempMaxC)
+        clearSignal(hybrid.batteryTempAvgC)
+        clearSignal(hybrid.iceTorqueNm)
+        clearSignal(hybrid.warmupActive)
+        clearSignal(hybrid.idleCheckActive)
+    }
+
+    private fun <T> clearSignal(signal: SignalValue<T>) {
+        signal.value = null
+        signal.status = SignalStatus.IDLE
+        signal.source = null
+        signal.updatedAtElapsedMs = null
+        signal.sourceTimestampElapsedMs = null
+        signal.version = 0L
     }
 
     companion object {

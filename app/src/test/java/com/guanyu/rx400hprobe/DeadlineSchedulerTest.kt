@@ -70,6 +70,24 @@ class DeadlineSchedulerTest {
     }
 
     @Test
+    fun startRunClearsEvidenceCountersAndMakesAllRequestsDue() {
+        val s = DeadlineScheduler(listOf(specs[0]), nowMs = 0L)
+        val out = IntArray(1)
+        s.markExecuted(0, 0L)
+        assertEquals(0, s.dueRequests(2000L, out))
+        assertEquals(1L, s.executions)
+        assertEquals(1L, s.deadlineMisses)
+        assertEquals(1L, s.skippedOverdue)
+
+        s.startRun(3000L)
+
+        assertEquals(0L, s.executions)
+        assertEquals(0L, s.deadlineMisses)
+        assertEquals(0L, s.skippedOverdue)
+        assertEquals(1, s.dueRequests(3000L, out))
+    }
+
+    @Test
     fun latencyWindowPercentiles() {
         val w = LatencyWindow(4)
         w.add(10); w.add(20); w.add(30); w.add(40)
@@ -77,5 +95,7 @@ class DeadlineSchedulerTest {
         assertEquals(20L, w.percentile(0.5))
         assertEquals(40L, w.percentile(1.0))
         assertEquals(0L, LatencyWindow(4).percentile(0.5))
+        w.clear()
+        assertEquals(0L, w.percentile(0.5))
     }
 }
