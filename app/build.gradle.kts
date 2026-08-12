@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-val appVersionName = "0.3.1"
+val appVersionName = "0.3.2"
 
 val gitExecutable = providers.environmentVariable("RX400H_GIT_EXECUTABLE")
     .orElse("git")
@@ -39,7 +39,7 @@ android {
         applicationId = "com.guanyu.rx400hprobe"
         minSdk = 26
         targetSdk = 35
-        versionCode = 23
+        versionCode = 24
         versionName = appVersionName
         buildConfigField("String", "APP_VERSION_NAME", "\"$appVersionName\"")
         buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")

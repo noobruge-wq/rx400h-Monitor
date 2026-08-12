@@ -144,13 +144,13 @@ V0.3.0 开发分支候选：
 RX400hProtocolProbe-v0.3.0-bottom-align-debug-signed
 ```
 
-当前 V0.3.1 三按钮/可恢复日志候选：
+当前 V0.3.2 capacity-aware scheduler 候选：
 
 ```text
-RX400hProtocolProbe-v0.3.1-resilient-logs-debug-signed
+RX400hProtocolProbe-v0.3.2-capacity-scheduler-debug-signed
 ```
 
-V0.3.1 是仍处于 V0.3.0 Scheduler / Refresh Frontier 工程里程碑内的 App 版本；Artifact、Gradle `versionName/versionCode` 与 session build provenance 必须指向同一 exact commit。
+V0.3.2 是仍处于 V0.3.0 Scheduler / Refresh Frontier 工程里程碑内的 App 版本；Artifact、Gradle `versionName/versionCode` 与 session build provenance 必须指向同一 exact commit。`UNKNOWN`/`OVERLOADED` admission 不得解锁 rate ladder。
 
 Gradle 的 Git provenance 采集必须 fail closed：Git 不可执行、命令失败或 commit ID 非 40 位十六进制时，构建直接失败。GitHub Actions 还必须在上传前检查生成的 `BuildConfig`：`GIT_COMMIT == GITHUB_SHA` 且 `GIT_DIRTY == false`。
 

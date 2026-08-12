@@ -46,7 +46,8 @@ class MainActivity : Activity() {
     private val pendingPermissionStart = AtomicBoolean(false)
     private val destroying = AtomicBoolean(false)
     private val scheduler = DeadlineScheduler(
-        RequestTable.requests.map { ScheduledSpec(it.id, it.header, it.targetPeriodMs, it.priority) }
+        RequestTable.schedulerSpecs,
+        RequestTable.diagnosticCostModel
     )
     private val latencyWindow = LatencyWindow(64)
     private val signalUpdateCounter = AtomicLong()
@@ -410,7 +411,6 @@ class MainActivity : Activity() {
             idleCheckState.reset()
             lastIdleCheckLogged = null
         }
-        scheduler.startRun(SystemClock.elapsedRealtime())
         latencyWindow.clear()
         signalUpdateCounter.set(0L)
         noDataCount.set(0L)
@@ -473,42 +473,254 @@ class MainActivity : Activity() {
     }
 
     private fun runLiveScheduler(sessionAddress: String, sessionName: String) {
-        logger.logConnection("LIVE_MODE_START scheduler=${ProbeLogger.SCHEDULER_PROFILE}")
-        scheduler.startRun(SystemClock.elapsedRealtime())
+        val admission = CapacityAdmission.assess(
+            RequestTable.schedulerSpecs,
+            RequestTable.diagnosticCostModel
+        )
+        val runMode = if (admission.state == AdmissionState.ADMITTED) {
+            SchedulerRunMode.NORMAL
+        } else {
+            SchedulerRunMode.DIAGNOSTIC_BEST_EFFORT
+        }
+        val liveEpochMs = SystemClock.elapsedRealtime()
+        scheduler.startRun(liveEpochMs, admission, runMode)
+        logger.setSchedulerRunMetadata(
+            admissionState = admission.state.name,
+            runMode = runMode.name,
+            costModelId = admission.modelId,
+            costSource = admission.sourceEvidenceId,
+            requestUtilization = admission.requestUtilization,
+            projectedUtilization = admission.projectedUtilization,
+            projectedMisses = admission.projectedDeadlineMisses,
+            projectedCapacityRejections = admission.projectedCapacityRejections
+        )
+        logger.logSchedulerEvent(
+            eventType = "ADMISSION",
+            outcome = admission.state.name,
+            reason = admission.reason,
+            admissionState = admission.state.name
+        )
+        logger.forceCheckpoint("SCHEDULER_ADMISSION")
+        logger.logConnection(
+            "LIVE_MODE_START scheduler=${ProbeLogger.SCHEDULER_PROFILE} " +
+                "admission=${admission.state} mode=$runMode model=${admission.modelId}"
+        )
         latencyWindow.clear()
         performanceTracker.reset()
         var nextFrameLog = 0L
-        var lastMetricSampleMs = SystemClock.elapsedRealtime()
+        var lastMetricSampleMs = liveEpochMs
         var lastExecutions = 0L
         var lastSignalUpdates = 0L
-        val due = IntArray(RequestTable.requests.size)
 
         while (liveMode.get() && !stopRequested.get()) {
             if (!elm.isConnected()) {
+                val downAtMs = SystemClock.elapsedRealtime()
+                scheduler.transportDown(downAtMs)
+                logger.logSchedulerEvent(
+                    eventType = "TRANSPORT_DOWN",
+                    completedAtMs = downAtMs,
+                    outcome = SchedulerOutcome.TRANSPORT_UNAVAILABLE.name,
+                    reason = SchedulerTerminalReason.TRANSPORT_DOWN.name
+                )
+                drainSchedulerTerminalEvents()
                 if (!attemptReconnect(sessionAddress, sessionName)) break
-                scheduler.reset(SystemClock.elapsedRealtime())
+                val upAtMs = SystemClock.elapsedRealtime()
+                currentHeader = null
+                scheduler.transportUp(upAtMs)
+                logger.logSchedulerEvent(eventType = "TRANSPORT_UP", completedAtMs = upAtMs)
+                drainSchedulerTerminalEvents()
                 nextFrameLog = 0L
             }
             val cycleStart = SystemClock.elapsedRealtime()
+            var sleepUntilMs: Long? = null
+            var successfulPoll = false
             try {
                 synchronized(signalLock) { store.refreshStaleStates(SystemClock.elapsedRealtime()) }
                 val now = SystemClock.elapsedRealtime()
-                val dueCount = scheduler.dueRequests(now, due)
-                for (i in 0 until dueCount) {
-                    requireContinue()
-                    val request = RequestTable.requests[due[i]]
-                    val requestStart = SystemClock.elapsedRealtime()
-                    val result = executeScheduled(request)
-                    latencyWindow.add(SystemClock.elapsedRealtime() - requestStart)
-                    when (result.status) {
-                        TransactionStatus.NO_DATA -> noDataCount.incrementAndGet()
-                        TransactionStatus.TIMEOUT -> timeoutCount.incrementAndGet()
-                        TransactionStatus.BUS_ERROR -> busErrorCount.incrementAndGet()
-                        else -> Unit
+                when (val decision = scheduler.next(now, currentHeader)) {
+                    is SchedulerDecision.TerminalBatch -> logSchedulerTerminal(decision)
+                    is SchedulerDecision.SleepUntil -> sleepUntilMs = decision.timeMs
+                    is SchedulerDecision.ChangeHeader -> {
+                        requireContinue()
+                        val request = RequestTable.requests[decision.specIndex]
+                        logger.logSchedulerEvent(
+                            eventType = "HEADER_DISPATCH",
+                            requestId = request.id,
+                            requestHeader = request.header,
+                            releaseSequence = decision.job.token.sequence,
+                            releaseCount = 1L,
+                            releaseAtMs = decision.job.releaseAtMs,
+                            deadlineAtMs = decision.job.deadlineAtMs,
+                            dispatchAtMs = decision.dispatchAtMs,
+                            predictedSetupMs = decision.predictedSetupMs,
+                            fromHeader = decision.fromHeader,
+                            toHeader = decision.toHeader
+                        )
+                        val setupStart = SystemClock.elapsedRealtime()
+                        try {
+                            ensureHeader(decision.toHeader)
+                            val completedAtMs = SystemClock.elapsedRealtime()
+                            val actualSetupMs = completedAtMs - setupStart
+                            scheduler.completeHeader(decision.token, completedAtMs, actualSetupMs)
+                            logger.logSchedulerEvent(
+                                eventType = "HEADER_COMPLETION",
+                                requestId = request.id,
+                                requestHeader = request.header,
+                                releaseSequence = decision.job.token.sequence,
+                                releaseCount = 1L,
+                                outcome = "COMPLETED",
+                                releaseAtMs = decision.job.releaseAtMs,
+                                deadlineAtMs = decision.job.deadlineAtMs,
+                                dispatchAtMs = decision.dispatchAtMs,
+                                completedAtMs = completedAtMs,
+                                predictedSetupMs = decision.predictedSetupMs,
+                                actualSetupMs = actualSetupMs,
+                                fromHeader = decision.fromHeader,
+                                toHeader = decision.toHeader
+                            )
+                        } catch (failure: Exception) {
+                            val failedAtMs = SystemClock.elapsedRealtime()
+                            val actualSetupMs = failedAtMs - setupStart
+                            scheduler.failHeader(decision.token, failedAtMs, actualSetupMs)
+                            currentHeader = null
+                            logger.logSchedulerEvent(
+                                eventType = "HEADER_FAILED",
+                                requestId = request.id,
+                                requestHeader = request.header,
+                                releaseSequence = decision.job.token.sequence,
+                                releaseCount = 1L,
+                                outcome = "FAILED_NON_TERMINAL",
+                                reason = failure::class.java.simpleName,
+                                releaseAtMs = decision.job.releaseAtMs,
+                                deadlineAtMs = decision.job.deadlineAtMs,
+                                dispatchAtMs = decision.dispatchAtMs,
+                                completedAtMs = failedAtMs,
+                                predictedSetupMs = decision.predictedSetupMs,
+                                actualSetupMs = actualSetupMs,
+                                fromHeader = decision.fromHeader,
+                                toHeader = decision.toHeader
+                            )
+                            throw failure
+                        }
                     }
-                    scheduler.markExecuted(due[i], SystemClock.elapsedRealtime())
-                    if (result.status == TransactionStatus.TIMEOUT || result.status == TransactionStatus.BUS_ERROR) {
-                        throw IOException("${request.header} ${request.command} ${result.status}")
+                    is SchedulerDecision.Dispatch -> {
+                        requireContinue()
+                        val request = RequestTable.requests[decision.specIndex]
+                        logger.logSchedulerEvent(
+                            eventType = "DISPATCH",
+                            requestId = request.id,
+                            requestHeader = request.header,
+                            releaseSequence = decision.job.token.sequence,
+                            releaseCount = 1L,
+                            releaseAtMs = decision.job.releaseAtMs,
+                            deadlineAtMs = decision.job.deadlineAtMs,
+                            dispatchAtMs = decision.dispatchAtMs,
+                            queueWaitMs = (decision.dispatchAtMs - decision.job.releaseAtMs).coerceAtLeast(0L),
+                            predictedSetupMs = decision.predictedSetupMs,
+                            predictedServiceMs = decision.predictedServiceMs,
+                            fromHeader = decision.fromHeader,
+                            toHeader = decision.toHeader
+                        )
+                        val actualSetupMs = 0L
+                        var actualServiceMs = 0L
+                        var schedulerCompleted = false
+                        try {
+                            val serviceStart = SystemClock.elapsedRealtime()
+                            val result = try {
+                                executeScheduledTransaction(request)
+                            } finally {
+                                actualServiceMs = SystemClock.elapsedRealtime() - serviceStart
+                            }
+                            var decodeFailure: Exception? = null
+                            if (
+                                result.status != TransactionStatus.TIMEOUT &&
+                                result.status != TransactionStatus.BUS_ERROR
+                            ) {
+                                try {
+                                    decodeScheduled(request, result)
+                                } catch (failure: Exception) {
+                                    decodeFailure = failure
+                                }
+                            }
+                            actualServiceMs = SystemClock.elapsedRealtime() - serviceStart
+                            if (result.status == TransactionStatus.TIMEOUT) {
+                                timeoutCount.incrementAndGet()
+                                val failedAtMs = SystemClock.elapsedRealtime()
+                                val terminal = scheduler.fail(
+                                    decision.job.token,
+                                    failedAtMs,
+                                    SchedulerOutcome.TRANSPORT_UNAVAILABLE,
+                                    SchedulerTerminalReason.TRANSPORT_DOWN
+                                )
+                                schedulerCompleted = true
+                                logSchedulerDispatchFailure(request, decision, terminal, actualServiceMs)
+                                throw IOException("${request.header} ${request.command} ${result.status}")
+                            }
+                            val completedAtMs = SystemClock.elapsedRealtime()
+                            val completion = scheduler.complete(
+                                decision.job.token,
+                                completedAtMs,
+                                actualSetupMs,
+                                actualServiceMs
+                            )
+                            schedulerCompleted = true
+                            latencyWindow.add(actualSetupMs + actualServiceMs)
+                            logSchedulerCompletion(request, completion)
+                            decodeFailure?.let { failure ->
+                                lastError = "DECODE ${request.id}: ${failure.message}"
+                                safeLogError("DECODE_PROCESSING_ERROR request=${request.id}", failure)
+                                logger.logSchedulerEvent(
+                                    eventType = "DECODE_FAILED",
+                                    requestId = request.id,
+                                    requestHeader = request.header,
+                                    releaseSequence = decision.job.token.sequence,
+                                    releaseCount = 1L,
+                                    outcome = "FAILED_NON_TERMINAL",
+                                    reason = failure::class.java.simpleName,
+                                    releaseAtMs = decision.job.releaseAtMs,
+                                    deadlineAtMs = decision.job.deadlineAtMs,
+                                    dispatchAtMs = decision.dispatchAtMs,
+                                    completedAtMs = completedAtMs
+                                )
+                            }
+                            when (result.status) {
+                                TransactionStatus.NO_DATA -> noDataCount.incrementAndGet()
+                                TransactionStatus.BUS_ERROR -> busErrorCount.incrementAndGet()
+                                else -> Unit
+                            }
+                            successfulPoll = result.status != TransactionStatus.TIMEOUT &&
+                                result.status != TransactionStatus.BUS_ERROR
+                            if (
+                                result.status == TransactionStatus.BUS_ERROR
+                            ) {
+                                throw IOException("${request.header} ${request.command} ${result.status}")
+                            }
+                        } catch (cancelled: SessionCancelledException) {
+                            if (!schedulerCompleted) {
+                                val failedAtMs = SystemClock.elapsedRealtime()
+                                val terminal = scheduler.fail(
+                                    decision.job.token,
+                                    failedAtMs,
+                                    SchedulerOutcome.SESSION_ENDED,
+                                    SchedulerTerminalReason.USER_OR_SESSION_END
+                                )
+                                logSchedulerDispatchFailure(request, decision, terminal, actualServiceMs)
+                            }
+                            throw cancelled
+                        } catch (failure: Exception) {
+                            if (!schedulerCompleted) {
+                                val failedAtMs = SystemClock.elapsedRealtime()
+                                val ending = stopRequested.get() || destroying.get() || !liveMode.get()
+                                val terminal = scheduler.fail(
+                                    decision.job.token,
+                                    failedAtMs,
+                                    if (ending) SchedulerOutcome.SESSION_ENDED else SchedulerOutcome.TRANSPORT_UNAVAILABLE,
+                                    if (ending) SchedulerTerminalReason.USER_OR_SESSION_END else SchedulerTerminalReason.TRANSPORT_DOWN
+                                )
+                                logSchedulerDispatchFailure(request, decision, terminal, actualServiceMs)
+                            }
+                            throw failure
+                        }
                     }
                 }
                 updateIdleCheckState()
@@ -519,7 +731,7 @@ class MainActivity : Activity() {
                     lastFrameLogMs = SystemClock.elapsedRealtime() - logStart
                     nextFrameLog = nowAfter + 1000L
                 }
-                consecutiveErrors = 0
+                if (successfulPoll) consecutiveErrors = 0
             } catch (_: SessionCancelledException) {
                 break
             } catch (e: Exception) {
@@ -536,6 +748,7 @@ class MainActivity : Activity() {
                 val deltaMs = (nowAfterCycle - lastMetricSampleMs).coerceAtLeast(1L)
                 val executions = scheduler.executions
                 val signalUpdates = signalUpdateCounter.get()
+                val schedulerSnapshot = scheduler.snapshot(nowAfterCycle)
                 val metrics = PerformanceTracker.SchedulerMetrics(
                     requestHz = (executions - lastExecutions) * 1000.0 / deltaMs,
                     signalUpdateHz = (signalUpdates - lastSignalUpdates) * 1000.0 / deltaMs,
@@ -546,7 +759,14 @@ class MainActivity : Activity() {
                     latencyP99Ms = latencyWindow.percentile(0.99),
                     noData = noDataCount.get(),
                     timeout = timeoutCount.get(),
-                    busError = busErrorCount.get()
+                    busError = busErrorCount.get(),
+                    expiredUnexecuted = scheduler.expiredUnexecuted,
+                    capacityRejections = scheduler.capacityRejections,
+                    transportUnavailable = scheduler.transportUnavailableCount,
+                    executedLate = scheduler.executedLate,
+                    pending = scheduler.pendingCount,
+                    headerSwitches = scheduler.headerSwitches,
+                    admissionState = admission.state.name
                 )
                 logger.logPerformance(
                     performanceTracker.sample(
@@ -557,26 +777,36 @@ class MainActivity : Activity() {
                         logger.takeTimingSample()
                     )
                 )
+                logSchedulerRequestStats(schedulerSnapshot)
                 lastMetricSampleMs = nowAfterCycle
                 lastExecutions = executions
                 lastSignalUpdates = signalUpdates
             }
-            val wakeMs = scheduler.nextWakeMs(SystemClock.elapsedRealtime())
-            sleepWhileRunning((wakeMs - SystemClock.elapsedRealtime()).coerceIn(5L, 250L))
+            sleepUntilMs?.let { wakeMs ->
+                val nowBeforeSleep = SystemClock.elapsedRealtime()
+                val sleepMs = if (wakeMs == Long.MAX_VALUE) {
+                    250L
+                } else {
+                    (wakeMs - nowBeforeSleep).coerceIn(1L, 250L)
+                }
+                sleepWhileRunning(sleepMs)
+            }
         }
+        scheduler.finishRun(SystemClock.elapsedRealtime())
+        drainSchedulerTerminalEvents()
+        logSchedulerRequestStats(scheduler.snapshot(SystemClock.elapsedRealtime()))
         logger.logConnection("LIVE_MODE_STOP")
     }
 
     private fun ensureHeader(header: String) {
         if (currentHeader == header) return
-        val result = elm.command("ATSH$header", 4000, 120, 80)
+        val result = elm.command("ATSH$header", 4000, 0, 0, 0)
         record(null, result)
         requireOk(result, "header $header")
         currentHeader = header
     }
 
-    private fun executeScheduled(request: ScheduledRequest): CommandResult {
-        request.header?.let { ensureHeader(it) }
+    private fun executeScheduledTransaction(request: ScheduledRequest): CommandResult {
         val result = elm.command(
             request.command,
             request.timeoutMs,
@@ -585,10 +815,127 @@ class MainActivity : Activity() {
             request.preDrainMs
         )
         record(request.header, result)
-        if (result.status != TransactionStatus.TIMEOUT && result.status != TransactionStatus.BUS_ERROR) {
-            decodeScheduled(request, result)
-        }
         return result
+    }
+
+    private fun logSchedulerCompletion(
+        request: ScheduledRequest,
+        completion: SchedulerCompletion
+    ) {
+        val dispatch = completion.dispatch
+        logger.logSchedulerEvent(
+            eventType = "COMPLETION",
+            requestId = request.id,
+            requestHeader = request.header,
+            releaseSequence = dispatch.job.token.sequence,
+            releaseCount = 1L,
+            outcome = completion.outcome.name,
+            reason = completion.reason.name,
+            releaseAtMs = dispatch.job.releaseAtMs,
+            deadlineAtMs = dispatch.job.deadlineAtMs,
+            dispatchAtMs = dispatch.dispatchAtMs,
+            completedAtMs = completion.completedAtMs,
+            queueWaitMs = completion.queueWaitMs,
+            latenessMs = completion.latenessMs,
+            predictedSetupMs = dispatch.predictedSetupMs,
+            predictedServiceMs = dispatch.predictedServiceMs,
+            actualSetupMs = completion.actualSetupMs,
+            actualServiceMs = completion.actualServiceMs,
+            fromHeader = dispatch.fromHeader,
+            toHeader = dispatch.toHeader
+        )
+    }
+
+    private fun logSchedulerDispatchFailure(
+        request: ScheduledRequest,
+        decision: SchedulerDecision.Dispatch,
+        terminal: SchedulerCompletion,
+        actualServiceMs: Long
+    ) {
+        logger.logSchedulerEvent(
+            eventType = "DISPATCH_FAILED",
+            requestId = request.id,
+            requestHeader = request.header,
+            releaseSequence = decision.job.token.sequence,
+            releaseCount = 1L,
+            outcome = terminal.outcome.name,
+            reason = terminal.reason.name,
+            releaseAtMs = decision.job.releaseAtMs,
+            deadlineAtMs = decision.job.deadlineAtMs,
+            dispatchAtMs = decision.dispatchAtMs,
+            completedAtMs = terminal.completedAtMs,
+            queueWaitMs = terminal.queueWaitMs,
+            latenessMs = terminal.latenessMs,
+            predictedSetupMs = decision.predictedSetupMs,
+            predictedServiceMs = decision.predictedServiceMs,
+            actualSetupMs = 0L,
+            actualServiceMs = actualServiceMs,
+            fromHeader = decision.fromHeader,
+            toHeader = currentHeader
+        )
+    }
+
+    private fun logSchedulerTerminal(terminal: SchedulerDecision.TerminalBatch) {
+        val request = RequestTable.requests[terminal.specIndex]
+        logger.logSchedulerEvent(
+            eventType = "TERMINAL_BATCH",
+            requestId = request.id,
+            requestHeader = request.header,
+            releaseSequence = terminal.firstSequence,
+            releaseCount = terminal.count,
+            outcome = terminal.outcome.name,
+            reason = terminal.reason.name,
+            releaseAtMs = terminal.firstReleaseAtMs,
+            deadlineAtMs = terminal.lastReleaseAtMs + request.deadlineMs,
+            completedAtMs = terminal.recordedAtMs,
+            latenessMs = (terminal.recordedAtMs - (terminal.lastReleaseAtMs + request.deadlineMs))
+                .coerceAtLeast(0L)
+        )
+    }
+
+    private fun drainSchedulerTerminalEvents() {
+        while (true) {
+            val terminal = scheduler.pollTerminal() ?: return
+            logSchedulerTerminal(terminal)
+        }
+    }
+
+    private fun logSchedulerRequestStats(snapshot: SchedulerSnapshot) {
+        snapshot.requests.forEach { request ->
+            logger.logSchedulerRequestStats(
+                elapsedMs = request.elapsedMs,
+                requestId = request.id,
+                header = request.header,
+                targetPeriodMs = request.periodMs,
+                released = request.released,
+                executedOnTime = request.executedOnTime,
+                executedLate = request.executedLate,
+                capacityRejected = request.capacityRejected,
+                expiredUnexecuted = request.expiredUnexecuted,
+                transportUnavailable = request.transportUnavailable,
+                sessionEnded = request.sessionEnded,
+                pending = request.pending,
+                inFlight = request.inFlight,
+                queueWaitP50Ms = request.queueWaitP50Ms,
+                queueWaitP95Ms = request.queueWaitP95Ms,
+                queueWaitMaxMs = request.queueWaitMaxMs,
+                setupP50Ms = request.setupP50Ms,
+                setupP95Ms = request.setupP95Ms,
+                setupMaxMs = request.setupMaxMs,
+                serviceP50Ms = request.serviceP50Ms,
+                serviceP95Ms = request.serviceP95Ms,
+                serviceMaxMs = request.serviceMaxMs,
+                intervalP50Ms = request.intervalP50Ms,
+                intervalP95Ms = request.intervalP95Ms,
+                intervalMaxMs = request.intervalMaxMs,
+                latenessP50Ms = request.latenessP50Ms,
+                latenessP95Ms = request.latenessP95Ms,
+                latenessMaxMs = request.latenessMaxMs,
+                headerSwitches = request.headerSwitches,
+                effectiveHz = request.effectiveHz,
+                admissionState = snapshot.admission.state.name
+            )
+        }
     }
 
     private fun decodeScheduled(request: ScheduledRequest, result: CommandResult) {

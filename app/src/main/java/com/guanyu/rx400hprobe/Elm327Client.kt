@@ -21,6 +21,7 @@ class Elm327Client {
     private val connectionLock = Any()
     private val connected = AtomicBoolean(false)
     private var lastCommandFinishedAtMs = 0L
+    private var promptBoundarySynchronized = false
 
     @Throws(IOException::class, SecurityException::class)
     fun connect(device: BluetoothDevice, shouldContinue: () -> Boolean = { true }) {
@@ -47,6 +48,8 @@ class Elm327Client {
                     input = openedInput
                     output = openedOutput
                     connected.set(true)
+                    promptBoundarySynchronized = false
+                    lastCommandFinishedAtMs = 0L
                     true
                 }
             }
@@ -90,13 +93,30 @@ class Elm327Client {
         }
         val now = SystemClock.elapsedRealtime()
         val gap = now - lastCommandFinishedAtMs
-        if (gap < minimumGapMs) Thread.sleep(minimumGapMs - gap)
-        if (preDrainMs > 0L) drainInput(preDrainMs, activeInput)
+        val gapWaitMs = (minimumGapMs - gap).coerceAtLeast(0L)
+        if (gapWaitMs > 0L) Thread.sleep(gapWaitMs)
+
+        // A normal runtime transaction is delimited by the ELM prompt. Never
+        // guess that a timed drain recovered a missing boundary: once a command
+        // was sent, prompt loss invalidates this socket and reconnect is required.
+        if (lastCommandFinishedAtMs > 0L && !promptBoundarySynchronized) {
+            throw IOException("ELM prompt boundary is unknown; reconnect required")
+        }
+        val effectivePreDrainMs = when {
+            preDrainMs > 0L -> preDrainMs
+            else -> 0L
+        }
+        if (effectivePreDrainMs > 0L) drainInput(effectivePreDrainMs, activeInput)
 
         val clean = command.trim().uppercase()
         val startNs = System.nanoTime()
-        activeOutput.write((clean + "\r").toByteArray(Charsets.US_ASCII))
-        activeOutput.flush()
+        try {
+            activeOutput.write((clean + "\r").toByteArray(Charsets.US_ASCII))
+            activeOutput.flush()
+        } catch (failure: Exception) {
+            invalidateBoundary()
+            throw failure
+        }
 
         val response = StringBuilder()
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
@@ -104,33 +124,38 @@ class Elm327Client {
         var firstByteMs: Long? = null
         var promptMs: Long? = null
 
-        while (SystemClock.elapsedRealtime() < deadline) {
-            if (activeInput.available() > 0) {
-                val v = activeInput.read()
-                if (v < 0) break
-                if (firstByteMs == null) firstByteMs = (System.nanoTime() - startNs) / 1_000_000
-                val ch = v.toChar()
-                if (ch == '>') {
-                    promptSeen = true
-                    promptMs = (System.nanoTime() - startNs) / 1_000_000
-                    break
-                }
-                response.append(ch)
-            } else {
-                Thread.sleep(10)
-            }
-        }
-
-        if (promptSeen && quietWindowMs > 0) {
-            val quietEnd = SystemClock.elapsedRealtime() + quietWindowMs
-            while (SystemClock.elapsedRealtime() < quietEnd) {
+        try {
+            while (SystemClock.elapsedRealtime() < deadline) {
                 if (activeInput.available() > 0) {
                     val v = activeInput.read()
-                    if (v >= 0 && v.toChar() != '>') response.append(v.toChar())
+                    if (v < 0) break
+                    if (firstByteMs == null) firstByteMs = (System.nanoTime() - startNs) / 1_000_000
+                    val ch = v.toChar()
+                    if (ch == '>') {
+                        promptSeen = true
+                        promptMs = (System.nanoTime() - startNs) / 1_000_000
+                        break
+                    }
+                    response.append(ch)
                 } else {
-                    Thread.sleep(8)
+                    Thread.sleep(10)
                 }
             }
+
+            if (promptSeen && quietWindowMs > 0) {
+                val quietEnd = SystemClock.elapsedRealtime() + quietWindowMs
+                while (SystemClock.elapsedRealtime() < quietEnd) {
+                    if (activeInput.available() > 0) {
+                        val v = activeInput.read()
+                        if (v >= 0 && v.toChar() != '>') response.append(v.toChar())
+                    } else {
+                        Thread.sleep(8)
+                    }
+                }
+            }
+        } catch (failure: Exception) {
+            invalidateBoundary()
+            throw failure
         }
 
         val latency = (System.nanoTime() - startNs) / 1_000_000
@@ -154,7 +179,9 @@ class Elm327Client {
         val positiveSeen = service != null && canPayloads.any { payload -> payload.firstOrNull() == positiveService(service) }
 
         val status = classify(clean, joined, normalizedHex, promptSeen, positiveSeen, negativeSeen, pendingSeen)
+        promptBoundarySynchronized = promptSeen
         lastCommandFinishedAtMs = SystemClock.elapsedRealtime()
+        if (!promptSeen) connected.set(false)
         return CommandResult(
             command = clean,
             rawLines = lines,
@@ -165,8 +192,10 @@ class Elm327Client {
             responsePendingSeen = pendingSeen,
             firstByteLatencyMs = firstByteMs,
             promptLatencyMs = promptMs,
+            minimumGapMs = minimumGapMs,
+            gapWaitMs = gapWaitMs,
             quietWindowMs = quietWindowMs,
-            preDrainMs = preDrainMs
+            preDrainMs = effectivePreDrainMs
         )
     }
 
@@ -179,10 +208,12 @@ class Elm327Client {
         negativeSeen: Boolean,
         pendingSeen: Boolean
     ): TransactionStatus = when {
+        // A payload without the final prompt is not a complete serial ELM
+        // transaction and must never authorize the next hot-path command.
+        !prompt -> TransactionStatus.TIMEOUT
         positiveSeen -> TransactionStatus.OK
         pendingSeen -> TransactionStatus.RESPONSE_PENDING
         negativeSeen -> TransactionStatus.NEGATIVE_RESPONSE
-        !prompt -> TransactionStatus.TIMEOUT
         joined.contains("CAN ERROR") || joined.contains("BUS ERROR") || joined.contains("BUFFER FULL") -> TransactionStatus.BUS_ERROR
         joined.contains("STOPPED") -> TransactionStatus.INTERRUPTED
         joined.contains("NO DATA") || joined.contains("UNABLE TO CONNECT") -> TransactionStatus.NO_DATA
@@ -243,10 +274,18 @@ class Elm327Client {
         while (SystemClock.elapsedRealtime() < end) {
             try {
                 if (source.available() > 0) source.read() else Thread.sleep(5)
-            } catch (_: Exception) {
-                break
+            } catch (interrupted: InterruptedException) {
+                Thread.currentThread().interrupt()
+                throw IOException("ELM input drain was interrupted", interrupted)
+            } catch (failure: IOException) {
+                throw failure
             }
         }
+    }
+
+    private fun invalidateBoundary() {
+        promptBoundarySynchronized = false
+        connected.set(false)
     }
 
     fun close() {
@@ -256,6 +295,8 @@ class Elm327Client {
             socket = null
             input = null
             output = null
+            promptBoundarySynchronized = false
+            lastCommandFinishedAtMs = 0L
             handles
         }
         try { detached.first?.close() } catch (_: Exception) {}

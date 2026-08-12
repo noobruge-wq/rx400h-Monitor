@@ -364,3 +364,11 @@ Codex 必须先证明它已经能回答：
 - Work 使用 `WORK_ROLE.md`：普通实施、本机操作、build/install/GUI/log 收集；复杂问题用 CODEX_ESCALATION_PACKET 升级。
 - Codex 使用 `AGENTS.md`：作为高级架构/疑难问题专家，采用最小充分读取与修改，完成核心修复后输出 WORK_FOLLOWUP 交回 Work。
 - 动态版本和 gate 只以 `PROJECT_STATE.md` 为准；角色卡不替代 current-state 文档。
+
+## 18. V0.3.2 调度器重建本地候选 — 2026-08-12
+
+- 用户依据 V0.3.0 E1 反馈授权重做调度器。D-046 取代 D-040：release 锚定 LIVE epoch，header 与数据请求每笔交易后重新规划，每个 release 只有一个守恒终态。
+- Git 中的 HA/HCI 是 clean-room 时序与请求链证据，不是可移植源码。实现保留严格串行 prompt 边界与 HA 的 7E0/7E2 分组事实；正常 scheduled hot path 不再把旧 `120/80/80 ms` 等待当协议常数。
+- 当前本地候选为 V0.3.2/v24，scheduler profile `v030_capacity_002`。七个请求、header、command、decoder 和 target periods 保持不变；成本种子不可信，因此 admission 为 `UNKNOWN`、运行模式为 diagnostic，rate ladder 继续封锁。
+- 最终本地 72 JVM tests 全通过，lint 0 errors / 9 warnings，assemble、manifest 与固定 v2 证书验证通过。APK SHA-256 `a8bc90fb35a2c0f8e1c41b517b9016ef42444f1102d15e2ab2518de7343bb347`；它是 base `e58d9f9` 上的 dirty build，不是 exact-commit artifact。
+- 本次没有 commit、push、安装或车辆动作。clean commit/CI、API 27、paired-OBD connection → LIVE → End/public-save/recovery smoke 与同 periods E1 全部仍待完成；这些完成前不得 promotion，也不得提高频率。

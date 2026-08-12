@@ -36,4 +36,19 @@ class RequestTableTest {
             assertTrue(request.targetPeriodMs > 0)
         }
     }
+
+    @Test
+    fun d046KeepsFrozenPeriodsAndUsesPromptDelimitedRuntimeTransactions() {
+        assertEquals(
+            listOf(800L, 1000L, 3000L, 800L, 1500L, 5000L, 3000L),
+            RequestTable.requests.map { it.targetPeriodMs }
+        )
+        RequestTable.requests.forEach { request ->
+            assertEquals(request.targetPeriodMs, request.deadlineMs)
+            assertTrue(request.phaseMs in 0L until request.targetPeriodMs)
+            assertEquals(0L, request.minimumGapMs)
+            assertEquals(0L, request.preDrainMs)
+            assertEquals(0L, request.quietWindowMs)
+        }
+    }
 }

@@ -208,12 +208,33 @@ GitHub Actions run: pending
 Local APK size: 2,503,690 bytes
 Local APK SHA-256: bd3b252e09f193f3754e8f7d0597ef72841ad8e964e431ba3fd85690d0ae14a3
 Signature: APK Signature Scheme v2; fixed certificate SHA-256 77ba84b1f4f737a5d61b910bf4386df167548b9c6ce689ed25e994c37b2bc192
-Unit tests: 53 passed / 0 failed / 0 skipped
+Unit tests: 62 passed / 0 failed / 0 skipped
 Lint: 0 errors / 9 non-blocking warnings
 Manifest identity: applicationId com.guanyu.rx400hprobe.debug; versionName 0.3.1-debug; versionCode 23; minSdk 26; targetSdk 35
 ```
 
 Role: local, dirty-worktree evidence for D-041 responsive UI plus D-043 three-button, single-owner session flow and D-044 durable checkpoints/interrupted-session recovery/public archive publication. 62 JVM tests and compile/lint/assemble/signature checks passed using JDK 17 and checksum-verified Gradle 8.9. Build provenance records base commit `f1f7b2d3ab3d70fec519fc0ba4745f2981ac93e9` and `git_dirty=true`. API 26 (Android 8.0) emulator installation, cold launch, three-control states, DevicePicker empty state, portrait/landscape reflow, scroll reachability and same-Activity rotation were exercised without fatal crash. The emulator had no paired Bluetooth OBD adapter, so it did not validate the real connect→LIVE path, legacy public-Downloads grant/deny, completed archive publication or forced-interruption recovery. Do not treat this hash as a remote baseline: exact-commit GitHub Actions, API 27 and paired-device save/recovery smoke are still pending.
+
+### V0.3.2 capacity-aware scheduler local candidate
+
+```text
+Branch: v0.3.0
+Base commit: e58d9f9dd60197882a3d41f5d78b304a52f663f7
+Working tree: dirty by this implementation; no commit/push
+App version: 0.3.2
+versionCode: 24
+Scheduler profile: v030_capacity_002
+Candidate artifact: RX400hProtocolProbe-v0.3.2-capacity-scheduler-debug-signed
+GitHub Actions run: pending
+Local APK size: 2,557,574 bytes
+Local APK SHA-256: a8bc90fb35a2c0f8e1c41b517b9016ef42444f1102d15e2ab2518de7343bb347
+Signature: APK Signature Scheme v2; certificate SHA-256 77ba84b1f4f737a5d61b910bf4386df167548b9c6ce689ed25e994c37b2bc192
+Unit tests: 72 passed / 0 failed / 0 errors / 0 skipped
+Lint: 0 errors / 9 non-blocking warnings
+Manifest identity: applicationId com.guanyu.rx400hprobe.debug; versionName 0.3.2-debug; versionCode 24; minSdk 26; targetSdk 35
+```
+
+Role: final local dirty-worktree verification evidence for D-046, recorded before GitHub publication. It covers epoch-anchored releases, one-transaction header/request replanning, conserved per-request terminal outcomes, transport-down accounting, fail-closed admission regressions, mutually exclusive legacy deadline/skip compatibility counters, streaming scheduler evidence and prompt-loss/I/O-failure reconnect enforcement. The seven requests, headers, commands, decoder and target periods are unchanged. The bundled cost model is deliberately untrusted, so admission remains `UNKNOWN` and rate-ladder acceleration stays blocked. This local APK is not an exact-commit artifact and was not installed or connected to a vehicle. Promotion still requires an exact-commit CI artifact, API 27, paired-OBD connection → LIVE → End/public-save/recovery smoke and a same-period E1 rerun.
 
 ---
 

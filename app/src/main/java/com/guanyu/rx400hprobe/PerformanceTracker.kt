@@ -31,7 +31,14 @@ class PerformanceTracker {
         val latencyP99Ms: Long,
         val noData: Long,
         val timeout: Long,
-        val busError: Long
+        val busError: Long,
+        val expiredUnexecuted: Long = 0L,
+        val capacityRejections: Long = 0L,
+        val transportUnavailable: Long = 0L,
+        val executedLate: Long = 0L,
+        val pending: Long = 0L,
+        val headerSwitches: Long = 0L,
+        val admissionState: String = "UNKNOWN"
     )
 
     data class Sample(
@@ -56,6 +63,13 @@ class PerformanceTracker {
         val noData: Long,
         val timeout: Long,
         val busError: Long,
+        val expiredUnexecuted: Long,
+        val capacityRejections: Long,
+        val transportUnavailable: Long,
+        val executedLate: Long,
+        val pending: Long,
+        val headerSwitches: Long,
+        val admissionState: String,
         val loggerWriteTotalMs: Long,
         val loggerCheckpointTotalMs: Long,
         val loggerSyncTotalMs: Long,
@@ -109,6 +123,13 @@ class PerformanceTracker {
             noData = scheduler.noData,
             timeout = scheduler.timeout,
             busError = scheduler.busError,
+            expiredUnexecuted = scheduler.expiredUnexecuted,
+            capacityRejections = scheduler.capacityRejections,
+            transportUnavailable = scheduler.transportUnavailable,
+            executedLate = scheduler.executedLate,
+            pending = scheduler.pending,
+            headerSwitches = scheduler.headerSwitches,
+            admissionState = scheduler.admissionState,
             loggerWriteTotalMs = logger.writeTotalMs,
             loggerCheckpointTotalMs = logger.checkpointTotalMs,
             loggerSyncTotalMs = logger.syncTotalMs,

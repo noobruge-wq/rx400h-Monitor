@@ -46,7 +46,7 @@ internal class ProbeLogger(private val context: Context) {
         /** Semantic app version; VERSION_NAME separately records the debug/release variant suffix. */
         val APP_VERSION: String = BuildConfig.APP_VERSION_NAME
         const val PROFILE_VERSION = "rx400h_ha_hci_20260805_002"
-        const val SCHEDULER_PROFILE = "v030_deadline_001"
+        const val SCHEDULER_PROFILE = "v030_capacity_002"
         private const val BULK_FLUSH_INTERVAL_MS = 2_000L
         private const val DURABLE_SYNC_INTERVAL_MS = 10_000L
         private const val DURABLE_RETRY_INTERVAL_MS = 1_000L
@@ -63,6 +63,10 @@ internal class ProbeLogger(private val context: Context) {
             "request_stats.csv",
             "session.json"
         )
+        private val CAPACITY_SCHEDULER_EVIDENCE_FILES = setOf(
+            "scheduler_events.jsonl",
+            "scheduler_request_stats.csv"
+        )
         private val RECORD_TIME_FILES = setOf(
             "connection.log",
             "decoded.jsonl",
@@ -70,7 +74,9 @@ internal class ProbeLogger(private val context: Context) {
             "events.csv",
             "frames.csv",
             "performance.csv",
-            "raw_io.jsonl"
+            "raw_io.jsonl",
+            "scheduler_events.jsonl",
+            "scheduler_request_stats.csv"
         )
 
         /**
@@ -96,6 +102,8 @@ internal class ProbeLogger(private val context: Context) {
     private var errorWriter: DurableWriter? = null
     private var decodedWriter: DurableWriter? = null
     private var performanceWriter: DurableWriter? = null
+    private var schedulerEventWriter: DurableWriter? = null
+    private var schedulerRequestStatsWriter: DurableWriter? = null
     private val checkpointExecutor = Executors.newSingleThreadScheduledExecutor { runnable ->
         Thread(runnable, "rx400h-log-checkpoint").apply { isDaemon = true }
     }
@@ -110,6 +118,8 @@ internal class ProbeLogger(private val context: Context) {
     private var transactionCount: Long = 0L
     private var frameCount: Long = 0L
     private var eventCount: Long = 0L
+    private var schedulerEventCount: Long = 0L
+    private var schedulerRequestStatsCount: Long = 0L
     private var errorCount: Long = 0L
     private var loggerErrorCount: Long = 0L
     private var apkSha256: String = "unavailable"
@@ -121,6 +131,14 @@ internal class ProbeLogger(private val context: Context) {
     private var checkpointLockWaitNs: Long = 0L
     private var ownsProcessSessionGate = false
     private val shutdownRequested = AtomicBoolean(false)
+    private var schedulerAdmissionState: String = "UNKNOWN"
+    private var schedulerRunMode: String = "NOT_STARTED"
+    private var schedulerCostModelId: String? = null
+    private var schedulerCostSource: String? = null
+    private var schedulerRequestUtilization: Double? = null
+    private var schedulerProjectedUtilization: Double? = null
+    private var schedulerProjectedMisses: Long? = null
+    private var schedulerProjectedCapacityRejections: Long? = null
 
     @Volatile
     private var loggerDegraded = false
@@ -205,6 +223,8 @@ internal class ProbeLogger(private val context: Context) {
         transactionCount = 0
         frameCount = 0
         eventCount = 0
+        schedulerEventCount = 0
+        schedulerRequestStatsCount = 0
         errorCount = 0
         loggerErrorCount = 0
         writeTimingNs = 0L
@@ -215,6 +235,14 @@ internal class ProbeLogger(private val context: Context) {
         loggerDegraded = false
         pendingErrors.clear()
         requestStats.clear()
+        schedulerAdmissionState = "UNKNOWN"
+        schedulerRunMode = "NOT_STARTED"
+        schedulerCostModelId = null
+        schedulerCostSource = null
+        schedulerRequestUtilization = null
+        schedulerProjectedUtilization = null
+        schedulerProjectedMisses = null
+        schedulerProjectedCapacityRejections = null
         apkSha256 = runCatching { sha256(File(context.applicationInfo.sourceDir)) }.getOrDefault("unavailable")
         signingCertificateSha256 = signingCertificateSha256()
         state = SessionState.ACTIVE
@@ -239,9 +267,23 @@ internal class ProbeLogger(private val context: Context) {
                 "timestamp_iso,elapsed_ms,pss_kb,java_heap_used_kb,java_heap_total_kb," +
                     "cpu_delta_ms,alloc_delta,freed_delta,cycle_ms,render_ms,frame_log_ms," +
                     "request_hz,signal_update_hz,deadline_misses,skipped_overdue," +
+                    "expired_unexecuted,capacity_rejections,transport_unavailable,executed_late,pending," +
+                    "header_switches,admission_state," +
                     "latency_p50_ms,latency_p95_ms,latency_p99_ms,no_data,timeout,bus_error," +
                     "logger_stream_write_total_ms,logger_checkpoint_total_ms,logger_sync_total_ms," +
                     "logger_checkpoint_max_ms,logger_checkpoint_lock_wait_ms\n"
+            )
+        }
+        schedulerEventWriter = writer(dir, "scheduler_events.jsonl")
+        schedulerRequestStatsWriter = writer(dir, "scheduler_request_stats.csv").also {
+            it.write(
+                "timestamp_iso,monotonic_ns,elapsed_ms,request_id,header,target_period_ms,released," +
+                    "executed_on_time,executed_late,capacity_rejected,expired_unexecuted," +
+                    "transport_unavailable,session_ended,pending,in_flight," +
+                    "queue_wait_p50_ms,queue_wait_p95_ms,queue_wait_max_ms," +
+                    "setup_p50_ms,setup_p95_ms,setup_max_ms,service_p50_ms,service_p95_ms,service_max_ms," +
+                    "interval_p50_ms,interval_p95_ms,interval_max_ms," +
+                    "lateness_p50_ms,lateness_p95_ms,lateness_max_ms,header_switches,effective_hz,admission_state\n"
             )
         }
 
@@ -296,6 +338,8 @@ internal class ProbeLogger(private val context: Context) {
             .put("latency_ms", result.latencyMs)
             .put("first_byte_latency_ms", result.firstByteLatencyMs ?: JSONObject.NULL)
             .put("prompt_latency_ms", result.promptLatencyMs ?: JSONObject.NULL)
+            .put("minimum_gap_ms", result.minimumGapMs)
+            .put("gap_wait_ms", result.gapWaitMs)
             .put("quiet_window_ms", result.quietWindowMs)
             .put("pre_drain_ms", result.preDrainMs)
             .put("prompt_seen", result.promptSeen)
@@ -415,6 +459,8 @@ internal class ProbeLogger(private val context: Context) {
                     "${sample.wallTimeIso},${sample.elapsedMs},${sample.pssKb},${sample.javaHeapUsedKb},${sample.javaHeapTotalKb}," +
                         "${sample.cpuDeltaMs},${sample.allocDelta},${sample.freedDelta},${sample.cycleMs},${sample.renderMs},${sample.frameLogMs}," +
                         "${sample.requestHz},${sample.signalUpdateHz},${sample.deadlineMisses},${sample.skippedOverdue}," +
+                        "${sample.expiredUnexecuted},${sample.capacityRejections},${sample.transportUnavailable}," +
+                        "${sample.executedLate},${sample.pending},${sample.headerSwitches},${csv(sample.admissionState)}," +
                         "${sample.latencyP50Ms},${sample.latencyP95Ms},${sample.latencyP99Ms},${sample.noData},${sample.timeout},${sample.busError}," +
                         "${sample.loggerWriteTotalMs},${sample.loggerCheckpointTotalMs},${sample.loggerSyncTotalMs}," +
                         "${sample.loggerCheckpointMaxMs},${sample.loggerCheckpointLockWaitMs}\n"
@@ -423,6 +469,171 @@ internal class ProbeLogger(private val context: Context) {
         }) {
             touchRecord()
         }
+    }
+
+    /**
+     * Writes one scheduler transition/release/outcome record. Callers should use named
+     * arguments: nullable timing/cost fields stay explicit JSON nulls instead of being guessed.
+     */
+    @Synchronized
+    fun logSchedulerEvent(
+        eventType: String,
+        requestId: String? = null,
+        requestHeader: String? = null,
+        releaseSequence: Long? = null,
+        releaseCount: Long? = null,
+        outcome: String? = null,
+        reason: String? = null,
+        releaseAtMs: Long? = null,
+        deadlineAtMs: Long? = null,
+        dispatchAtMs: Long? = null,
+        completedAtMs: Long? = null,
+        queueWaitMs: Long? = null,
+        latenessMs: Long? = null,
+        predictedSetupMs: Long? = null,
+        predictedServiceMs: Long? = null,
+        actualSetupMs: Long? = null,
+        actualServiceMs: Long? = null,
+        fromHeader: String? = null,
+        toHeader: String? = null,
+        admissionState: String? = null
+    ) {
+        if (!isWritable()) return
+        val eventSequence = schedulerEventCount + 1L
+        val obj = JSONObject()
+            .put("session_id", sessionId)
+            .put("event_sequence", eventSequence)
+            .put("monotonic_ns", SystemClock.elapsedRealtimeNanos())
+            .put("wall_time_iso", Instant.now().toString())
+            .put("event_type", eventType)
+            .put("request_id", requestId ?: JSONObject.NULL)
+            .put("request_header", requestHeader ?: JSONObject.NULL)
+            .put("release_sequence", releaseSequence ?: JSONObject.NULL)
+            .put("release_count", releaseCount ?: JSONObject.NULL)
+            .put("outcome", outcome ?: JSONObject.NULL)
+            .put("reason", reason ?: JSONObject.NULL)
+            .put("release_at_ms", releaseAtMs ?: JSONObject.NULL)
+            .put("deadline_at_ms", deadlineAtMs ?: JSONObject.NULL)
+            .put("dispatch_at_ms", dispatchAtMs ?: JSONObject.NULL)
+            .put("completed_at_ms", completedAtMs ?: JSONObject.NULL)
+            .put("queue_wait_ms", queueWaitMs ?: JSONObject.NULL)
+            .put("lateness_ms", latenessMs ?: JSONObject.NULL)
+            .put("predicted_setup_ms", predictedSetupMs ?: JSONObject.NULL)
+            .put("predicted_service_ms", predictedServiceMs ?: JSONObject.NULL)
+            .put("actual_setup_ms", actualSetupMs ?: JSONObject.NULL)
+            .put("actual_service_ms", actualServiceMs ?: JSONObject.NULL)
+            .put("from_header", fromHeader ?: JSONObject.NULL)
+            .put("to_header", toHeader ?: JSONObject.NULL)
+            .put("admission_state", admissionState ?: schedulerAdmissionState)
+        if (safeWrite("scheduler_events.jsonl") {
+                schedulerEventWriter?.apply { write(obj.toString()); newLine() }
+            }
+        ) {
+            schedulerEventCount = eventSequence
+            touchRecord()
+        }
+    }
+
+    /** Streams a bounded per-request scheduler snapshot; percentile fields may be unavailable. */
+    @Suppress("LongParameterList")
+    @Synchronized
+    fun logSchedulerRequestStats(
+        elapsedMs: Long,
+        requestId: String,
+        header: String?,
+        targetPeriodMs: Long,
+        released: Long,
+        executedOnTime: Long,
+        executedLate: Long,
+        capacityRejected: Long,
+        expiredUnexecuted: Long,
+        transportUnavailable: Long,
+        sessionEnded: Long,
+        pending: Long,
+        inFlight: Long,
+        queueWaitP50Ms: Long? = null,
+        queueWaitP95Ms: Long? = null,
+        queueWaitMaxMs: Long? = null,
+        setupP50Ms: Long? = null,
+        setupP95Ms: Long? = null,
+        setupMaxMs: Long? = null,
+        serviceP50Ms: Long? = null,
+        serviceP95Ms: Long? = null,
+        serviceMaxMs: Long? = null,
+        intervalP50Ms: Long? = null,
+        intervalP95Ms: Long? = null,
+        intervalMaxMs: Long? = null,
+        latenessP50Ms: Long? = null,
+        latenessP95Ms: Long? = null,
+        latenessMaxMs: Long? = null,
+        headerSwitches: Long,
+        effectiveHz: Double,
+        admissionState: String = schedulerAdmissionState
+    ) {
+        if (!isWritable()) return
+        val row = listOf(
+            csv(Instant.now().toString()),
+            SystemClock.elapsedRealtimeNanos().toString(),
+            elapsedMs.toString(),
+            csv(requestId),
+            header?.let(::csv).orEmpty(),
+            targetPeriodMs.toString(),
+            released.toString(),
+            executedOnTime.toString(),
+            executedLate.toString(),
+            capacityRejected.toString(),
+            expiredUnexecuted.toString(),
+            transportUnavailable.toString(),
+            sessionEnded.toString(),
+            pending.toString(),
+            inFlight.toString(),
+            csvNumber(queueWaitP50Ms),
+            csvNumber(queueWaitP95Ms),
+            csvNumber(queueWaitMaxMs),
+            csvNumber(setupP50Ms),
+            csvNumber(setupP95Ms),
+            csvNumber(setupMaxMs),
+            csvNumber(serviceP50Ms),
+            csvNumber(serviceP95Ms),
+            csvNumber(serviceMaxMs),
+            csvNumber(intervalP50Ms),
+            csvNumber(intervalP95Ms),
+            csvNumber(intervalMaxMs),
+            csvNumber(latenessP50Ms),
+            csvNumber(latenessP95Ms),
+            csvNumber(latenessMaxMs),
+            headerSwitches.toString(),
+            effectiveHz.toString(),
+            csv(admissionState)
+        ).joinToString(",", postfix = "\n")
+        if (safeWrite("scheduler_request_stats.csv") { schedulerRequestStatsWriter?.write(row) }) {
+            schedulerRequestStatsCount++
+            touchRecord()
+        }
+    }
+
+    /** Records the admission decision and cost provenance in session metadata. */
+    @Synchronized
+    fun setSchedulerRunMetadata(
+        admissionState: String,
+        runMode: String,
+        costModelId: String?,
+        costSource: String?,
+        requestUtilization: Double? = null,
+        projectedUtilization: Double? = null,
+        projectedMisses: Long? = null,
+        projectedCapacityRejections: Long? = null
+    ) {
+        if (!isWritable()) return
+        schedulerAdmissionState = admissionState
+        schedulerRunMode = runMode
+        schedulerCostModelId = costModelId
+        schedulerCostSource = costSource
+        schedulerRequestUtilization = requestUtilization
+        schedulerProjectedUtilization = projectedUtilization
+        schedulerProjectedMisses = projectedMisses
+        schedulerProjectedCapacityRejections = projectedCapacityRejections
+        touchRecord()
     }
 
     @Synchronized
@@ -503,6 +714,7 @@ internal class ProbeLogger(private val context: Context) {
 
         val evidenceComplete = kind == LogCompletionKind.COMPLETED &&
             !loggerDegraded &&
+            capacitySchedulerEvidencePresent(dir) &&
             currentSessionProvenanceComplete()
         val status = when (kind) {
             LogCompletionKind.COMPLETED -> "completed"
@@ -803,6 +1015,11 @@ internal class ProbeLogger(private val context: Context) {
             .put("transaction_count", countValidJsonLines(File(dir, "raw_io.jsonl")))
             .put("frame_count", countDataRows(File(dir, "frames.csv")))
             .put("event_count", countDataRows(File(dir, "events.csv")))
+            .put("scheduler_event_count", countValidJsonLines(File(dir, "scheduler_events.jsonl")))
+            .put(
+                "scheduler_request_stats_count",
+                countDataRows(File(dir, "scheduler_request_stats.csv"))
+            )
             .put("partial_tail_detected", partialTail)
             .put(
                 "runtime_error_count",
@@ -941,6 +1158,8 @@ internal class ProbeLogger(private val context: Context) {
         errorWriter = null
         decodedWriter = null
         performanceWriter = null
+        schedulerEventWriter = null
+        schedulerRequestStatsWriter = null
     }
 
     private fun allWriters(): List<DurableWriter> = listOfNotNull(
@@ -950,7 +1169,9 @@ internal class ProbeLogger(private val context: Context) {
         connectionWriter,
         errorWriter,
         decodedWriter,
-        performanceWriter
+        performanceWriter,
+        schedulerEventWriter,
+        schedulerRequestStatsWriter
     )
 
     private fun safeWrite(target: String, block: () -> Unit): Boolean {
@@ -1032,6 +1253,25 @@ internal class ProbeLogger(private val context: Context) {
             .put("transaction_count", transactionCount)
             .put("frame_count", frameCount)
             .put("event_count", eventCount)
+            .put("scheduler_event_count", schedulerEventCount)
+            .put("scheduler_request_stats_count", schedulerRequestStatsCount)
+            .put("scheduler_admission_state", schedulerAdmissionState)
+            .put("scheduler_run_mode", schedulerRunMode)
+            .put("scheduler_cost_model_id", schedulerCostModelId ?: JSONObject.NULL)
+            .put("scheduler_cost_source", schedulerCostSource ?: JSONObject.NULL)
+            .put(
+                "scheduler_request_utilization",
+                schedulerRequestUtilization ?: JSONObject.NULL
+            )
+            .put(
+                "scheduler_projected_utilization",
+                schedulerProjectedUtilization ?: JSONObject.NULL
+            )
+            .put("scheduler_projected_misses", schedulerProjectedMisses ?: JSONObject.NULL)
+            .put(
+                "scheduler_projected_capacity_rejections",
+                schedulerProjectedCapacityRejections ?: JSONObject.NULL
+            )
             .put("runtime_error_count", errorCount)
             .put("logger_error_count", loggerErrorCount)
             .put("error_count", errorCount + loggerErrorCount)
@@ -1087,6 +1327,39 @@ internal class ProbeLogger(private val context: Context) {
                 .put(
                     "scheduler_profile",
                     jsonStringOrNull(sessionMetadata, "scheduler_profile") ?: JSONObject.NULL
+                )
+                .put(
+                    "scheduler_admission_state",
+                    jsonStringOrNull(sessionMetadata, "scheduler_admission_state") ?: JSONObject.NULL
+                )
+                .put(
+                    "scheduler_run_mode",
+                    jsonStringOrNull(sessionMetadata, "scheduler_run_mode") ?: JSONObject.NULL
+                )
+                .put(
+                    "scheduler_cost_model_id",
+                    jsonStringOrNull(sessionMetadata, "scheduler_cost_model_id") ?: JSONObject.NULL
+                )
+                .put(
+                    "scheduler_cost_source",
+                    jsonStringOrNull(sessionMetadata, "scheduler_cost_source") ?: JSONObject.NULL
+                )
+                .put(
+                    "scheduler_request_utilization",
+                    jsonDoubleOrNull(sessionMetadata, "scheduler_request_utilization") ?: JSONObject.NULL
+                )
+                .put(
+                    "scheduler_projected_utilization",
+                    jsonDoubleOrNull(sessionMetadata, "scheduler_projected_utilization") ?: JSONObject.NULL
+                )
+                .put(
+                    "scheduler_projected_misses",
+                    jsonLongOrNull(sessionMetadata, "scheduler_projected_misses") ?: JSONObject.NULL
+                )
+                .put(
+                    "scheduler_projected_capacity_rejections",
+                    jsonLongOrNull(sessionMetadata, "scheduler_projected_capacity_rejections")
+                        ?: JSONObject.NULL
                 )
                 .put("provenance_incomplete", provenanceIncomplete)
                 .put("manifest_generator_app_version", APP_VERSION)
@@ -1223,7 +1496,7 @@ internal class ProbeLogger(private val context: Context) {
                 )
             ) { "ZIP session identity mismatch" }
             val records = manifestRecords(manifest) ?: error("ZIP manifest file list is invalid")
-            require(REQUIRED_EVIDENCE_FILES.all { it in records }) {
+            require(requiredEvidenceFiles(session).all { it in records }) {
                 "ZIP manifest is missing required evidence files"
             }
             require(fingerprints.keys == records.keys + "manifest.json") {
@@ -1264,7 +1537,7 @@ internal class ProbeLogger(private val context: Context) {
 
             val records = manifestRecords(previousManifest)
                 ?: return IntegrityCheck(false, "INVALID_PREVIOUS_MANIFEST")
-            if (!REQUIRED_EVIDENCE_FILES.all { it in records }) {
+            if (!requiredEvidenceFiles(previous).all { it in records }) {
                 return IntegrityCheck(false, "REQUIRED_FILE_MISSING_FROM_MANIFEST")
             }
             val actualNames = EvidenceRecoveryPolicy.acquisitionFileNames(
@@ -1341,7 +1614,16 @@ internal class ProbeLogger(private val context: Context) {
             "signing_certificate_sha256" to "signing_certificate_sha256",
             "profile_version" to "protocol_profile_version",
             "decoder_version" to "decoder_version",
-            "scheduler_profile" to "scheduler_profile"
+            "scheduler_profile" to "scheduler_profile",
+            "scheduler_admission_state" to "scheduler_admission_state",
+            "scheduler_run_mode" to "scheduler_run_mode",
+            "scheduler_cost_model_id" to "scheduler_cost_model_id",
+            "scheduler_cost_source" to "scheduler_cost_source",
+            "scheduler_request_utilization" to "scheduler_request_utilization",
+            "scheduler_projected_utilization" to "scheduler_projected_utilization",
+            "scheduler_projected_misses" to "scheduler_projected_misses",
+            "scheduler_projected_capacity_rejections" to
+                "scheduler_projected_capacity_rejections"
         ).forEach { (sourceKey, targetKey) ->
             if ((!target.has(targetKey) || target.isNull(targetKey)) &&
                 oldManifest.has(sourceKey) && !oldManifest.isNull(sourceKey)
@@ -1372,6 +1654,21 @@ internal class ProbeLogger(private val context: Context) {
             apk?.matches(Regex("[0-9a-f]{64}")) == true &&
             cert?.matches(Regex("[0-9a-f]{64}")) == true
     }
+
+    private fun requiredEvidenceFiles(metadata: JSONObject?): Set<String> {
+        val schedulerProfile = jsonStringOrNull(metadata, "scheduler_profile")
+        return if (schedulerProfile == SCHEDULER_PROFILE) {
+            REQUIRED_EVIDENCE_FILES + CAPACITY_SCHEDULER_EVIDENCE_FILES
+        } else {
+            REQUIRED_EVIDENCE_FILES
+        }
+    }
+
+    private fun capacitySchedulerEvidencePresent(dir: File): Boolean =
+        CAPACITY_SCHEDULER_EVIDENCE_FILES.all { File(dir, it).isFile } &&
+            schedulerEventCount > 0L &&
+            schedulerRequestStatsCount >= RequestTable.requests.size.toLong() &&
+            schedulerRunMode != "NOT_STARTED"
 
     private fun currentSessionProvenanceComplete(): Boolean =
         BuildConfig.GIT_COMMIT.matches(Regex("[0-9a-fA-F]{40}")) &&
@@ -1443,6 +1740,8 @@ internal class ProbeLogger(private val context: Context) {
         "frames.csv",
         "events.csv",
         "performance.csv",
+        "scheduler_events.jsonl",
+        "scheduler_request_stats.csv",
         "connection.log",
         "errors.log"
     ).any { name -> File(dir, name).let { it.isFile && it.length() > 0L && !endsWithLineBreak(it) } }
@@ -1485,6 +1784,11 @@ internal class ProbeLogger(private val context: Context) {
     private fun jsonLongOrNull(json: JSONObject?, key: String): Long? {
         if (json == null || !json.has(key) || json.isNull(key)) return null
         return runCatching { json.getLong(key) }.getOrNull()
+    }
+
+    private fun jsonDoubleOrNull(json: JSONObject?, key: String): Double? {
+        if (json == null || !json.has(key) || json.isNull(key)) return null
+        return runCatching { json.getDouble(key) }.getOrNull()?.takeIf { it.isFinite() }
     }
 
     private fun jsonBooleanOrNull(json: JSONObject?, key: String): Boolean? {
@@ -1605,6 +1909,8 @@ internal class ProbeLogger(private val context: Context) {
         .replace("\"", "\"\"")
         .replace("\r", "\\r")
         .replace("\n", "\\n")}\""
+
+    private fun csvNumber(value: Long?): String = value?.toString().orEmpty()
 
     private class DurableWriter(file: File) {
         private val stream = FileOutputStream(file, true)

@@ -26,6 +26,12 @@ internal class LatencyWindow(private val capacity: Int = 64) {
 
     fun size(): Int = size
 
+    fun max(): Long {
+        var maximum = 0L
+        for (index in 0 until size) if (values[index] > maximum) maximum = values[index]
+        return maximum
+    }
+
     fun clear() {
         head = 0
         size = 0

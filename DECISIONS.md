@@ -510,7 +510,7 @@ Required durable documents:
 
 ## D-040 — V0.3.0 deadline/priority scheduler with backpressure
 
-**Status:** Accepted — 2026-08-10
+**Status:** Superseded by D-046 after E1 review — 2026-08-12
 
 **Decision:** Replace the fixed whole-frame cadence with a `DeadlineScheduler`. Each whitelist request keeps an independent target period, priority and deadline; due requests are selected every loop and ordered to minimize ELM header switches (7E0 group → 7E2 group → adapter). A request overdue past its deadline is skipped for that cycle and its next slot is re-based on now, so there is never a catch-up request avalanche. The scheduler tracks executions, deadline misses, skips and a bounded latency window (P50/P95/P99); the live loop samples request Hz, signal-publish Hz and NO DATA/TIMEOUT/BUS error counters into `performance.csv` every ~5 s. Fast/slow rates remain the V0.2.0 periods until staged frequency tests provide evidence.
 
@@ -536,13 +536,13 @@ The frozen product presentation contract is restored: POWER is ICE mechanical po
 
 ## D-042 — V0.3.x engineering milestone and V0.3.1 app version are distinct
 
-**Status:** Accepted — 2026-08-11
+**Status:** Milestone/app-version separation retained; V0.3.1/v23 mapping superseded by D-046 V0.3.2/v24 — 2026-08-12
 
 **Decision:** Keep the V0.3.0 High-Performance Scheduler / Refresh Frontier engineering milestone open while advancing the installable app candidate to `versionName = 0.3.1`, `versionCode = 23`. D-041 responsive UI and the V0.3.1 control/logging work are delivered together in that app candidate on branch `v0.3.0`.
 
 **Reason:** D-041 already produced a locally built `versionCode = 22` V0.3.0 APK, while the user has now explicitly authorized V0.3.1. Reusing code 22 or silently calling the performance milestone closed would make installation and evidence identity ambiguous.
 
-**Consequences:** Gradle, `BuildConfig`, logger metadata, workflow artifact names and canonical documents must all identify V0.3.1/v23. Decoder, protocol and scheduler semantic profile identifiers remain unchanged. The candidate artifact is `RX400hProtocolProbe-v0.3.1-resilient-logs-debug-signed`; V0.3.0 does not close until the scheduler frontier exit gate is satisfied.
+**Consequences:** For the historical V0.3.1 candidate, Gradle, `BuildConfig`, logger metadata, workflow artifact names and canonical documents identified V0.3.1/v23. D-046 now advances those app/build identities to V0.3.2/v24 and changes only the scheduler semantic profile; decoder and protocol profile stay unchanged. The engineering milestone remains V0.3.0 until its scheduler-frontier exit gate is satisfied.
 
 ---
 
@@ -587,3 +587,21 @@ After normal finalization or recovery, the archive is automatically published to
 **Reason:** Routine GUI, file, build, install, screenshot, log collection and clearly specified small changes do not require the same repository-level reasoning as core communication, architecture and concurrency work. Separating them reduces repeated investigation and unnecessary Codex use while preserving early escalation when blind Work trial-and-error would be more expensive or risky.
 
 **Consequences:** Chat produces a project-specific `TASK_PACKET`; Work verifies remote/branch/HEAD before mutation and returns concrete commands, results, hashes and evidence. Work upgrades with the `CODEX_ESCALATION_PACKET` in `WORK_ROLE.md`. Codex begins from that local evidence, applies the smallest necessary core change, and returns a `WORK_FOLLOWUP` so Work can perform build/install/GUI regression. Frozen protocol/UI/evidence gates and explicit authorization for push/release/vehicle actions remain unchanged.
+
+---
+
+## D-046 — Reconstruct the scheduler around absolute releases, prompt boundaries and capacity evidence
+
+**Status:** Accepted for implementation — 2026-08-12
+
+**Decision:** Replace `v030_deadline_001` with a capacity-aware, single-dispatch scheduler. Each request keeps the frozen V0.2.0 target period, but releases are anchored to the LIVE epoch instead of `completion + period`. A release deadline is explicit (`release + period`). The scheduler retains at most one pending job per request, accounts for every coalesced release, replans after every header or request transaction, and treats the ELM header as state with a measurable transition cost. Feasible work is ordered to meet absolute deadlines first and minimize header changes second; priority is used only for deterministic overload shedding. Reconnect does not reset all requests to immediately due.
+
+Each release has exactly one terminal class: executed on time, executed late, rejected for capacity, expired unexecuted, transport unavailable, or session ended. Per-request counters must conserve the release total. The legacy `deadline_misses` and `skipped_overdue` columns remain only as derived compatibility fields and no longer describe the same event twice. New scheduler event and per-request-stat streams record release/deadline times, queue wait, predicted and actual setup/service cost, lateness, header switches, admission state and terminal reason.
+
+The transport remains strictly serial and never sends the next command before the prior ELM prompt boundary. The fixed Probe-era runtime waits (`minimumGap=120 ms`, `preDrain=80 ms`, `quiet=80 ms`) are not protocol facts: the hash-registered HA/HCI evidence records six serial ELM transactions in a median core loop of about 159 ms, which is incompatible with applying those fixed waits to every command. Normal scheduled requests therefore use the prompt as the synchronized transaction boundary and do not add fixed per-command gap/drain/quiet delays; conservative waits remain in initialization, identity and recovery paths. Any prompt loss still fails the transaction and drives the existing error/reconnect path.
+
+Admission is fail-closed. A complete trusted p95 cost model is assessed over the 60-second hyperperiod using the production scheduling policy. Missing cost evidence returns `UNKNOWN`; impossible demand returns `OVERLOADED`; only a zero-miss simulation with positive headroom returns `ADMITTED`. `UNKNOWN` and `OVERLOADED` may run only as explicitly logged diagnostic best effort and cannot unlock the rate ladder.
+
+**Reason:** The V0.3.0 E1 archive showed 4,248 scheduled executions in about 2,850 seconds (1.49/s) against 5.033/s frozen nominal demand, 2,270 header commands, and 2,856/2,856 legacy miss/skip counters. Source review proved those two counters were incremented in the same branch, long stalls counted only once per request scan, batch members were not rechecked after queueing, and both success and skip rebased cadence on the current/completion time. Even before header cost, the old fixed waits make the frozen demand physically infeasible. HA/HCI supplies a clean-room feasible serial working point and header-group sequence, but not HA scheduler source or per-command p95 values; it justifies removing the false wait assumption, not claiming capacity admission prematurely.
+
+**Consequences:** The app candidate advances to `versionName = 0.3.2`, `versionCode = 24`, with scheduler profile `v030_capacity_002`; protocol profile, decoder, seven-request whitelist and target periods remain unchanged. D-040's implementation semantics are superseded, while its no-catch-up and bounded-memory goals remain. Deterministic tests must cover absolute cadence, long stalls, conservation, deadline boundaries, header-aware replanning, ATRV header neutrality, transport downtime, capacity admission and E1-like overload. The new candidate is not a promoted baseline until exact-commit CI, API 27, paired-OBD connection/LIVE/End/public-save/recovery smoke, and a same-period E1 rerun show auditable per-request behavior.

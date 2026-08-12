@@ -4,7 +4,7 @@
 **Current engineering baseline:** V0.2.0 — Reactive Core (closed 2026-08-09)<br>
 **Historical validated engineering baseline:** V0.1.10 cleanup / real-vehicle validated branch<br>
 **Next major milestone:** V0.3.0 — High-Performance Scheduler / Refresh Frontier (development started 2026-08-10 on branch `v0.3.0`)
-**Current app candidate:** V0.3.1 — three-button session flow + durable/recoverable logs (`versionCode = 23`, implementation started 2026-08-11)<br>
+**Current app candidate:** V0.3.2 — capacity-aware scheduler reconstruction (`versionCode = 24`, implementation started 2026-08-12)<br>
 **Repository:** `noobruge-wq/rx400h-Monitor`
 
 > This file is the primary handoff document. Future development must update this document before code changes. A new AI/developer should be able to resume the project from this file + `DECISIONS.md` + `ROADMAP.md` + latest source without relying on chat history.
@@ -523,13 +523,13 @@ Remaining real-vehicle-only items are tracked in V0.3.0: more natural Idle Check
 - Full responsive/adaptive UI reset implemented locally (D-041): actual inset-safe View measurement replaces short-side whole-screen scaling and content-view rebuilds; cards use 240/320/480dp bounded width contracts and content-driven height, controls use safe inline/split/stacked wrapping, ultra-wide rows are capped/centered, and short windows scroll the whole page. The frozen POWER order and active-only Idle Check contract are restored. `versionCode = 22`, candidate artifact `RX400hProtocolProbe-v0.3.0-fluid-ui-debug-signed`.
 - Local verification: 38 unit tests passed; `lintDebug` passed with 0 errors; `assembleDebug` and fixed-key v2 signature verification passed; local APK SHA-256 `427a1c0e1950b4154a613e1a7173f9c3c8b5ea372460affec3444dd6863d0364`. API 37 View testing covered portrait, landscape, 4:3, 16:9, 16:10, tablet, split, ultra-wide, extreme-wide/short, 200dp narrow + font scale 2.0, and every structural threshold in both directions without PID/Activity replacement or crash. GitHub Actions and uploaded artifact verification remain pending, so this is not yet a promoted branch baseline.
 - Engineering baseline on `main` remains V0.2.0 until V0.3.0 closes.
-- Scheduler core/backpressure are already implemented on `v0.3.0`; remaining V0.3.0 work per `ROADMAP.md` is D-041 GitHub candidate verification, rate tiers, temporal coherence, extended performance metrics and staged frequency tests (≈0.36 Hz → HA ~5.5 Hz point → higher, with the head unit as the weak-hardware baseline).
+- Historical D-040 scheduler/backpressure was implemented on `v0.3.0` but was superseded by D-046 after E1 review. The rate ladder remains blocked until the reconstructed scheduler has exact-commit/device evidence and a same-period E1.
 
 ---
 
-## 20. V0.3.1 current work — 2026-08-11
+## 20. V0.3.1 previous app candidate — 2026-08-11
 
-V0.3.1 is the current installable app candidate inside the still-open V0.3.x Scheduler / Refresh Frontier engineering milestone. Advancing the app version does not close the V0.3.0 performance exit gate.
+V0.3.1 was the previous installable app candidate inside the still-open V0.3.x Scheduler / Refresh Frontier engineering milestone. It was never promoted, and advancing the app version did not close the V0.3.0 performance exit gate.
 
 User-approved scope (D-042 through D-044):
 
@@ -558,3 +558,30 @@ The project now uses D-045 `Chat → Work → Codex` routing:
 - `AGENTS.md`: Codex senior-engineering rules. Codex handles architecture, difficult multi-file root causes, concurrency/lifecycle/state machines, performance core and vehicle communication/protocol work, then returns routine verification to Work.
 
 This routing does not relax protocol safety, docs-first discipline, evidence grades, consumer traceability or authorization gates. Fast-changing state remains here in `PROJECT_STATE.md`; role cards should not accumulate per-build hashes or replace this document.
+
+---
+
+## 22. V0.3.2 scheduler reconstruction — 2026-08-12
+
+The user authorized rebuilding the scheduler after review of the V0.3.0 E1 archive and the repository's Hybrid Assistant / HCI history. This is a scheduler-and-transport-boundary correction inside the still-open V0.3.0 High-Performance Scheduler / Refresh Frontier milestone; it does not replace the dashboard, three-button session flow, durable logging, request whitelist or decoder.
+
+Confirmed E1 facts driving D-046:
+
+- The archive recorded about 2,850 seconds of LIVE time, 4,248 scheduled request executions (about 1.49/s) and 2,270 `ATSH` transactions against 5.033/s frozen nominal request demand.
+- `deadline_misses = skipped_overdue = 2,856` is constructed by the old source: both counters increment in the same overdue branch. It is one event with two names, not two independent failure counts.
+- The old scheduler selects a whole due batch once, does not recheck later batch members, counts at most one skip per request scan after a long stall, and advances both success and skip as `now/completion + period`; target cadence therefore drifts and overload is hidden by rebasing.
+- HA/HCI clean-room evidence records the strict serial core sequence `ATSH7E0 → std_core → cd_f3 → ATSH7E2 → c3 → c4` with a median six-transaction loop near 159 ms. Git contains the derived evidence, hashes and mapping, not HA source code.
+- The runtime `120/80/80 ms` gap/pre-drain/quiet policy predates the HA evidence, has no HCI requirement, and cannot coexist with a six-command 159 ms loop. Strict prompt-delimited serialization remains mandatory; fixed waits move out of the normal scheduled hot path and remain available for initialization/recovery.
+
+Authorized implementation contract:
+
+- App identity advances to V0.3.2/v24; scheduler profile advances to `v030_capacity_002`.
+- Releases stay anchored to a LIVE epoch; deadline is `release + period`; at most one job per request remains pending and every older/coalesced release receives an explicit terminal outcome.
+- The live loop dispatches one job, then replans using the actual monotonic clock and current header. Deadline feasibility comes before header locality; priority only controls overload shedding.
+- Per-request accounting is conserved across on-time, late, capacity-rejected, expired, transport-unavailable, session-ended, pending and in-flight outcomes. New scheduler evidence records queue, completion lateness, service/setup cost, header transitions and admission state.
+- Capacity admission is `UNKNOWN`, `ADMITTED` or `OVERLOADED`. Only trusted p95 costs plus a zero-miss 60-second production-policy replay can return `ADMITTED`; all other states remain diagnostic and block the rate ladder.
+- The seven request commands, headers, target periods, protocol profile and decoder formulas remain frozen. No vehicle action, Git push, release publication or target-period increase is authorized by this work item.
+
+Acceptance before promotion: deterministic scheduler/admission tests, local unit/lint/assemble/signature checks, exact-commit CI artifact, API 27, paired-OBD connection → LIVE → End/public-save/recovery smoke, then a same-period E1 rerun whose per-request outcomes and capacity state can be independently recomputed. Until those gates pass, V0.3.2 is a local engineering candidate rather than the project baseline.
+
+Final local verification on base `e58d9f9dd60197882a3d41f5d78b304a52f663f7`, before GitHub publication: 72 JVM tests passed with 0 failures/errors/skips; lint passed with 0 errors / 9 non-blocking warnings; debug assemble, manifest identity and fixed-certificate APK Signature Scheme v2 verification passed. The local V0.3.2/v24 APK is 2,557,574 bytes with SHA-256 `a8bc90fb35a2c0f8e1c41b517b9016ef42444f1102d15e2ab2518de7343bb347`. It is a dirty-worktree build, not an exact-commit artifact; no install or vehicle action was performed. Because the included per-command/header costs have zero trusted samples, the capacity decision remains `UNKNOWN` and the scheduler runs explicitly in diagnostic best-effort mode; rate-ladder work remains blocked.

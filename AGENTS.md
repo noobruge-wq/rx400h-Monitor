@@ -220,4 +220,4 @@ local git
 
 V0.3.0 已由用户授权并在分支 `v0.3.0` 开始；按 `DEVELOPMENT_PROTOCOL.md` 的 docs-first 顺序执行，不得在文档/基线更新前改源码。V0.2.0 已关闭，不得把历史“开始 V0.2.0”提示当作当前任务。
 
-当前可安装 App 候选已由用户授权推进为 **V0.3.1 / versionCode 23**，但它仍属于未关闭的 V0.3.0 Scheduler / Refresh Frontier 工程里程碑（D-042）。D-041 响应式 UI + D-043 三按钮 session ownership + D-044 可恢复日志已提交并推送到 `v0.3.0`（代码提交 `43a959b`）；协议白名单、decoder 与 scheduler profile 不变。local test/lint/build/signature 与 API 26 smoke 已通过；clean exact-commit CI、API 27 以及带真实 OBD 的连接/公开保存/异常恢复 smoke 仍待完成，不得称为已验证 baseline。
+当前本地 App 候选是 **V0.3.2 / versionCode 24**，仍属于未关闭的 V0.3.0 Scheduler / Refresh Frontier 工程里程碑（D-046）。它在 V0.3.1 的响应式 UI、三按钮 session ownership 与可恢复日志之上重建调度器；协议白名单、decoder、七个请求和 target periods 不变。local test/lint/build/signature 已通过，但本次实现尚未 commit/push，也未连接车辆；clean exact-commit CI、API 27、带真实 OBD 的连接/公开保存/异常恢复 smoke 与同 periods E1 仍待完成，不得称为已验证 baseline。
