@@ -220,12 +220,16 @@ Role: local, dirty-worktree evidence for D-041 responsive UI plus D-043 three-bu
 ```text
 Branch: v0.3.0
 Base commit: e58d9f9dd60197882a3d41f5d78b304a52f663f7
-Working tree: dirty by this implementation; no commit/push
+Implementation commit: 8e55c6afae20ca64b9ea9bba5861bc85d8017c62
+Remote branch: origin/v0.3.0
 App version: 0.3.2
 versionCode: 24
 Scheduler profile: v030_capacity_002
 Candidate artifact: RX400hProtocolProbe-v0.3.2-capacity-scheduler-debug-signed
-GitHub Actions run: pending
+GitHub Actions run: 31635798035 — success
+GitHub Actions URL: https://github.com/noobruge-wq/rx400h-Monitor/actions/runs/31635798035
+CI APK size: 2,554,982 bytes
+CI APK SHA-256: 841b1a4adb9f9e4a1834d2830dd6e94754a54cbcc3b2b3209023061da1969e9b
 Local APK size: 2,557,574 bytes
 Local APK SHA-256: a8bc90fb35a2c0f8e1c41b517b9016ef42444f1102d15e2ab2518de7343bb347
 Signature: APK Signature Scheme v2; certificate SHA-256 77ba84b1f4f737a5d61b910bf4386df167548b9c6ce689ed25e994c37b2bc192
@@ -234,7 +238,7 @@ Lint: 0 errors / 9 non-blocking warnings
 Manifest identity: applicationId com.guanyu.rx400hprobe.debug; versionName 0.3.2-debug; versionCode 24; minSdk 26; targetSdk 35
 ```
 
-Role: final local dirty-worktree verification evidence for D-046, recorded before GitHub publication. It covers epoch-anchored releases, one-transaction header/request replanning, conserved per-request terminal outcomes, transport-down accounting, fail-closed admission regressions, mutually exclusive legacy deadline/skip compatibility counters, streaming scheduler evidence and prompt-loss/I/O-failure reconnect enforcement. The seven requests, headers, commands, decoder and target periods are unchanged. The bundled cost model is deliberately untrusted, so admission remains `UNKNOWN` and rate-ladder acceleration stays blocked. This local APK is not an exact-commit artifact and was not installed or connected to a vehicle. Promotion still requires an exact-commit CI artifact, API 27, paired-OBD connection → LIVE → End/public-save/recovery smoke and a same-period E1 rerun.
+Role: D-046 exact-source build evidence. GitHub Actions rebuilt clean commit `8e55c6a`, passed the configured unit/lint/assemble gates, verified embedded commit/clean provenance, verified the fixed v2 signing certificate and uploaded the named artifact. The scheduler covers epoch-anchored releases, one-transaction header/request replanning, conserved per-request terminal outcomes, transport-down accounting, fail-closed admission, mutually exclusive legacy deadline/skip compatibility counters, streaming evidence and prompt-loss/I/O-failure reconnect enforcement. The seven requests, headers, commands, decoder and target periods are unchanged. Costs remain untrusted, so admission is `UNKNOWN` and rate-ladder acceleration stays blocked. The APK has not yet been installed or connected to a vehicle. Promotion still requires API 27, paired-OBD connection → LIVE → End/public-save/recovery smoke and a same-period E1 rerun.
 
 ---
 

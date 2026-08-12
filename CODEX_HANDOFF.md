@@ -371,4 +371,4 @@ Codex 必须先证明它已经能回答：
 - Git 中的 HA/HCI 是 clean-room 时序与请求链证据，不是可移植源码。实现保留严格串行 prompt 边界与 HA 的 7E0/7E2 分组事实；正常 scheduled hot path 不再把旧 `120/80/80 ms` 等待当协议常数。
 - 当前本地候选为 V0.3.2/v24，scheduler profile `v030_capacity_002`。七个请求、header、command、decoder 和 target periods 保持不变；成本种子不可信，因此 admission 为 `UNKNOWN`、运行模式为 diagnostic，rate ladder 继续封锁。
 - 最终本地 72 JVM tests 全通过，lint 0 errors / 9 warnings，assemble、manifest 与固定 v2 证书验证通过。APK SHA-256 `a8bc90fb35a2c0f8e1c41b517b9016ef42444f1102d15e2ab2518de7343bb347`；它是 base `e58d9f9` 上的 dirty build，不是 exact-commit artifact。
-- 本次没有 commit、push、安装或车辆动作。clean commit/CI、API 27、paired-OBD connection → LIVE → End/public-save/recovery smoke 与同 periods E1 全部仍待完成；这些完成前不得 promotion，也不得提高频率。
+- 实现已作为 `8e55c6a` 推送到 `origin/v0.3.0`；GitHub Actions run `31635798035` 在该 exact clean commit 上通过并产出 APK SHA-256 `841b1a4adb9f9e4a1834d2830dd6e94754a54cbcc3b2b3209023061da1969e9b`。尚未安装或执行车辆动作。API 27、paired-OBD connection → LIVE → End/public-save/recovery smoke 与同 periods E1 仍待完成；这些完成前不得 promotion，也不得提高频率。

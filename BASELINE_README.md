@@ -32,7 +32,7 @@
 - V0.1.9 = VOID;
 - current baseline = V0.2.0 Reactive Core (closed 2026-08-09; historical validated baseline = V0.1.10);
 - active engineering milestone = V0.3.0 High-Performance Scheduler / Refresh Frontier;
-- current local app candidate = V0.3.2 / versionCode 24 (D-046 scheduler reconstruction on `v0.3.0`; local tests/lint/build/signature passed; no commit/push or vehicle action; exact-commit CI, API 27, real-OBD save/recovery smoke and same-period E1 pending);
+- current app candidate = V0.3.2 / versionCode 24 (D-046 scheduler reconstruction, implementation commit `8e55c6a`; local and exact-commit GitHub Actions build/signature gates passed; API 27, real-OBD save/recovery smoke and same-period E1 pending);
 - protocol is whitelist/evidence-driven;
 - Lean Core + high useful refresh are first-class objectives;
 - no expensive dedicated long-trip release gate;

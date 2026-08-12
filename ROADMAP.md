@@ -68,7 +68,7 @@ Scheduler reconstruction in progress (D-046, superseding D-040 semantics): E1 sh
 
 ### Current implementation candidate — V0.3.2
 
-V0.3.2/v24 reconstructs the scheduler and its normal runtime transport boundary under D-046. The scheduler profile becomes `v030_capacity_002`; the protocol profile, decoder, whitelist and target periods remain unchanged. HA/HCI is used only as clean-room feasibility evidence: it proves a strict serial six-command core loop around 159 ms and disproves treating Probe-era fixed per-command waits as protocol requirements, but it does not provide source code or trusted per-command p95 costs. Consequently the first V0.3.2 run mode is explicitly diagnostic until a same-period E1 supplies a complete admission model. Local tests/lint/assemble/manifest/signature gates pass; exact-commit CI and all device/E1 gates remain pending.
+V0.3.2/v24 reconstructs the scheduler and its normal runtime transport boundary under D-046. The scheduler profile becomes `v030_capacity_002`; the protocol profile, decoder, whitelist and target periods remain unchanged. HA/HCI is used only as clean-room feasibility evidence: it proves a strict serial six-command core loop around 159 ms and disproves treating Probe-era fixed per-command waits as protocol requirements, but it does not provide source code or trusted per-command p95 costs. Consequently the first V0.3.2 run mode is explicitly diagnostic until a same-period E1 supplies a complete admission model. Local gates and exact-commit GitHub Actions run `31635798035` pass; API 27, paired-OBD save/recovery and same-period E1 gates remain pending.
 
 ### Previous installable candidate — V0.3.1
 
