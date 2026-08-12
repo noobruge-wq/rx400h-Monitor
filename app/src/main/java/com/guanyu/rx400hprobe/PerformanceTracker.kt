@@ -13,6 +13,34 @@ import java.time.Instant
  * UI render duration and logger write duration.
  */
 class PerformanceTracker {
+    data class LoggerMetrics(
+        val writeTotalMs: Long,
+        val checkpointTotalMs: Long,
+        val syncTotalMs: Long,
+        val checkpointMaxMs: Long,
+        val checkpointLockWaitMs: Long
+    )
+
+    data class SchedulerMetrics(
+        val requestHz: Double,
+        val signalUpdateHz: Double,
+        val deadlineMisses: Long,
+        val skippedOverdue: Long,
+        val latencyP50Ms: Long,
+        val latencyP95Ms: Long,
+        val latencyP99Ms: Long,
+        val noData: Long,
+        val timeout: Long,
+        val busError: Long,
+        val expiredUnexecuted: Long = 0L,
+        val capacityRejections: Long = 0L,
+        val transportUnavailable: Long = 0L,
+        val executedLate: Long = 0L,
+        val pending: Long = 0L,
+        val headerSwitches: Long = 0L,
+        val admissionState: String = "UNKNOWN"
+    )
+
     data class Sample(
         val wallTimeIso: String,
         val elapsedMs: Long,
@@ -24,14 +52,50 @@ class PerformanceTracker {
         val freedDelta: Long,
         val cycleMs: Long,
         val renderMs: Long,
-        val loggerWriteMs: Long
+        val frameLogMs: Long,
+        val requestHz: Double,
+        val signalUpdateHz: Double,
+        val deadlineMisses: Long,
+        val skippedOverdue: Long,
+        val latencyP50Ms: Long,
+        val latencyP95Ms: Long,
+        val latencyP99Ms: Long,
+        val noData: Long,
+        val timeout: Long,
+        val busError: Long,
+        val expiredUnexecuted: Long,
+        val capacityRejections: Long,
+        val transportUnavailable: Long,
+        val executedLate: Long,
+        val pending: Long,
+        val headerSwitches: Long,
+        val admissionState: String,
+        val loggerWriteTotalMs: Long,
+        val loggerCheckpointTotalMs: Long,
+        val loggerSyncTotalMs: Long,
+        val loggerCheckpointMaxMs: Long,
+        val loggerCheckpointLockWaitMs: Long
     )
 
     private var lastCpuMs: Long = Process.getElapsedCpuTime()
     private var lastAllocCount: Long = Debug.getGlobalAllocCount().toLong()
     private var lastFreedCount: Long = Debug.getGlobalFreedCount().toLong()
+    private var sessionStartElapsedMs: Long = SystemClock.elapsedRealtime()
 
-    fun sample(cycleMs: Long, renderMs: Long, loggerWriteMs: Long): Sample {
+    fun reset() {
+        sessionStartElapsedMs = SystemClock.elapsedRealtime()
+        lastCpuMs = Process.getElapsedCpuTime()
+        lastAllocCount = Debug.getGlobalAllocCount().toLong()
+        lastFreedCount = Debug.getGlobalFreedCount().toLong()
+    }
+
+    fun sample(
+        cycleMs: Long,
+        renderMs: Long,
+        frameLogMs: Long,
+        scheduler: SchedulerMetrics,
+        logger: LoggerMetrics
+    ): Sample {
         val now = SystemClock.elapsedRealtime()
         val cpu = Process.getElapsedCpuTime()
         val alloc = Debug.getGlobalAllocCount().toLong()
@@ -39,7 +103,7 @@ class PerformanceTracker {
         val runtime = Runtime.getRuntime()
         val sample = Sample(
             wallTimeIso = Instant.now().toString(),
-            elapsedMs = now,
+            elapsedMs = (now - sessionStartElapsedMs).coerceAtLeast(0L),
             pssKb = Debug.getPss().toLong(),
             javaHeapUsedKb = (runtime.totalMemory() - runtime.freeMemory()) / 1024L,
             javaHeapTotalKb = runtime.totalMemory() / 1024L,
@@ -48,7 +112,29 @@ class PerformanceTracker {
             freedDelta = (freed - lastFreedCount).coerceAtLeast(0L),
             cycleMs = cycleMs,
             renderMs = renderMs,
-            loggerWriteMs = loggerWriteMs
+            frameLogMs = frameLogMs,
+            requestHz = scheduler.requestHz,
+            signalUpdateHz = scheduler.signalUpdateHz,
+            deadlineMisses = scheduler.deadlineMisses,
+            skippedOverdue = scheduler.skippedOverdue,
+            latencyP50Ms = scheduler.latencyP50Ms,
+            latencyP95Ms = scheduler.latencyP95Ms,
+            latencyP99Ms = scheduler.latencyP99Ms,
+            noData = scheduler.noData,
+            timeout = scheduler.timeout,
+            busError = scheduler.busError,
+            expiredUnexecuted = scheduler.expiredUnexecuted,
+            capacityRejections = scheduler.capacityRejections,
+            transportUnavailable = scheduler.transportUnavailable,
+            executedLate = scheduler.executedLate,
+            pending = scheduler.pending,
+            headerSwitches = scheduler.headerSwitches,
+            admissionState = scheduler.admissionState,
+            loggerWriteTotalMs = logger.writeTotalMs,
+            loggerCheckpointTotalMs = logger.checkpointTotalMs,
+            loggerSyncTotalMs = logger.syncTotalMs,
+            loggerCheckpointMaxMs = logger.checkpointMaxMs,
+            loggerCheckpointLockWaitMs = logger.checkpointLockWaitMs
         )
         lastCpuMs = cpu
         lastAllocCount = alloc

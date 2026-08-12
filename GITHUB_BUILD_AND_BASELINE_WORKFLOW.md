@@ -44,6 +44,7 @@ Gradle: 8.9
 Android compile/target SDK: 35（除非后续版本文档明确修改）
 Build task: :app:assembleDebug
 Unit tests: :app:testDebugUnitTest (before assembleDebug)
+Static analysis: :app:lintDebug
 APK verification: apksigner verify
 ```
 
@@ -112,6 +113,7 @@ Keystore file historical SHA-256:
 ```text
 Gradle build PASS
 :app:testDebugUnitTest PASS
+:app:lintDebug PASS
 :app:assembleDebug PASS
 APK exists
 apksigner verify PASS
@@ -135,6 +137,22 @@ V0.2.1 UI patch：
 ```text
 RX400hProtocolProbe-v0.2.1-ui-debug-signed
 ```
+
+V0.3.0 开发分支候选：
+
+```text
+RX400hProtocolProbe-v0.3.0-bottom-align-debug-signed
+```
+
+当前 V0.3.2 capacity-aware scheduler 候选：
+
+```text
+RX400hProtocolProbe-v0.3.2-capacity-scheduler-debug-signed
+```
+
+V0.3.2 是仍处于 V0.3.0 Scheduler / Refresh Frontier 工程里程碑内的 App 版本；Artifact、Gradle `versionName/versionCode` 与 session build provenance 必须指向同一 exact commit。`UNKNOWN`/`OVERLOADED` admission 不得解锁 rate ladder。
+
+Gradle 的 Git provenance 采集必须 fail closed：Git 不可执行、命令失败或 commit ID 非 40 位十六进制时，构建直接失败。GitHub Actions 还必须在上传前检查生成的 `BuildConfig`：`GIT_COMMIT == GITHUB_SHA` 且 `GIT_DIRTY == false`。
 
 版本进入正式 Monitor 阶段后可以调整命名，但必须保持“从 Artifact 名就能识别 app version / candidate”的原则。
 
@@ -223,6 +241,8 @@ Push 后 GitHub Actions 自动开始构建。
 
 ```text
 BASELINE_README.md
+CHAT_ROLE.md
+WORK_ROLE.md
 PROJECT_STATE.md
 CHANGELOG.md
 DECISIONS.md
@@ -268,14 +288,20 @@ BASELINE_MANIFEST.sha256
 cd ~/rx400h-Monitor
 
 sha256sum \
+  AGENTS.md \
   BASELINE_README.md \
-  PROJECT_STATE.md \
+  CHAT_ROLE.md \
   CHANGELOG.md \
+  CODEX_HANDOFF.md \
   DECISIONS.md \
-  ROADMAP.md \
   DEVELOPMENT_PROTOCOL.md \
   EVIDENCE_INDEX.md \
+  FULL_PROJECT_CONTEXT.md \
   GITHUB_BUILD_AND_BASELINE_WORKFLOW.md \
+  PROJECT_STATE.md \
+  REPO_ACCESS_AND_AUTH.md \
+  ROADMAP.md \
+  WORK_ROLE.md \
   > BASELINE_MANIFEST.sha256
 ```
 
@@ -334,6 +360,8 @@ sha256sum -c BASELINE_MANIFEST.sha256
 ```bash
 git add \
   BASELINE_README.md \
+  CHAT_ROLE.md \
+  WORK_ROLE.md \
   PROJECT_STATE.md \
   CHANGELOG.md \
   DECISIONS.md \
@@ -388,6 +416,7 @@ git rev-parse origin/main
 
 ```text
 GitHub repository + latest commit
+CHAT_ROLE.md or WORK_ROLE.md (according to the receiving role)
 PROJECT_STATE.md
 DECISIONS.md
 ROADMAP.md

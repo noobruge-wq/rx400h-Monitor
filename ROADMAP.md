@@ -12,7 +12,7 @@ Major engineering milestones use `0.x.0`.
 
 ## V0.1.10 — Validated cleanup baseline
 
-**Status:** Current / effectively complete as the transition baseline.
+**Status:** Historical real-vehicle-validated transition baseline; superseded as the engineering baseline by V0.2.0.
 
 ### Goal
 
@@ -60,6 +60,22 @@ A renderer can be replaced without modifying decoder/signal semantics, and every
 
 ## V0.3.0 — High-Performance Scheduler / Refresh Frontier
 
+**Status:** In development — started 2026-08-10 (branch `v0.3.0`).
+
+The first UI candidates (D-033…D-039) established Chinese domain cards and initial window-width reflow, but retained short-side proportional scaling and a permanent inactive Idle Check label. D-041 supersedes that layout model with component-bounded, actual-window native reflow, wrapped/reachable controls, capped ultra-wide cards, height-aware whole-page scrolling and the frozen POWER/active-only Idle Check contract. Implementation, local tests/lint/signature verification and an API 37 continuous-resize matrix are complete; GitHub Actions candidate publication remains pending.
+
+Scheduler reconstruction in progress (D-046, superseding D-040 semantics): E1 showed cadence drift, batch-blind deadlines, duplicated miss/skip meaning, excessive header churn and a transport wait budget that cannot satisfy the frozen demand. V0.3.2 keeps the seven requests and periods but moves to absolute releases, single-item header-aware replanning, conserved per-request outcomes, prompt-delimited runtime transactions and fail-closed capacity admission.
+
+### Current implementation candidate — V0.3.2
+
+V0.3.2/v24 reconstructs the scheduler and its normal runtime transport boundary under D-046. The scheduler profile becomes `v030_capacity_002`; the protocol profile, decoder, whitelist and target periods remain unchanged. HA/HCI is used only as clean-room feasibility evidence: it proves a strict serial six-command core loop around 159 ms and disproves treating Probe-era fixed per-command waits as protocol requirements, but it does not provide source code or trusted per-command p95 costs. Consequently the first V0.3.2 run mode is explicitly diagnostic until a same-period E1 supplies a complete admission model. Local gates and exact-commit GitHub Actions run `31635798035` pass; API 27, paired-OBD save/recovery and same-period E1 gates remain pending.
+
+### Previous installable candidate — V0.3.1
+
+V0.3.1 (D-042…D-044) combines D-041 with the user-approved three-button session flow and resilient logging. The dashboard controls become `设备` / `开始` / `结束`; one typed session owner performs connect → validate → LIVE → stop → save. Logs receive periodic durable checkpoints, interrupted-session recovery, human-readable end-time archive names and automatic publication to user-visible Downloads. This deliberately pulls a small, fixed subset of V0.4/V0.5 lifecycle/durability work forward because reliable evidence must precede the V0.3 rate ladder. It does not claim Activity-independent continuous background monitoring, complete durability closure or V0.3 performance closure.
+
+The V0.3.1 local checks remain useful regression evidence, but it was never promoted: exact-commit GitHub publication, API 27 and paired-OBD connection→LIVE→End/public-save/recovery smoke are still pending. V0.3.2 must repeat those gates and then complete a same-period E1 before any rate-ladder step.
+
 ### Carried from V0.2.0 (real-vehicle-only)
 
 - Continue natural Idle Check observations to strengthen eligibility equivalence.
@@ -72,12 +88,12 @@ Determine the practical high-value sampling frontier of RX400h + OBDLink.
 ### Required outcomes
 
 - Multi-source cross-check: Hybrid Assistant APK + Dr Prius XAPK + HCI + E1 + current source are complementary; no single source blocks development (D-031).
-- Deadline/priority scheduler.
+- Epoch-anchored, capacity-aware single-transaction scheduler with replanning after each header/request transaction.
 - Independent fast/medium/slow request periods.
-- Backpressure and skip-overdue policy; no catch-up request avalanche.
+- Conserved per-request outcomes, deterministic capacity shedding and no catch-up request avalanche.
 - Real acquisition Hz and signal publish Hz metrics.
 - Controlled step tests through the HA operating region and, where stable, above it.
-- Track median/P95/P99 latency, deadline misses, NO DATA, TIMEOUT, BUS/ISO-TP errors, CPU and GC.
+- Track queue/setup/service/interval/lateness distributions; on-time, late, capacity-rejected, expired, transport-unavailable and session-ended outcomes; NO DATA, TIMEOUT, BUS/ISO-TP errors, CPU and GC.
 - Hot-path allocation/parser review.
 
 ### Important target philosophy
@@ -111,6 +127,8 @@ Make the vehicle session independent of Activity lifetime.
 
 The UI can be destroyed/recreated while a valid runtime session remains correct and observable.
 
+V0.3.1 introduces an Activity-owned typed session state to make the three controls race-safe, but this does not satisfy V0.4: the vehicle session still requires a lifecycle-independent owner before V0.4 closes.
+
 ---
 
 ## V0.5.0 — Durability / Recovery
@@ -136,6 +154,8 @@ No dedicated expensive long-distance trip is required. Use daily driving + repla
 ### Exit criterion
 
 Long-equivalent replay/fault tests and accumulated normal driving show no structural memory/logger/session failure.
+
+V0.3.1 advances checkpointing and basic interrupted-session packaging/publication. Automatic MediaStore/legacy copies are hash-deduplicated; arbitrary SAF destinations are read-back verified but retain a documented external-write-to-receipt crash window. V0.5 still owns log rolling, disk guard, full fault matrix, SAF provisional-receipt recovery and long-equivalent durability closure.
 
 ---
 

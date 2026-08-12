@@ -20,12 +20,19 @@
 
 `04_EVIDENCE/` 内包含 HCI、APK、实车日志和历史审计证据。它们用于需要追溯时核验，不要求 Codex 初次接手时一次性吞掉所有二进制内容。
 
+## 三角色入口
+
+- 新 Chat：先读 `CHAT_ROLE.md`，动态状态再读 `PROJECT_STATE.md`。
+- 新 Work：先读 `WORK_ROLE.md`，修改前必须核对真实 remote / branch / HEAD / dirty state。
+- Codex：按 `AGENTS.md`；收到完整 escalation packet 时采用最小充分读取，不为局部问题全面扫描。
+
 ## Canonical rules
 
 - project memory lives in Git docs, not chat;
 - V0.1.9 = VOID;
 - current baseline = V0.2.0 Reactive Core (closed 2026-08-09; historical validated baseline = V0.1.10);
-- next milestone = V0.3.0 High-Performance Scheduler;
+- active engineering milestone = V0.3.0 High-Performance Scheduler / Refresh Frontier;
+- current app candidate = V0.3.2 / versionCode 24 (D-046 scheduler reconstruction, implementation commit `8e55c6a`; local and exact-commit GitHub Actions build/signature gates passed; API 27, real-OBD save/recovery smoke and same-period E1 pending);
 - protocol is whitelist/evidence-driven;
 - Lean Core + high useful refresh are first-class objectives;
 - no expensive dedicated long-trip release gate;

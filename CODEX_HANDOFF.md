@@ -345,4 +345,30 @@ Codex 必须先证明它已经能回答：
 - repo read/write works?
 - GitHub Actions signing works?
 
-回答完后停止，等用户下达实际 V0.2.0 开发任务。
+回答完后按用户当前明确授权继续；若没有新的开发授权则停止。V0.2.0 已关闭，当前开发分支/里程碑是 `v0.3.0`。
+
+## 16. 当前 `v0.3.0` 分支 / V0.3.1 App 候选 — 2026-08-11
+
+- D-041 全尺寸响应式 UI、D-043 三按钮单-owner session 和 D-044 可恢复日志已作为 V0.3.1/v23 提交并推送到 `origin/v0.3.0`，代码提交为 `43a959b`。
+- 稳定 Android View 树从实际 inset-safe 窗口测量并 reflow；卡片/控制组件有显式尺寸合同，整页可滚，冻结 POWER / active-only Idle Check contract 已恢复。
+- Pre-commit local verification 为 62 tests、lint 0 errors / 9 warnings、assemble、固定 v2 签名和 API26 smoke；local APK `bd3b252e…14a3` 是诚实标记 dirty 的候选，不是 `43a959b` clean remote artifact。
+- Clean exact-commit GitHub Actions artifact 仍待生成；下一位代理不得把 local hash 称为远端 baseline。protocol/scheduler/request table 保持不变。
+- 用户已授权把下一可安装 App 候选推进为 `versionName = 0.3.1`, `versionCode = 23`，但 V0.3.0 Scheduler / Refresh Frontier 工程里程碑仍未关闭（D-042）。
+- V0.3.1 新合同（D-043）：控制固定为 `设备` / `开始` / `结束`；Start 自动执行连接、初始化、runtime 配置并在成功后进入 LIVE；End 由同一 session task 停止、关闭并保存，不再有独立连接/停止/导出按钮，也不强制分享 chooser。
+- V0.3.1 日志合同（D-044）：app-specific 工作目录持续流式 checkpoint；下次启动恢复 incomplete session；正常/恢复 ZIP 使用本地结束/最后持久化时间的人类可读名称，并发布到 `Download/RX400h Monitor`。不得申请 `MANAGE_EXTERNAL_STORAGE`。
+- API 26（Android 8.0）模拟器已通过 clean install、冷启动、三按钮初始状态、DevicePicker 空状态、横竖屏 reflow/scroll 与保持同一 Activity 的旋转 smoke，未见 fatal crash。exact-commit GitHub artifact、API 27 以及带已配对 OBD 的连接→LIVE→结束→公共保存/异常恢复 smoke 尚未完成，不得把本地 hash 称为远端 baseline。Android 7 因 `minSdk=26` 不支持。候选 artifact 名为 `RX400hProtocolProbe-v0.3.1-resilient-logs-debug-signed`，protocol/request/scheduler profile 保持冻结。
+
+## 17. 三角色协作入口 — 2026-08-12
+
+- Chat 使用 `CHAT_ROLE.md`：澄清需求、分类证据、生成 TASK_PACKET、决定 Work/Codex 路由。
+- Work 使用 `WORK_ROLE.md`：普通实施、本机操作、build/install/GUI/log 收集；复杂问题用 CODEX_ESCALATION_PACKET 升级。
+- Codex 使用 `AGENTS.md`：作为高级架构/疑难问题专家，采用最小充分读取与修改，完成核心修复后输出 WORK_FOLLOWUP 交回 Work。
+- 动态版本和 gate 只以 `PROJECT_STATE.md` 为准；角色卡不替代 current-state 文档。
+
+## 18. V0.3.2 调度器重建本地候选 — 2026-08-12
+
+- 用户依据 V0.3.0 E1 反馈授权重做调度器。D-046 取代 D-040：release 锚定 LIVE epoch，header 与数据请求每笔交易后重新规划，每个 release 只有一个守恒终态。
+- Git 中的 HA/HCI 是 clean-room 时序与请求链证据，不是可移植源码。实现保留严格串行 prompt 边界与 HA 的 7E0/7E2 分组事实；正常 scheduled hot path 不再把旧 `120/80/80 ms` 等待当协议常数。
+- 当前本地候选为 V0.3.2/v24，scheduler profile `v030_capacity_002`。七个请求、header、command、decoder 和 target periods 保持不变；成本种子不可信，因此 admission 为 `UNKNOWN`、运行模式为 diagnostic，rate ladder 继续封锁。
+- 最终本地 72 JVM tests 全通过，lint 0 errors / 9 warnings，assemble、manifest 与固定 v2 证书验证通过。APK SHA-256 `a8bc90fb35a2c0f8e1c41b517b9016ef42444f1102d15e2ab2518de7343bb347`；它是 base `e58d9f9` 上的 dirty build，不是 exact-commit artifact。
+- 实现已作为 `8e55c6a` 推送到 `origin/v0.3.0`；GitHub Actions run `31635798035` 在该 exact clean commit 上通过并产出 APK SHA-256 `841b1a4adb9f9e4a1834d2830dd6e94754a54cbcc3b2b3209023061da1969e9b`。尚未安装或执行车辆动作。API 27、paired-OBD connection → LIVE → End/public-save/recovery smoke 与同 periods E1 仍待完成；这些完成前不得 promotion，也不得提高频率。

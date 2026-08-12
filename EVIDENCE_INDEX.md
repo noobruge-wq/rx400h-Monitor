@@ -60,6 +60,186 @@ Unit tests: 17 passed
 
 Role: head-unit UI adjustment after V0.2.0 closure — taller top bar, centered and enlarged control buttons. No protocol or scheduler changes.
 
+### V0.3.0 UI header candidate (branch v0.3.0)
+
+```text
+Commit: 8cd2e00f39ac0862467b32a42d1eeaf6f6ee2c9a (v0.3.0)
+GitHub Actions run: 31314095899 — success
+Artifact: RX400hProtocolProbe-v0.3.0-ui-header-debug-signed
+APK SHA-256: f94ae4aafb45e57bb254074541ebe44c37d934fc4de7dce327db3a7c218ba08c
+Unit tests: 17 passed
+```
+
+Role: first V0.3.0 development build — wide-screen header becomes a single row (title / buttons / status), narrow layouts keep the two-row fallback (D-033). Layout-only; no protocol or scheduler changes.
+
+### V0.3.0 header v2 candidate (branch v0.3.0)
+
+```text
+Commit: e9479babbe2cd67711692c9970b7de116aad22cc (v0.3.0)
+GitHub Actions run: 31315386621 — success
+Artifact: RX400hProtocolProbe-v0.3.0-header-v2-debug-signed
+APK SHA-256: 27b013c68cc822c59d3f0ca5f320c7150a4c9ea5a71947fe60880ca21427f1d6
+Unit tests: 17 passed
+```
+
+Role: header v2 + Chinese display contract (D-034) — two-line fixed-size title/status text, centered buttons that do not squeeze the text zones, uniform value typography except battery MAX/MIN, POWER order 混动功率/引擎功率/转速 and permanent gray 怠速检查. Layout-only; no protocol or scheduler changes.
+
+### V0.3.0 header v3 candidate (branch v0.3.0)
+
+```text
+Commit: 6a18f18217f5ff3995b6fbb51b86a50c124c0ef5 (v0.3.0)
+GitHub Actions run: 31316526865 — success
+Artifact: RX400hProtocolProbe-v0.3.0-header-v3-debug-signed
+APK SHA-256: 399d268c3781324373b8392258c8393304c9d27ef12408cefa6879fef5d483c2
+Unit tests: 17 passed
+```
+
+Role: header v3 (D-035) — text row first (two-line title + widened multi-line status) above a full-width button row; buttons narrower/taller and squeezed by text; Chinese centered domain titles (能量域/车辆域/动力域), label/value lines and doubled fonts except battery MAX/MIN and the permanent gray 怠速检查. Layout-only; no protocol or scheduler changes.
+
+### V0.3.0 header v4 fix candidate (branch v0.3.0)
+
+```text
+Commit: 0f791110808dd62eb8b9553b95a4d0e8ee2aa79f (v0.3.0)
+GitHub Actions run: 31318586138 — success
+Artifact: RX400hProtocolProbe-v0.3.0-header-v4-debug-signed
+APK SHA-256: 347841bdbd38c37bf2fb92e7823841016a19bcf17db02da095b878edf444d5dc
+Unit tests: 17 passed
+```
+
+Role: fixes domain card child ordering — each label is immediately followed by its value line (电量/`--.-%`, 温度/`--.-°C`, 最高 最低/`--.-°C--.-°C`), matching the user's example. Layout-only.
+
+### V0.3.0 header v5 candidate (branch v0.3.0)
+
+```text
+Commit: e971ded91823754750d1d74a716cc21a287ace53 (v0.3.0)
+GitHub Actions run: 31318832012 — success
+Artifact: RX400hProtocolProbe-v0.3.0-header-v5-debug-signed
+APK SHA-256: 4dd73e132d543351f8cd8891055e6810096f30088fe85ee12dfdece2d0e8c349
+Unit tests: 17 passed
+```
+
+Role: header v5 (D-036) — buttons return inside the header row on wide screens (title / buttons / widened multi-line status), removing the separate button row so vertical space is not wasted; narrow screens keep the scrollable button row. Layout-only.
+
+### V0.3.0 header v6 candidate (branch v0.3.0)
+
+```text
+Commit: 5cc642679f6896cdea1a9a1d73703a2c1daa4072 (v0.3.0)
+GitHub Actions run: 31319195137 — success
+Artifact: RX400hProtocolProbe-v0.3.0-header-v6-debug-signed
+APK SHA-256: f192a05600d00d455460f41261d0791eefe5657e07f48ddb7331a5cee0f6455d
+Unit tests: 17 passed
+```
+
+Role: screen-proportional typography and controls (D-037) — fonts and button/header metrics scale with the screen's short side (reference 720dp, floor 0.5); factor is 1.0 on the target head unit. Layout-only.
+
+### V0.3.0 header v7 candidate (branch v0.3.0)
+
+```text
+Commit: 4df826cbae7de5c803372c22af6bb11d0d5c8ae1 (v0.3.0)
+GitHub Actions run: 31319464972 — success
+Artifact: RX400hProtocolProbe-v0.3.0-header-v7-debug-signed
+APK SHA-256: bb2b5fdc0034f626d647e25ed6a0b217efb63b446c42351b81cdb7cd6f940cf5
+Unit tests: 17 passed
+```
+
+Role: all layout elements scale with the same screen proportion (D-038) — root/card/button paddings, margins, separator, corner radius, header/button geometry, with a 1px floor; narrow fallbacks and ellipsis keep text inside the displayable area. Layout-only.
+
+### V0.3.0 responsive UI candidate (branch v0.3.0)
+
+```text
+Commit: 1cce7304921e21e0ecbdab43f852877676b88b2d (v0.3.0)
+GitHub Actions run: 31320031870 — success
+Artifact: RX400hProtocolProbe-v0.3.0-responsive-debug-signed
+APK SHA-256: 6d4873e02466d1fb492abf0c95b9cea53ffe3dd85f4401784025da9e203dff2f
+Unit tests: 19 passed (incl. ResponsiveLayoutTest)
+```
+
+Role: size-independent responsive/adaptive UI (D-039) — window-size-driven dynamic card columns (240dp min, max 3), width-based header mode, vertical scroll instead of text shrinking, live resize re-layout by bucket. Layout-only; visual pass at multiple window sizes is pending user device testing.
+
+### V0.3.0 scheduler core candidate (branch v0.3.0)
+
+```text
+Commit: fd3024011fd2d6566d42093a68cd3f9e9ffbe5d3 (v0.3.0)
+GitHub Actions run: 31320500825 — success
+Artifact: RX400hProtocolProbe-v0.3.0-scheduler-debug-signed
+APK SHA-256: 8cde4227cdc1fd45efa7f133c152b1664678bd95f9b714f023ca28ab194019fe
+Unit tests: 26 passed (incl. DeadlineSchedulerTest + LatencyWindow)
+```
+
+Role: V0.3.0 scheduler phase first candidate (D-040) — `DeadlineScheduler` (independent periods, priority/header order, deadline skip/backpressure), `LatencyWindow` P50/P95/P99, scheduler columns in `performance.csv`, `SCHEDULER_PROFILE = v030_deadline_001`. Rates still at V0.2.0 periods; real-vehicle ladder tests pending.
+
+### V0.3.0 bottom-align candidate (branch v0.3.0)
+
+```text
+Commit: 14125dd723570f2be0302074798a72d9050eaf79 (v0.3.0)
+GitHub Actions run: 31320956460 — success
+Artifact: RX400hProtocolProbe-v0.3.0-bottom-align-debug-signed
+APK SHA-256: 2b8c022c1af8b13ec8c17ce990991e0bfacb17f6db6ab672fd30b4fa28509fbb
+Unit tests: 26 passed
+```
+
+Role: equal-height cards per row (each fills the tallest card) with a bottom-anchored, viewport-filling data area so all domain frames share one bottom edge aligned to the screen bottom. UI-only.
+
+### V0.3.0 fluid responsive UI local pre-CI candidate (branch v0.3.0)
+
+```text
+Base HEAD: f1f7b2d3ab3d70fec519fc0ba4745f2981ac93e9 (v0.3.0)
+Commit: pending — intentional uncommitted worktree
+GitHub Actions run: pending
+Candidate artifact: RX400hProtocolProbe-v0.3.0-fluid-ui-debug-signed
+Local APK: app/build/outputs/apk/debug/app-debug.apk
+Local APK SHA-256: 427a1c0e1950b4154a613e1a7173f9c3c8b5ea372460affec3444dd6863d0364
+Signature: APK Signature Scheme v2; fixed certificate SHA-256 77ba84b1f4f737a5d61b910bf4386df167548b9c6ce689ed25e994c37b2bc192
+Unit tests: 38 passed (14 ResponsiveLayoutTest)
+Lint: 0 errors / 10 non-blocking warnings
+```
+
+Role: D-041 local candidate — stable native View tree, exact policy/runtime row geometry, inset-safe whole-page scrolling, component-bounded card/control contracts, safe header hysteresis, and restored POWER / active-only Idle Check contract. API 37 View testing covered phone portrait/landscape, 4:3, 16:9, 16:10, tablet, split/freeform-sized, ultra-wide, extreme-wide/short, 200dp narrow with font scale 2.0, and bidirectional threshold sweeps without Activity replacement or crash. This record is local evidence only; do not promote it to a remote build baseline until a commit and GitHub Actions signed artifact exist.
+
+### V0.3.1 resilient controls/logs local candidate
+
+```text
+Branch: v0.3.0
+App version: 0.3.1
+versionCode: 23
+Candidate artifact: RX400hProtocolProbe-v0.3.1-resilient-logs-debug-signed
+Commit: pending
+GitHub Actions run: pending
+Local APK size: 2,503,690 bytes
+Local APK SHA-256: bd3b252e09f193f3754e8f7d0597ef72841ad8e964e431ba3fd85690d0ae14a3
+Signature: APK Signature Scheme v2; fixed certificate SHA-256 77ba84b1f4f737a5d61b910bf4386df167548b9c6ce689ed25e994c37b2bc192
+Unit tests: 62 passed / 0 failed / 0 skipped
+Lint: 0 errors / 9 non-blocking warnings
+Manifest identity: applicationId com.guanyu.rx400hprobe.debug; versionName 0.3.1-debug; versionCode 23; minSdk 26; targetSdk 35
+```
+
+Role: local, dirty-worktree evidence for D-041 responsive UI plus D-043 three-button, single-owner session flow and D-044 durable checkpoints/interrupted-session recovery/public archive publication. 62 JVM tests and compile/lint/assemble/signature checks passed using JDK 17 and checksum-verified Gradle 8.9. Build provenance records base commit `f1f7b2d3ab3d70fec519fc0ba4745f2981ac93e9` and `git_dirty=true`. API 26 (Android 8.0) emulator installation, cold launch, three-control states, DevicePicker empty state, portrait/landscape reflow, scroll reachability and same-Activity rotation were exercised without fatal crash. The emulator had no paired Bluetooth OBD adapter, so it did not validate the real connect→LIVE path, legacy public-Downloads grant/deny, completed archive publication or forced-interruption recovery. Do not treat this hash as a remote baseline: exact-commit GitHub Actions, API 27 and paired-device save/recovery smoke are still pending.
+
+### V0.3.2 capacity-aware scheduler local candidate
+
+```text
+Branch: v0.3.0
+Base commit: e58d9f9dd60197882a3d41f5d78b304a52f663f7
+Implementation commit: 8e55c6afae20ca64b9ea9bba5861bc85d8017c62
+Remote branch: origin/v0.3.0
+App version: 0.3.2
+versionCode: 24
+Scheduler profile: v030_capacity_002
+Candidate artifact: RX400hProtocolProbe-v0.3.2-capacity-scheduler-debug-signed
+GitHub Actions run: 31635798035 — success
+GitHub Actions URL: https://github.com/noobruge-wq/rx400h-Monitor/actions/runs/31635798035
+CI APK size: 2,554,982 bytes
+CI APK SHA-256: 841b1a4adb9f9e4a1834d2830dd6e94754a54cbcc3b2b3209023061da1969e9b
+Local APK size: 2,557,574 bytes
+Local APK SHA-256: a8bc90fb35a2c0f8e1c41b517b9016ef42444f1102d15e2ab2518de7343bb347
+Signature: APK Signature Scheme v2; certificate SHA-256 77ba84b1f4f737a5d61b910bf4386df167548b9c6ce689ed25e994c37b2bc192
+Unit tests: 72 passed / 0 failed / 0 errors / 0 skipped
+Lint: 0 errors / 9 non-blocking warnings
+Manifest identity: applicationId com.guanyu.rx400hprobe.debug; versionName 0.3.2-debug; versionCode 24; minSdk 26; targetSdk 35
+```
+
+Role: D-046 exact-source build evidence. GitHub Actions rebuilt clean commit `8e55c6a`, passed the configured unit/lint/assemble gates, verified embedded commit/clean provenance, verified the fixed v2 signing certificate and uploaded the named artifact. The scheduler covers epoch-anchored releases, one-transaction header/request replanning, conserved per-request terminal outcomes, transport-down accounting, fail-closed admission, mutually exclusive legacy deadline/skip compatibility counters, streaming evidence and prompt-loss/I/O-failure reconnect enforcement. The seven requests, headers, commands, decoder and target periods are unchanged. Costs remain untrusted, so admission is `UNKNOWN` and rate-ladder acceleration stays blocked. The APK has not yet been installed or connected to a vehicle. Promotion still requires API 27, paired-OBD connection → LIVE → End/public-save/recovery smoke and a same-period E1 rerun.
+
 ---
 
 ## B. Void source

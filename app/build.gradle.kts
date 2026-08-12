@@ -3,6 +3,34 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val appVersionName = "0.3.2"
+
+val gitExecutable = providers.environmentVariable("RX400H_GIT_EXECUTABLE")
+    .orElse("git")
+    .get()
+
+fun checkedGitOutput(vararg arguments: String): String {
+    val output = providers.exec {
+        workingDir(rootDir)
+        commandLine(gitExecutable, *arguments)
+        isIgnoreExitValue = true
+    }
+    val result = output.result.get()
+    check(result.exitValue == 0) {
+        val detail = output.standardError.asText.get().trim()
+        "Git provenance command failed (${result.exitValue}): ${arguments.joinToString(" ")}" +
+            if (detail.isBlank()) "" else " — $detail"
+    }
+    return output.standardOutput.asText.get()
+}
+
+val gitCommit = checkedGitOutput("rev-parse", "HEAD").trim()
+check(gitCommit.matches(Regex("[0-9a-fA-F]{40}"))) {
+    "Git provenance returned an invalid commit ID: $gitCommit"
+}
+
+val gitDirty = checkedGitOutput("status", "--porcelain", "--untracked-files=normal").isNotBlank()
+
 android {
     namespace = "com.guanyu.rx400hprobe"
     compileSdk = 35
@@ -11,8 +39,11 @@ android {
         applicationId = "com.guanyu.rx400hprobe"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.2.1"
+        versionCode = 24
+        versionName = appVersionName
+        buildConfigField("String", "APP_VERSION_NAME", "\"$appVersionName\"")
+        buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")
+        buildConfigField("boolean", "GIT_DIRTY", gitDirty.toString())
     }
 
     // Fixed project debug signing key, retained from v0.1.6-v0.1.8.
@@ -44,6 +75,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    buildFeatures { buildConfig = true }
 }
 
 

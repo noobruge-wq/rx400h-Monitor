@@ -23,6 +23,8 @@ data class CommandResult(
     val responsePendingSeen: Boolean = false,
     val firstByteLatencyMs: Long? = null,
     val promptLatencyMs: Long? = null,
+    val minimumGapMs: Long = 0,
+    val gapWaitMs: Long = 0,
     val quietWindowMs: Long = 0,
     val preDrainMs: Long = 0
 )
@@ -112,4 +114,3 @@ data class ToyotaCdF3Decoded(
     val iceTorqueNm: Double,
     val rawDataHex: String
 )
-

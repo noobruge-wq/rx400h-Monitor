@@ -198,6 +198,7 @@ Never overwrite original evidence archives.
 When a conversation/project context is approaching its limit, the handoff packet is simply:
 
 ```text
+CHAT_ROLE.md or WORK_ROLE.md (according to the receiving role)
 PROJECT_STATE.md
 DECISIONS.md
 ROADMAP.md
@@ -255,7 +256,7 @@ latest required evidence not already in repository
 
 ## 14. Codex / repository access gate
 
-For Codex, startup order is expanded to:
+For a first/full Codex takeover, startup order is expanded to:
 
 ```text
 AGENTS.md
@@ -283,3 +284,23 @@ working tree clean or explicitly understood
 If authentication is missing, prefer `gh auth login --web` and system credential storage. Never request that a PAT be pasted into a project file.
 
 A failed ChatGPT connector write is not a reason to block development when local GitHub credentials work.
+
+---
+
+## 15. Chat / Work / Codex routing
+
+Stable role entrypoints:
+
+```text
+CHAT_ROLE.md
+WORK_ROLE.md
+AGENTS.md  # Codex rules
+```
+
+Chat owns product clarification, evidence classification, scope, acceptance criteria and the project-specific `TASK_PACKET`. Work owns ordinary implementation, build/install/adb/logcat/GUI operation and defined regression. Codex is reserved for repository-level difficult work: architecture, high-risk refactoring, large call chains, concurrency/lifecycle/state machines, performance core, CAN/ISO-TP/ELM327/Bluetooth, protocol parsing and Work investigations that have reached an evidence-backed impasse.
+
+Work must not upgrade on the first ordinary compile error. It first reports the complete first project error, relevant file/function/diff and attempted local fixes. Conversely, Work must not continue blind trial-and-error once a task crosses the escalation threshold; it sends the `CODEX_ESCALATION_PACKET` defined in `WORK_ROLE.md`.
+
+Codex begins from the packet and specified direct call chain. It expands repository reading only when the supplied evidence is insufficient. After resolving the core issue, Codex returns a `WORK_FOLLOWUP` with changed files, root cause, build/install/test steps, acceptance criteria and exact evidence to collect on failure. Work then owns routine execution and regression.
+
+Fast-changing version/HEAD/test/gate state remains in `PROJECT_STATE.md`; role cards contain stable routing and safety constraints only.

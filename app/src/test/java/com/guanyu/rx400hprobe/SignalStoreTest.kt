@@ -49,4 +49,35 @@ class SignalStoreTest {
         assertEquals(SignalStatus.DECODE_ERROR, store.baseline.rpm.status)
         assertNull(store.baseline.rpm.value)
     }
+
+    @Test
+    fun nullOutcomePublishesAQualityChangeEvenWithoutAValue() {
+        val store = SignalStore(clock = { 100L })
+        val noData = CommandResult("TEST", emptyList(), "", 0L, TransactionStatus.NO_DATA, true)
+        store.update(store.baseline.coolantC, null, "TEST", noData)
+        assertEquals(1L, store.baseline.coolantC.version)
+        assertEquals(SignalStatus.NO_DATA, store.baseline.coolantC.status)
+
+        store.update(store.baseline.coolantC, null, "TEST", noData)
+        assertEquals(1L, store.baseline.coolantC.version)
+    }
+
+    @Test
+    fun clearRemovesAllRunStateAndVersions() {
+        val store = SignalStore(clock = { 100L })
+        val ok = CommandResult("TEST", emptyList(), "", 0L, TransactionStatus.OK, true)
+        store.update(store.baseline.rpm, 1000.0, "TEST", ok)
+        store.setDerived(store.hybrid.idleCheckActive, true, "IDLE_CHECK")
+
+        store.clear()
+
+        assertNull(store.baseline.rpm.value)
+        assertNull(store.baseline.rpm.updatedAtElapsedMs)
+        assertNull(store.baseline.rpm.source)
+        assertEquals(SignalStatus.IDLE, store.baseline.rpm.status)
+        assertEquals(0L, store.baseline.rpm.version)
+        assertNull(store.hybrid.idleCheckActive.value)
+        assertEquals(SignalStatus.IDLE, store.hybrid.idleCheckActive.status)
+        assertEquals(0L, store.hybrid.idleCheckActive.version)
+    }
 }

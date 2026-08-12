@@ -44,6 +44,7 @@ internal data class DashboardStatus(
     val mode: String,
     val logging: String,
     val reconnectCount: Int,
+    val notice: String?,
     val error: String?,
     val warning: Boolean
 )
