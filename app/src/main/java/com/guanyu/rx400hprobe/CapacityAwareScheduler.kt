@@ -46,7 +46,7 @@ internal class DeadlineScheduler(
 
     private val states = List(specs.size) { RequestState() }
     private val terminalQueue = ArrayDeque<SchedulerDecision.TerminalBatch>()
-    private val observedHeaderSetup = linkedMapOf<String, LatencyWindow>()
+    private val observedHeaderSetup = linkedMapOf<SchedulerHeaderTransition, LatencyWindow>()
 
     private var running = false
     private var transportAvailable = true
@@ -216,7 +216,9 @@ internal class DeadlineScheduler(
         val state = states[dispatch.specIndex]
         state.headerSwitches = saturatedAdd(state.headerSwitches, 1L)
         observedHeaderSetup
-            .getOrPut(headerTransitionKey(dispatch.fromHeader, dispatch.toHeader)) { LatencyWindow(32) }
+            .getOrPut(SchedulerHeaderTransition(dispatch.fromHeader, dispatch.toHeader)) {
+                LatencyWindow(32)
+            }
             .add(actualSetupMs)
         state.setup.add(actualSetupMs)
         headerInFlight = null
@@ -585,9 +587,9 @@ internal class DeadlineScheduler(
 
     private fun predictedSetupMs(currentHeader: String?, requiredHeader: String?): Long {
         if (requiredHeader == null || requiredHeader == currentHeader) return 0L
-        val observed = observedHeaderSetup[headerTransitionKey(currentHeader, requiredHeader)]
+        val observed = observedHeaderSetup[SchedulerHeaderTransition(currentHeader, requiredHeader)]
             ?.percentile(0.95) ?: 0L
-        return maxOf(costModel.headerSetupMs(), observed)
+        return maxOf(costModel.headerSetupMs(currentHeader, requiredHeader), observed)
     }
 
     private fun requireInFlight(token: ReleaseToken): InFlight {
@@ -632,9 +634,6 @@ internal class DeadlineScheduler(
         specIndex, firstSequence, count, firstReleaseAtMs, lastReleaseAtMs,
         outcome, reason, recordedAtMs
     )
-
-    private fun headerTransitionKey(from: String?, to: String?): String =
-        "${from ?: "NONE"}->${to ?: "NONE"}"
 
     companion object {
         private fun releaseCountThrough(firstMs: Long, throughMs: Long, periodMs: Long): Long {
@@ -757,23 +756,85 @@ internal data class SchedulerCostEstimate(
     }
 }
 
+/**
+ * One directed ELM header change. A null [fromHeader] is a cold start, not a
+ * periodic switch, and is intentionally kept distinct in the cost model.
+ */
+internal data class SchedulerHeaderTransition(
+    val fromHeader: String?,
+    val toHeader: String
+) {
+    init {
+        require(fromHeader == null || fromHeader.isNotBlank())
+        require(toHeader.isNotBlank())
+        require(fromHeader != toHeader)
+    }
+}
+
 internal data class SchedulerCostModel(
     val modelId: String,
     val sourceEvidenceId: String,
     val requestCosts: Map<String, SchedulerCostEstimate>,
-    val headerSetupCost: SchedulerCostEstimate
+    val headerSetupCost: SchedulerCostEstimate,
+    val periodicHeaderCosts: Map<SchedulerHeaderTransition, SchedulerCostEstimate> = emptyMap(),
+    val coldStartHeaderCosts: Map<String, SchedulerCostEstimate> = emptyMap()
 ) {
+    init {
+        require(modelId.isNotBlank())
+        require(sourceEvidenceId.isNotBlank())
+        require(periodicHeaderCosts.keys.all { it.fromHeader != null }) {
+            "Cold-start costs belong in coldStartHeaderCosts"
+        }
+        require(coldStartHeaderCosts.keys.all { it.isNotBlank() })
+    }
+
     fun requestMs(spec: ScheduledSpec): Long = requireNotNull(requestCosts[spec.id]) {
         "Missing request cost for ${spec.id}"
     }.p95Ms
 
+    /** Backwards-compatible scalar accessor for older diagnostic/test models. */
     fun headerSetupMs(): Long = headerSetupCost.p95Ms
 
-    fun isTrustedFor(specs: List<ScheduledSpec>, minimumSamples: Int): Boolean =
-        headerSetupCost.trusted && headerSetupCost.sampleCount >= minimumSamples &&
-            specs.all { spec ->
-                requestCosts[spec.id]?.let { it.trusted && it.sampleCount >= minimumSamples } == true
-            }
+    /**
+     * Uses an exact periodic direction when present. Cold start is a one-off
+     * bounded planning fallback and is deliberately not treated as periodic
+     * p95 evidence. If only legacy scalar evidence exists, it remains usable.
+     */
+    fun headerSetupMs(fromHeader: String?, toHeader: String): Long {
+        if (fromHeader == toHeader) return 0L
+        if (fromHeader == null) {
+            if (coldStartHeaderCosts.isEmpty()) return headerSetupCost.p95Ms
+            return requireNotNull(coldStartHeaderCosts[toHeader]) {
+                "Missing cold-start header cost for $toHeader"
+            }.p95Ms
+        }
+        return periodicHeaderCosts[SchedulerHeaderTransition(fromHeader, toHeader)]?.p95Ms
+            ?: headerSetupCost.p95Ms
+    }
+
+    fun isTrustedFor(specs: List<ScheduledSpec>, minimumSamples: Int): Boolean {
+        val requestsTrusted = specs.all { spec ->
+            requestCosts[spec.id]?.let { it.trusted && it.sampleCount >= minimumSamples } == true
+        }
+        if (!requestsTrusted) return false
+
+        if (periodicHeaderCosts.isEmpty()) {
+            return headerSetupCost.trusted && headerSetupCost.sampleCount >= minimumSamples
+        }
+
+        val headers = specs.mapNotNull { it.header }.distinct()
+        if (!headers.all(coldStartHeaderCosts::containsKey)) return false
+        val requiredPeriodicTransitions = headers.flatMap { from ->
+            headers.filter { it != from }.map { to -> SchedulerHeaderTransition(from, to) }
+        }
+        // coldStartHeaderCosts are exceptional conservative bounds. Their low
+        // sample count neither establishes periodic trust nor blocks it.
+        return requiredPeriodicTransitions.all { transition ->
+            periodicHeaderCosts[transition]?.let {
+                it.trusted && it.sampleCount >= minimumSamples
+            } == true
+        }
+    }
 }
 
 internal enum class AdmissionState { UNKNOWN, ADMITTED, OVERLOADED }

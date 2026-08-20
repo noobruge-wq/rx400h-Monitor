@@ -372,3 +372,13 @@ Codex 必须先证明它已经能回答：
 - 当前本地候选为 V0.3.2/v24，scheduler profile `v030_capacity_002`。七个请求、header、command、decoder 和 target periods 保持不变；成本种子不可信，因此 admission 为 `UNKNOWN`、运行模式为 diagnostic，rate ladder 继续封锁。
 - 最终本地 72 JVM tests 全通过，lint 0 errors / 9 warnings，assemble、manifest 与固定 v2 证书验证通过。APK SHA-256 `a8bc90fb35a2c0f8e1c41b517b9016ef42444f1102d15e2ab2518de7343bb347`；它是 base `e58d9f9` 上的 dirty build，不是 exact-commit artifact。
 - 实现已作为 `8e55c6a` 推送到 `origin/v0.3.0`；GitHub Actions run `31635798035` 在该 exact clean commit 上通过并产出 APK SHA-256 `841b1a4adb9f9e4a1834d2830dd6e94754a54cbcc3b2b3209023061da1969e9b`。尚未安装或执行车辆动作。API 27、paired-OBD connection → LIVE → End/public-save/recovery smoke 与同 periods E1 仍待完成；这些完成前不得 promotion，也不得提高频率。
+
+## 19. V0.3.3/v25 本地实现候选 — 2026-08-21
+
+- 已安装/既有实车证据仍归属 V0.3.2/v24；当前本地源码、Gradle 与 workflow artifact 身份已推进到 V0.3.3/v25，但尚未 promotion。
+- D-049：首屏显式 `RECOVERING`；已发布的稳定终态使用有界 metadata fast path，待恢复、缺失或不一致的记录仍走完整 ZIP/manifest/SHA/session 校验。
+- D-050：End、`onDestroy`、worker finally 与 logger 共享 first-writer-wins 的 `finalize_intent.json`；USER_END 不再被后来的 Activity 销毁改写。终止后普通事件入口关闭，START_FAILED 保留已有字节并以 `evidence_complete=false` 可重试打包。
+- D-051：只在 API27 `sprd/sp7731e_1h10_native/sp7731e_1h10` + 大小写匹配的 `OBDLink MX+` 家族上选择版本化方向成本模型；不适用或缺成本回到 `UNKNOWN`。冻结 60 秒 replay 为 `ADMITTED`、projected utilization `0.906533`、0 miss/0 reject，七个请求周期完全不变。
+- D-052：前后校时只追加 `CLOCK_ADJUSTMENT` 证据，不参与 scheduler、freshness、Idle Check、checkpoint 或生命周期真值。D-047 固定 CRT Green 已整合，仍是轻量 Android View presentation skin。
+- 本地生产/测试源码编译通过；刚编译的 98 项 JUnit 直接运行全部通过；lint 0 errors / 9 warnings；dirty-worktree V0.3.3-debug/v25 assemble、manifest 与固定 v2 证书验证通过。Gradle test worker 在当前 Windows/Unicode 路径上因 `GradleWorkerMain`/pipe 启动器故障无法运行，必须与测试失败区分记录。
+- 下一 gate 是 exact-commit 本地 artifact、响应式 GUI smoke，以及实际 V0.3.3/v25 API27 connection → LIVE → End/public-save 和强制中断恢复。不得提高频率，不得把本地候选称为 baseline；除非用户另行授权，不 push/PR/release。

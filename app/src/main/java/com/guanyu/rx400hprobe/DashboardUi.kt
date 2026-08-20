@@ -1,9 +1,7 @@
 package com.guanyu.rx400hprobe
 
 import android.app.Activity
-import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
@@ -61,11 +59,17 @@ internal class DashboardUi(
     private val cardTitles = mutableListOf<TextView>()
     private val metricBlocks = mutableListOf<LinearLayout>()
     private val autoSizeTargets = mutableListOf<AutoSizeTarget>()
+    private val glowTargets = mutableListOf<GlowTarget>()
     private var lastSnapshot: DashboardSnapshot? = null
 
-    private val valueColor = Color.rgb(125, 255, 175)
-    private val dimColor = Color.rgb(95, 205, 175)
-    private val titleColor = Color.rgb(70, 215, 210)
+    private val valueColor = activity.getColor(R.color.crt_green_primary)
+    private val brightColor = activity.getColor(R.color.crt_green_bright)
+    private val dimColor = activity.getColor(R.color.crt_green_dim)
+    private val mutedColor = activity.getColor(R.color.crt_green_muted)
+    private val frameColor = activity.getColor(R.color.crt_green_frame)
+    private val glowColor = activity.getColor(R.color.crt_glow)
+    private val titleColor = brightColor
+    private val surfaceColor = activity.getColor(R.color.crt_surface)
 
     private var insetLeftPx = 0
     private var insetTopPx = 0
@@ -93,11 +97,11 @@ internal class DashboardUi(
         buildDomainCards().forEach { cardGrid.addView(it) }
 
         separatorView = View(activity).apply {
-            setBackgroundColor(Color.rgb(20, 125, 115))
+            setBackgroundColor(frameColor)
         }
         contentLayout = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(2, 8, 7))
+            setBackgroundColor(activity.getColor(R.color.crt_black))
             addView(
                 header,
                 LinearLayout.LayoutParams(
@@ -115,7 +119,7 @@ internal class DashboardUi(
             )
         }
         val scroll = ScrollView(activity).apply {
-            setBackgroundColor(Color.rgb(2, 8, 7))
+            setBackgroundColor(activity.getColor(R.color.crt_black))
             isFillViewport = true
             isVerticalScrollBarEnabled = true
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
@@ -127,7 +131,16 @@ internal class DashboardUi(
                 )
             )
         }
-        root = scroll
+        root = CrtScreenLayout(activity).apply {
+            setBackgroundColor(activity.getColor(R.color.crt_black))
+            addView(
+                scroll,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
 
         applyPhysicalMetrics()
         applyWindowLayout(
@@ -182,9 +195,9 @@ internal class DashboardUi(
         statusProtoText.setStatusText("协议${modeText(status.mode)}")
         statusDataText.setStatusText("数据${loggingText(status.logging)}$reconnect$notice$error")
         val stateColor = when {
-            status.warning -> Color.rgb(255, 185, 80)
-            status.connection == "CONNECTED" -> Color.rgb(105, 240, 195)
-            else -> Color.rgb(130, 160, 150)
+            status.warning -> activity.getColor(R.color.crt_warning)
+            status.connection == "CONNECTED" -> brightColor
+            else -> mutedColor
         }
         statusBleText.setTextColor(stateColor)
         statusProtoText.setTextColor(stateColor)
@@ -192,9 +205,14 @@ internal class DashboardUi(
     }
 
     fun setControlState(state: MonitorControlState) {
-        deviceButton.isEnabled = state.deviceEnabled
-        startButton.isEnabled = state.startEnabled
-        endButton.isEnabled = state.endEnabled
+        deviceButton.applyControlAvailability(state.deviceEnabled)
+        startButton.applyControlAvailability(state.startEnabled)
+        endButton.applyControlAvailability(state.endEnabled)
+    }
+
+    private fun Button.applyControlAvailability(enabled: Boolean) {
+        isEnabled = enabled
+        isFocusable = enabled
     }
 
     /** Existing views survive rotation, split-screen and freeform changes. */
@@ -217,14 +235,17 @@ internal class DashboardUi(
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.START or Gravity.CENTER_VERTICAL
         addView(styledText("RX400h", 1).apply {
-            setTextColor(valueColor)
+            setTextColor(brightColor)
+            letterSpacing = 0.055f
+            crtGlow(1.2f)
             autoSize(
                 ResponsiveLayout.TypographyBounds().headerTitleMinSp,
                 ResponsiveLayout.TypographyBounds().headerTitleMaxSp
             )
         })
         addView(styledText("MONITOR", 1).apply {
-            setTextColor(Color.rgb(110, 235, 205))
+            setTextColor(dimColor)
+            letterSpacing = 0.09f
             autoSize(
                 ResponsiveLayout.TypographyBounds().headerSubtitleMinSp,
                 ResponsiveLayout.TypographyBounds().headerSubtitleMaxSp
@@ -238,13 +259,13 @@ internal class DashboardUi(
         statusDeviceText = styledText("未选择设备", 2).apply {
             gravity = Gravity.END
             ellipsize = TextUtils.TruncateAt.END
-            setTextColor(Color.rgb(220, 235, 225))
+            setTextColor(valueColor)
             autoSize(14, 18)
         }
         fun statusLine(): TextView = styledText("", 2).apply {
             gravity = Gravity.END
             ellipsize = TextUtils.TruncateAt.END
-            setTextColor(Color.rgb(130, 160, 150))
+            setTextColor(mutedColor)
             autoSize(
                 ResponsiveLayout.TypographyBounds().statusMinSp,
                 ResponsiveLayout.TypographyBounds().statusMaxSp
@@ -296,6 +317,7 @@ internal class DashboardUi(
         val titleView = styledText(title, 2).apply {
             gravity = Gravity.CENTER
             setTextColor(titleColor)
+            crtGlow(0.9f)
             autoSize(
                 ResponsiveLayout.TypographyBounds().cardTitleMinSp,
                 ResponsiveLayout.TypographyBounds().cardTitleMaxSp
@@ -367,6 +389,7 @@ internal class DashboardUi(
     private fun valueText(initial: String, detail: Boolean): TextView = styledText(initial, Int.MAX_VALUE).apply {
         gravity = Gravity.CENTER
         setTextColor(if (detail) dimColor else valueColor)
+        if (!detail) crtGlow(0.8f)
         val bounds = ResponsiveLayout.TypographyBounds()
         if (detail) autoSize(bounds.detailMinSp, bounds.detailMaxSp)
         else autoSize(bounds.valueMinSp, bounds.valueMaxSp)
@@ -385,6 +408,14 @@ internal class DashboardUi(
         maxLines = 3
         gravity = Gravity.CENTER
         isAllCaps = false
+        typeface = Typeface.MONOSPACE
+        letterSpacing = 0.08f
+        background = crtButtonBackground(activity)
+        setTextColor(crtButtonTextColors(activity))
+        stateListAnimator = null
+        elevation = 0f
+        defaultFocusHighlightEnabled = false
+        crtGlow(0.7f)
         setHorizontallyScrolling(false)
         autoSize(
             ResponsiveLayout.TypographyBounds().buttonMinSp,
@@ -397,6 +428,16 @@ internal class DashboardUi(
         val target = AutoSizeTarget(this, minSp, maxSp)
         autoSizeTargets.add(target)
         applyAutoSize(target)
+    }
+
+    private fun TextView.crtGlow(radiusDp: Float) {
+        val target = GlowTarget(this, radiusDp)
+        glowTargets.add(target)
+        applyGlow(target)
+    }
+
+    private fun applyGlow(target: GlowTarget) {
+        target.view.setShadowLayer(dpFloat(target.radiusDp), 0f, 0f, glowColor)
     }
 
     private fun applyAutoSizeTargets() {
@@ -475,15 +516,21 @@ internal class DashboardUi(
         cards.forEach { card ->
             card.minimumHeight = dp(ResponsiveLayout.CARD_MIN_HEIGHT_DP)
             card.setPadding(cardPadding, cardPadding, cardPadding, cardPadding)
-            card.background = GradientDrawable().apply {
-                setColor(Color.rgb(3, 14, 12))
-                setStroke(dp(1), Color.rgb(30, 205, 175))
-                cornerRadius = dp(8).toFloat()
-            }
+            card.background = CrtFrameDrawable(
+                fillColor = surfaceColor,
+                strokeColor = frameColor,
+                cornerColor = brightColor,
+                strokeWidthPx = dpFloat(1f),
+                cornerLengthPx = dpFloat(11f),
+                cornerInsetPx = dpFloat(2f)
+            )
         }
         cardTitles.forEach { it.setPadding(0, 0, 0, dp(8)) }
         metricBlocks.forEach { it.setPadding(0, dp(3), 0, dp(3)) }
+        glowTargets.forEach(::applyGlow)
         listOf(deviceButton, startButton, endButton).forEach { button ->
+            button.background = crtButtonBackground(activity)
+            button.setTextColor(crtButtonTextColors(activity))
             button.minHeight = dp(ResponsiveLayout.CONTROL_MIN_HEIGHT_DP)
             button.minimumHeight = dp(ResponsiveLayout.CONTROL_MIN_HEIGHT_DP)
             button.minWidth = dp(ResponsiveLayout.CONTROL_MIN_WIDTH_DP)
@@ -496,6 +543,7 @@ internal class DashboardUi(
         if (connection == "CONNECTED") "已连接" else "未连接"
 
     private fun modeText(mode: String): String = when (mode) {
+        "RECOVERING" -> "恢复旧记录"
         "LIVE" -> "实时"
         "PERMISSION" -> "等待授权"
         "CONNECTING" -> "连接中"
@@ -535,7 +583,12 @@ internal class DashboardUi(
     private fun dp(value: Int): Int =
         (value * activity.resources.displayMetrics.density + 0.5f).toInt().coerceAtLeast(if (value > 0) 1 else 0)
 
+    private fun dpFloat(value: Float): Float =
+        value * activity.resources.displayMetrics.density.coerceAtLeast(0.1f)
+
     private data class AutoSizeTarget(val view: TextView, val minSp: Int, val maxSp: Int)
+
+    private data class GlowTarget(val view: TextView, val radiusDp: Float)
 
     private data class WindowToken(
         val insetLeftPx: Int,

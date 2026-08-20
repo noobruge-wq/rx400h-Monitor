@@ -1,0 +1,18 @@
+<resources>
+    <color name="crt_black">#010402</color>
+    <color name="crt_surface">#020805</color>
+    <color name="crt_panel_pressed">#092512</color>
+    <color name="crt_panel_disabled">#020704</color>
+
+    <color name="crt_green_bright">#9CFFAA</color>
+    <color name="crt_green_primary">#70F58B</color>
+    <color name="crt_green_dim">#45B963</color>
+    <color name="crt_green_muted">#41995A</color>
+    <color name="crt_green_frame">#48E06D</color>
+    <color name="crt_green_disabled">#285D37</color>
+    <color name="crt_glow">#6658FF78</color>
+
+    <color name="crt_warning">#E8C66A</color>
+    <color name="crt_scanline">#14000000</color>
+    <color name="crt_edge_shade">#30000000</color>
+</resources>

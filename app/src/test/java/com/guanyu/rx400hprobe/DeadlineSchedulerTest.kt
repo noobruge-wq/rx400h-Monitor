@@ -240,6 +240,72 @@ class DeadlineSchedulerTest {
     }
 
     @Test
+    fun trustedSampleThresholdIsInclusiveAtTwenty() {
+        assertEquals(
+            AdmissionState.UNKNOWN,
+            CapacityAdmission.assess(specs, model(trusted = true, samples = 19)).state
+        )
+        assertEquals(
+            AdmissionState.ADMITTED,
+            CapacityAdmission.assess(specs, model(trusted = true, samples = 20)).state
+        )
+    }
+
+    @Test
+    fun coldStartBoundDoesNotMasqueradeAsPeriodicTrustOrInflateEverySwitch() {
+        val directionAware = SchedulerCostModel(
+            modelId = "direction-aware",
+            sourceEvidenceId = "synthetic",
+            requestCosts = specs.associate {
+                it.id to SchedulerCostEstimate(50L, 40, true)
+            },
+            headerSetupCost = SchedulerCostEstimate(116L, 80, true),
+            periodicHeaderCosts = mapOf(
+                SchedulerHeaderTransition("7E0", "7E2") to
+                    SchedulerCostEstimate(65L, 40, true),
+                SchedulerHeaderTransition("7E2", "7E0") to
+                    SchedulerCostEstimate(116L, 40, true)
+            ),
+            coldStartHeaderCosts = mapOf(
+                "7E0" to SchedulerCostEstimate(154L, 2, false),
+                "7E2" to SchedulerCostEstimate(154L, 0, false)
+            )
+        )
+
+        assertEquals(154L, directionAware.headerSetupMs(null, "7E0"))
+        assertEquals(154L, directionAware.headerSetupMs(null, "7E2"))
+        assertEquals(65L, directionAware.headerSetupMs("7E0", "7E2"))
+        assertEquals(116L, directionAware.headerSetupMs("7E2", "7E0"))
+        assertEquals(true, directionAware.isTrustedFor(specs, 20))
+
+        val incompletePeriodic = directionAware.copy(
+            periodicHeaderCosts = directionAware.periodicHeaderCosts +
+                (SchedulerHeaderTransition("7E0", "7E2") to
+                    SchedulerCostEstimate(65L, 19, true))
+        )
+        assertEquals(
+            AdmissionState.UNKNOWN,
+            CapacityAdmission.assess(specs, incompletePeriodic).state
+        )
+        assertEquals(
+            AdmissionState.UNKNOWN,
+            CapacityAdmission.assess(
+                specs,
+                directionAware.copy(coldStartHeaderCosts = emptyMap())
+            ).state
+        )
+        assertEquals(
+            AdmissionState.UNKNOWN,
+            CapacityAdmission.assess(
+                specs,
+                directionAware.copy(
+                    coldStartHeaderCosts = directionAware.coldStartHeaderCosts - "7E2"
+                )
+            ).state
+        )
+    }
+
+    @Test
     fun missingCostEntryIsUnknownInsteadOfThrowing() {
         val incomplete = SchedulerCostModel(
             "missing", "synthetic", emptyMap(), SchedulerCostEstimate(10L, 40, true)

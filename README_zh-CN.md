@@ -1,6 +1,6 @@
-# RX400h Monitor V0.2.1 — Reactive Core（UI 调整版）
+# RX400h Monitor — V0.3.0 Scheduler / Refresh Frontier 开发分支
 
-> **状态：V0.2.0 基线已关闭，V0.2.1 为头部栏/按钮 UI 调整。** V0.1.10 为历史实车验证基线。V0.2.x 不改变车辆请求白名单，也不提高轮询频率；下一版本为 V0.3.0 High-Performance Scheduler。
+> **状态：V0.2.0 仍是已关闭的工程基线；V0.1.10 是历史实车验证基线。** 当前已安装/实车证据候选为 V0.3.2/v24，当前本地源码候选为 V0.3.3/v25（恢复、生命周期、可信成本、校时观察与 CRT Green 整合），尚未 promotion。车辆请求白名单、decoder、SignalStore 与七个轮询周期保持冻结，rate ladder 未授权。
 
 ## V0.2.0 做什么
 

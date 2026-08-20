@@ -605,3 +605,125 @@ Admission is fail-closed. A complete trusted p95 cost model is assessed over the
 **Reason:** The V0.3.0 E1 archive showed 4,248 scheduled executions in about 2,850 seconds (1.49/s) against 5.033/s frozen nominal demand, 2,270 header commands, and 2,856/2,856 legacy miss/skip counters. Source review proved those two counters were incremented in the same branch, long stalls counted only once per request scan, batch members were not rechecked after queueing, and both success and skip rebased cadence on the current/completion time. Even before header cost, the old fixed waits make the frozen demand physically infeasible. HA/HCI supplies a clean-room feasible serial working point and header-group sequence, but not HA scheduler source or per-command p95 values; it justifies removing the false wait assumption, not claiming capacity admission prematurely.
 
 **Consequences:** The app candidate advances to `versionName = 0.3.2`, `versionCode = 24`, with scheduler profile `v030_capacity_002`; protocol profile, decoder, seven-request whitelist and target periods remain unchanged. D-040's implementation semantics are superseded, while its no-catch-up and bounded-memory goals remain. Deterministic tests must cover absolute cadence, long stalls, conservation, deadline boundaries, header-aware replanning, ATRV header neutrality, transport downtime, capacity admission and E1-like overload. The new candidate is not a promoted baseline until exact-commit CI, API 27, paired-OBD connection/LIVE/End/public-save/recovery smoke, and a same-period E1 rerun show auditable per-request behavior.
+
+---
+
+## D-047 — CRT Green remains a bounded presentation skin over D-041
+
+**Status:** Integrated in the local V0.3.3 candidate; promotion pending — 2026-08-21
+
+**Decision:** Restyle the existing D-041 dashboard as one fixed CRT Green prototype without introducing a generalized theme system. Keep the stable Android View tree and all responsive geometry policies. Use a near-black surface, a small monochrome phosphor-green palette, thin rectangular frames with restrained corner accents, state-aware terminal-style buttons, subtle static scanlines and a low-radius text glow. Effects must be preallocated or static, must not schedule animation frames, and must not require Compose, WebView, runtime blur, a shader framework or a new dependency.
+
+The renderer continues to consume only `DashboardSnapshot`, `DashboardStatus` and `MonitorControlState`. The exact controls, fields, units, order, freshness indication and active-only Idle Check behavior do not change. Existing warning semantics may retain one restrained amber state; presentation styling must not create new vehicle or safety meaning.
+
+**Reason:** The user supplied a concrete monochrome CRT reference and requested a low-cost presentation prototype. The current `DashboardUi` / presentation contract already permits replacing visual treatment without changing vehicle truth. Keeping this as a bounded skin proves that separation and avoids coupling a visual experiment to the open scheduler and lifecycle work.
+
+**Consequences:** Production core, protocol, decoder, SignalStore, logger and session ownership were untouched while the prototype was evaluated. The completed local test/lint/assemble/signature and responsive GUI evidence is sufficient to integrate this fixed skin into the next V0.3.3 candidate without creating a theme system. Readability overrides scanline/glow strength. The V0.3.3 integration may advance build identity only under D-048 and authorizes neither Git publication nor a final multi-theme architecture.
+
+---
+
+## D-048 — V0.3.3/v25 is a bounded reliability, admission-data and CRT integration candidate
+
+**Status:** Implemented as the local V0.3.3/v25 candidate; promotion pending — 2026-08-21
+
+**Decision:** Advance the next installable candidate inside the still-open V0.3.0 Scheduler / Refresh Frontier milestone to `versionName = 0.3.3`, `versionCode = 25`. V0.3.3 combines only these already-scoped items:
+
+1. the startup-recovery fast path and explicit `RECOVERING` state in D-049;
+2. one exactly-once logical terminalization owner for End/onDestroy/finalize in D-050;
+3. a versioned trusted API 27 p95 scheduler-cost model at the unchanged request periods in D-051;
+4. observational wall-clock-adjustment evidence in D-052; and
+5. integration of the accepted fixed CRT Green presentation from D-047.
+
+The current source and APK remain V0.3.2/v24 until the implementation stage actually changes and verifies build identity. This docs-first decision does not itself promote V0.3.3, close V0.3.0, authorize a rate ladder, or claim a new engineering baseline.
+
+**Reason:** The API 27 same-period sessions show that the reconstructed scheduler can run the frozen demand cleanly, while startup recovery still performs work that is too broad for every launch, `SAVING` does not honestly describe recovery, and End/Activity destruction can compete around finalization. The accepted CRT prototype is ready to ship with those bounded corrections. A new app version is required so evidence cannot be confused with V0.3.2/v24.
+
+**Consequences:** The frozen vehicle contract is unchanged: no new command/header, no protocol-profile or decoder-formula change, no `SignalStore` semantic change, and no request-table period/phase/deadline change. The exact periods remain `std_core=800 ms`, `cd_f3=1000 ms`, `coolant=3000 ms`, `c3=800 ms`, `c4=1500 ms`, `cf=5000 ms`, `atrv=3000 ms`. This decision authorizes local implementation and verification only; it does not authorize commit, push, PR, release publication or vehicle action.
+
+---
+
+## D-049 — Startup recovery has an explicit phase and a metadata fast path
+
+**Status:** Implemented locally; target-device validation pending — 2026-08-21
+
+**Decision:** Add `RECOVERING` as a first-class monitor/session phase, distinct from normal-session `SAVING`. On cold start the UI enters `RECOVERING`, reports that prior logs are being checked, and keeps all three controls unavailable until classification completes. Recovery work remains off the UI thread and remains serialized against any live/finalizing logger owner.
+
+The startup classifier first reads only bounded atomic metadata. A directory in a stable terminal status (`completed`, `interrupted` or `start_failed`), with the expected immutable archive matching identity/name/recorded size and a parseable bound publication receipt, may take the already-published fast path without recomputing the archive SHA-256 or opening every ZIP entry at every launch. This does not upgrade interrupted/start-failed evidence to complete; it only recognizes that its immutable archive and public receipt are no longer pending work. Missing/invalid metadata, non-terminal status, missing/size-mismatched archive, absent/invalid receipt or any recovery/publication-pending condition enters the existing slow path, which retains full ZIP/manifest/size/SHA/session validation before recovery or publication. The fast path makes no new post-publication bit-rot claim; it reuses the integrity result already committed by finalization/publication and must never discard or rewrite acquisition evidence.
+
+**Reason:** A growing history of already completed/published sessions must not make each app launch hash every old ZIP or present recovery as ordinary saving. Recovery correctness still requires deep validation for actual candidates, but healthy terminal history is not a recovery candidate.
+
+**Consequences:** No database, unbounded index, service or new dependency is implied; prefer the existing atomic session/receipt records. Tests must prove that healthy completed history avoids deep hashing, suspicious/pending sessions still take the validating path, Activity replacement cannot race the recovery worker, and the phase returns deterministically to `IDLE` or the existing save-failed/retry state.
+
+---
+
+## D-050 — End, onDestroy and finalize share one exactly-once logical terminalization owner
+
+**Status:** Implemented locally; forced-recovery validation pending — 2026-08-21
+
+**Decision:** One session-scoped atomic terminalization claim owns stop reason, transport close, final event sequence, durable checkpoint, archive finalization and automatic publication. User End and `onDestroy` submit intent to that same owner; neither may independently close/reclassify/finalize the logger after the claim is held. A previously latched user End remains `USER_END` if Activity destruction follows it. Activity destruction without a prior normal End is an interruption reason, but, while the process is alive, it still runs through the same idempotent terminalization pipeline instead of bypassing finalization and separately invoking logger shutdown.
+
+Exactly once means one logical terminal transition and at most one promoted internal archive/publication receipt per session in one process. The atomic `finalize_intent.json` is the canonical logical terminal claim. Normal in-process completion also writes one `SESSION_END` row. If the process dies after the intent is durable but before that event batch is durable, recovery preserves the claimed kind/reason, records that the event was not durable, and keeps `evidence_complete=false`; it does not invent a back-dated `SESSION_END`. Filesystem operations remain retry-idempotent so process death at any boundary is completed by next-launch recovery. This does not upgrade arbitrary SAF providers to a cross-process exactly-once guarantee; D-044's documented external-write-to-receipt best-effort window remains.
+
+**Reason:** The current Activity finally block may return when destruction is observed while `onDestroy` separately asks the logger to shut down. That conservative behavior preserves evidence but can turn a user-ended run into next-launch interrupted recovery and makes competing completion paths difficult to reason about.
+
+**Consequences:** Tests must race repeated End, End followed by onDestroy, onDestroy during connect/LIVE/finalize/publish, Activity replacement and retry after process-death checkpoints. They must assert one canonical terminal claim, exactly one `SESSION_END` on the uninterrupted path, no post-terminal writes, one internal archive identity, content-hash-deduplicated public output, and honest downgraded recovery when the process dies before the event batch or terminal receipt.
+
+---
+
+## D-051 — Trusted scheduler costs are versioned API 27 evidence, not period tuning
+
+**Status:** Implemented locally; exact-artifact and target-device holdout pending — 2026-08-21
+
+**Decision:** Replace the zero-sample diagnostic seed only with a named, versioned cost-model record derived offline from hash-pinned, provenance-complete, same-period API 27 E1 sessions on the target Spreadtrum head unit and OBDLink adapter. The primary training provenance is the two clean exact-commit 2026-08-15 long runs:
+
+```text
+RX400h Monitor log 2026-08-15 14-15-58.zip
+SHA-256 0dc6b6a71f40365b18febe6a815eeb13f2a6bb32ee0a4dcb6237091421a245f7
+
+RX400h Monitor log 2026-08-15 17-50-18.zip
+SHA-256 d304e9dfabb1f1d4a28eda9b9c0fc674c04276ce119e8ea5a94e8cdf783432d7
+
+git commit 8e55c6afae20ca64b9ea9bba5861bc85d8017c62
+exact CI APK SHA-256 841b1a4adb9f9e4a1834d2830dd6e94754a54cbcc3b2b3209023061da1969e9b
+device API 27
+```
+
+The conservative request-service p95 inputs and sample counts are frozen for the first model as:
+
+```text
+std_core  141 ms / 5631 samples
+cd_f3     139 ms / 4503 samples
+coolant   139 ms / 1501 samples
+c3        162 ms / 5630 samples
+c4        169 ms / 3000 samples
+cf        151 ms /  900 samples
+atrv       81 ms / 1498 samples
+```
+
+The first model is direction-aware rather than one scalar. Its steady header costs are `7E0 → 7E2 = 65 ms / 4500 samples` and `7E2 → 7E0 = 116 ms / 4498 samples`. Cold start is represented separately: `NONE → 7E0 = 154 ms / 2 samples` is the observed maximum, while `NONE → 7E2 = 154 ms / 0 direct samples` is an explicit conservative engineering bound for reconnect planning, not empirical p95 evidence. Both cold entries remain statistically untrusted and do not satisfy or block the minimum-sample trust gate for periodic work. Missing either required cold target makes the model incomplete/`UNKNOWN`; there is no silent cross-target fallback. The exact empirical population remains `8998 steady transitions + 2 observed cold starts = 9000 total`; the cold maximum must never be charged to every steady switch.
+
+The model ID is `api27_sp7731e_obdlink_v030_capacity_002_p95_v1`. Its applicability is fail-closed: only API 27, manufacturer `sprd`, model `sp7731e_1h10_native`, device `sp7731e_1h10` and a case-sensitive `OBDLink MX+` family adapter name select the trusted model. Any mismatch or unavailable adapter name selects the existing untrusted diagnostic seed and therefore returns admission `UNKNOWN`. With the frozen seven-request table, the deterministic 60-second production-policy replay returns `ADMITTED`, projected utilization `0.906533`, zero projected deadline misses and zero capacity rejections. This admission result does not authorize a polling-period increase or rate-ladder step.
+
+The record must bind model ID, all source ZIP SHA-256 values, app/APK/commit identity, device/API/adapter applicability, extraction method and quantile rule, per-request values/sample counts, both steady header directions, the separate cold-start limitation and any explicit conservative margin. Runtime observations may be logged for later models but may not silently mutate the trusted model or polling periods.
+
+The two 2026-08-18 dirty-CRT API 27 short sessions (`c3cdba1706a3bd610d106403ed505c4479562ad174b15ee5ceccf38dc5ac24c9` and `a806771c8fb6d09aadc6db102716e58a3429c0ca75ea133fe4bba6385118c8b7`) are holdout/regression evidence. They may validate the frozen model against the integrated presentation candidate, but they are not the sole or primary training provenance.
+
+Admission remains fail-closed under D-046: incomplete or hardware-inapplicable costs remain `UNKNOWN`; only the complete versioned model passing the deterministic 60-second production-policy replay with zero projected misses, zero capacity rejections and positive headroom may report `ADMITTED`. The V0.3.3 model uses the already frozen request table and does not change periods, phases, deadlines, priority, whitelist or prompt-delimited transport semantics.
+
+**Reason:** The API 27 sessions provide the missing real weak-device service/header distributions, but a bare set of constants without source hashes, samples and a quantile method is not reproducible trusted evidence. Admission data and rate selection are separate decisions.
+
+**Consequences:** Unit tests must pin the model ID/inputs, reject missing/untrusted samples, recompute admission deterministically and prove the seven periods are byte-for-byte unchanged. Any later cost update requires a new model version and evidence record; any later period change still requires a separate rate-ladder decision and real-vehicle gate.
+
+---
+
+## D-052 — Wall-clock adjustment is observational; monotonic truth is unchanged
+
+**Status:** Implemented locally; target-device clock-step observation pending — 2026-08-21
+
+**Decision:** Detect a material divergence between wall-clock progression and elapsed/monotonic progression and emit a bounded `CLOCK_ADJUSTMENT` evidence event containing the observed delta/direction and before/after wall context. Do not reorder or rewrite prior records. Scheduler release/deadline/capacity logic, freshness, Idle Check timers, duration, checkpoint cadence, lifecycle ownership and recovery eligibility continue to use monotonic or already durable state and must not react to a wall-clock step.
+
+Local archive naming and human-readable timestamps may reflect the wall clock observed at the terminal boundary, with existing collision-safe naming, but wall-clock movement cannot start/stop a session, trigger recovery, change completion status, alter a request period or become vehicle-OFF evidence.
+
+**Reason:** Vehicle head units may correct time after boot, navigation/network synchronization or user action. A forward/backward wall step is valuable provenance, but treating it as control truth would corrupt deadlines, durations or session semantics.
+
+**Consequences:** Virtual-clock tests must cover forward and backward wall steps while monotonic time advances normally, including steps around End/finalize. Scheduler outcomes and record order remain monotonic; only the additional observational event and subsequent wall timestamps may reflect the adjustment.

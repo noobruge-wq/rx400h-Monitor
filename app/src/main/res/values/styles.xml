@@ -2,8 +2,11 @@
     <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">monospace</item>
         <item name="android:windowFullscreen">true</item>
-        <item name="android:navigationBarColor">#000000</item>
-        <item name="android:windowBackground">#050A08</item>
-        <item name="android:colorAccent">#72FFB2</item>
+        <item name="android:navigationBarColor">@color/crt_black</item>
+        <item name="android:windowBackground">@color/crt_black</item>
+        <item name="android:colorAccent">@color/crt_green_primary</item>
+        <item name="android:textColorPrimary">@color/crt_green_primary</item>
+        <item name="android:textColorSecondary">@color/crt_green_dim</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

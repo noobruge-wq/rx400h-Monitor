@@ -238,7 +238,29 @@ Lint: 0 errors / 9 non-blocking warnings
 Manifest identity: applicationId com.guanyu.rx400hprobe.debug; versionName 0.3.2-debug; versionCode 24; minSdk 26; targetSdk 35
 ```
 
-Role: D-046 exact-source build evidence. GitHub Actions rebuilt clean commit `8e55c6a`, passed the configured unit/lint/assemble gates, verified embedded commit/clean provenance, verified the fixed v2 signing certificate and uploaded the named artifact. The scheduler covers epoch-anchored releases, one-transaction header/request replanning, conserved per-request terminal outcomes, transport-down accounting, fail-closed admission, mutually exclusive legacy deadline/skip compatibility counters, streaming evidence and prompt-loss/I/O-failure reconnect enforcement. The seven requests, headers, commands, decoder and target periods are unchanged. Costs remain untrusted, so admission is `UNKNOWN` and rate-ladder acceleration stays blocked. The APK has not yet been installed or connected to a vehicle. Promotion still requires API 27, paired-OBD connection → LIVE → End/public-save/recovery smoke and a same-period E1 rerun.
+Role: D-046 exact-source build evidence. GitHub Actions rebuilt clean commit `8e55c6a`, passed the configured unit/lint/assemble gates, verified embedded commit/clean provenance, verified the fixed v2 signing certificate and uploaded the named artifact. The scheduler covers epoch-anchored releases, one-transaction header/request replanning, conserved per-request terminal outcomes, transport-down accounting, fail-closed admission, mutually exclusive legacy deadline/skip compatibility counters, streaming evidence and prompt-loss/I/O-failure reconnect enforcement. The seven requests, headers, commands, decoder and target periods are unchanged. Later API 27 paired-OBD sessions listed below validate normal connection → LIVE → End/public-save and same-period behavior. Forced interrupted recovery remained open for the V0.3.2 artifact; D-051 trusted-model integration is implemented only in the later V0.3.3 source candidate.
+
+### V0.3.3 recovery/cost/CRT local source candidate
+
+```text
+Branch: v0.3.0
+Base commit before implementation: 3b48d2dd7ab5d85c99b94336320e19a1b4bd3787
+Implementation commit: pending local commit
+App version: 0.3.3
+versionCode: 25
+Protocol profile: rx400h_ha_hci_20260805_002 (unchanged)
+Decoder profile: rx400h-reactive-20260808-002 (unchanged)
+Scheduler profile: v030_capacity_002 (unchanged)
+Candidate artifact: RX400hProtocolProbe-v0.3.3-recovery-cost-crt-debug-signed
+Remote CI / push: not performed
+Compiled direct-JUnit result: 98 passed / 0 failed / 0 errors
+Gradle test worker: host infrastructure failure before test execution (GradleWorkerMain / closed pipe)
+Lint: 0 errors / 9 non-blocking warnings
+Manifest identity: applicationId com.guanyu.rx400hprobe.debug; versionName 0.3.3-debug; versionCode 25; minSdk 26; targetSdk 35
+Signature: APK Signature Scheme v2; certificate SHA-256 77ba84b1f4f737a5d61b910bf4386df167548b9c6ce689ed25e994c37b2bc192
+```
+
+Role: local D-047…D-052 implementation evidence before exact-commit packaging. It adds the explicit recovery phase/fast path, first-writer-wins terminal intent and idempotent recovery, pinned API 27 direction-aware cost model, observational clock-step logging and the fixed CRT Green presentation. Protocol, decoder, SignalStore, request whitelist and all seven periods/phases/deadlines remain unchanged. APK size/SHA and embedded clean implementation commit are intentionally deferred until the exact clean build; V0.3.3 target-device normal and forced-recovery evidence is not yet claimed.
 
 ---
 
@@ -256,6 +278,44 @@ Do not use as a development baseline.
 ---
 
 ## C. Real-vehicle sessions
+
+### V0.3.2 API 27 exact-commit long runs — D-051 primary training evidence
+
+```text
+RX400h Monitor log 2026-08-15 14-15-58.zip
+SHA-256: 0dc6b6a71f40365b18febe6a815eeb13f2a6bb32ee0a4dcb6237091421a245f7
+LIVE monotonic duration: 2346.753 s
+Scheduler: 11813 releases = 11807 on-time + 1 late + 5 capacity-rejected
+
+RX400h Monitor log 2026-08-15 17-50-18.zip
+SHA-256: d304e9dfabb1f1d4a28eda9b9c0fc674c04276ce119e8ea5a94e8cdf783432d7
+LIVE monotonic duration: 2158.960 s
+Scheduler: 10869 releases = 10853 on-time + 2 late + 12 capacity-rejected + 2 session-ended
+
+Source commit: 8e55c6afae20ca64b9ea9bba5861bc85d8017c62
+Exact CI APK SHA-256: 841b1a4adb9f9e4a1834d2830dd6e94754a54cbcc3b2b3209023061da1969e9b
+Device: API 27 sprd sp7731e_1h10_native / sp7731e_1h10; OBDLink MX+ 99905
+```
+
+Both ZIPs pass CRC, manifest file size/SHA, provenance, count, line-tail and monotonic scheduler conservation checks. The first contains one 168.604-second all-CAN `NO_DATA` window while ATRV/prompt/cadence continue; the user confirmed this coincided with vehicle shutdown, but the log alone labels it only as ECU/CAN unavailability. The second contains an approximately 54-second backward wall-clock correction; monotonic scheduling is continuous and unaffected. D-051 freezes request p95/sample values `141/5631, 139/4503, 139/1501, 162/5630, 169/3000, 151/900, 81/1498 ms`, steady headers `65/4500` and `116/4498 ms`, plus separately untrusted cold bounds.
+
+### V0.3.2 API 27 dirty-CRT short runs — D-051 holdout/regression only
+
+```text
+RX400h Monitor log 2026-08-18 11-52-40.zip
+SHA-256: c3cdba1706a3bd610d106403ed505c4479562ad174b15ee5ceccf38dc5ac24c9
+LIVE monotonic duration: 193.893 s
+Raw / scheduler completion: 1389 all OK / 979 all on-time
+
+RX400h Monitor log 2026-08-18 20-29-22.zip
+SHA-256: a806771c8fb6d09aadc6db102716e58a3429c0ca75ea133fe4bba6385118c8b7
+LIVE monotonic duration: 429.495 s
+Raw / scheduler completion: 3044 all OK / 2163 all on-time
+
+Declared/local-matched APK SHA-256: af4ce2ba7e9899a4d33bf304038cb4df13f7d4a9986fb65da5f1662f4ab5b51f
+```
+
+Both are complete `USER_END` archives with full manifest/hash/count/tail checks and no recovery metadata. The longer run crosses a 12.852-second Activity stop/start while acquisition continues. Because the APK records a dirty presentation worktree, these sessions are useful independent holdout/regression evidence but are not the sole or primary trusted-cost training provenance.
 
 ### V0.1.8 first successful run
 

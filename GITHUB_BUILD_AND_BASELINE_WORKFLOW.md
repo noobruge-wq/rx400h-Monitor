@@ -152,6 +152,14 @@ RX400hProtocolProbe-v0.3.2-capacity-scheduler-debug-signed
 
 V0.3.2 是仍处于 V0.3.0 Scheduler / Refresh Frontier 工程里程碑内的 App 版本；Artifact、Gradle `versionName/versionCode` 与 session build provenance 必须指向同一 exact commit。`UNKNOWN`/`OVERLOADED` admission 不得解锁 rate ladder。
 
+当前本地 V0.3.3 recovery/cost/CRT 候选：
+
+```text
+RX400hProtocolProbe-v0.3.3-recovery-cost-crt-debug-signed
+```
+
+Gradle 身份为 V0.3.3 / versionCode 25，workflow 名称已同步；在实际提交、触发并验证 exact-commit run 前，不得把本地 APK 称为 GitHub Actions artifact。已安装与既有实车证据仍属于 V0.3.2/v24。
+
 Gradle 的 Git provenance 采集必须 fail closed：Git 不可执行、命令失败或 commit ID 非 40 位十六进制时，构建直接失败。GitHub Actions 还必须在上传前检查生成的 `BuildConfig`：`GIT_COMMIT == GITHUB_SHA` 且 `GIT_DIRTY == false`。
 
 版本进入正式 Monitor 阶段后可以调整命名，但必须保持“从 Artifact 名就能识别 app version / candidate”的原则。

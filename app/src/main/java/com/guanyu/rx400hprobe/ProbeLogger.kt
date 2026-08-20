@@ -35,8 +35,63 @@ internal data class PublicLogCommit(
     val receiptWritten: Boolean
 )
 
+internal enum class StartupRecoveryState { CLEAN, PENDING, OWNER_BUSY, FAILED }
+
+internal data class StartupRecoveryScan(
+    val state: StartupRecoveryState,
+    val scannedSessions: Int,
+    val alreadyPublished: Int,
+    val reason: String? = null
+)
+
+internal data class LogRecoveryFailure(
+    val sessionId: String,
+    val reason: String
+)
+
+internal data class LogRecoveryReport(
+    val pendingArchives: List<PendingLogArchive>,
+    val failures: List<LogRecoveryFailure>,
+    val scannedSessions: Int,
+    val alreadyPublished: Int
+)
+
+/** Small pure rules kept outside Android I/O so lifecycle failure paths are JVM-testable. */
+internal object ProbeLoggerLifecyclePolicy {
+    val requiredEvidenceFiles: Set<String> = setOf(
+        "connection.log",
+        "decoded.jsonl",
+        "device.json",
+        "errors.log",
+        "events.csv",
+        "frames.csv",
+        "performance.csv",
+        "raw_io.jsonl",
+        "request_stats.csv",
+        "session.json"
+    )
+    val capacitySchedulerEvidenceFiles: Set<String> = setOf(
+        "scheduler_events.jsonl",
+        "scheduler_request_stats.csv"
+    )
+    private val finalizerGeneratedFiles = setOf("request_stats.csv", "session.json")
+
+    fun startFailedPlaceholderFiles(existingFiles: Collection<String>): Set<String> =
+        (requiredEvidenceFiles + capacitySchedulerEvidenceFiles - finalizerGeneratedFiles)
+            .filterNotTo(linkedSetOf()) { it in existingFiles }
+
+    fun mayWriteFinalizeRequest(
+        writable: Boolean,
+        terminalEventsLogged: Boolean,
+        finalizeRequestLogged: Boolean
+    ): Boolean = writable && !terminalEventsLogged && !finalizeRequestLogged
+
+    fun recoveryEntries(entries: Array<File>?): List<File> = entries?.toList()
+        ?: error("Cannot enumerate the session log root")
+}
+
 /**
- * Streaming evidence logger with bounded V0.3.1 durability checkpoints.
+ * Streaming evidence logger with bounded V0.3.x durability checkpoints.
  *
  * Live files stay in the permission-free app working directory. Public export
  * happens only after an immutable ZIP has been built and validated.
@@ -51,22 +106,10 @@ internal class ProbeLogger(private val context: Context) {
         private const val DURABLE_SYNC_INTERVAL_MS = 10_000L
         private const val DURABLE_RETRY_INTERVAL_MS = 1_000L
         private const val PUBLICATION_MARKER = "public_export.json"
-        private val REQUIRED_EVIDENCE_FILES = setOf(
-            "connection.log",
-            "decoded.jsonl",
-            "device.json",
-            "errors.log",
-            "events.csv",
-            "frames.csv",
-            "performance.csv",
-            "raw_io.jsonl",
-            "request_stats.csv",
-            "session.json"
-        )
-        private val CAPACITY_SCHEDULER_EVIDENCE_FILES = setOf(
-            "scheduler_events.jsonl",
-            "scheduler_request_stats.csv"
-        )
+        private const val FINALIZATION_INTENT_MARKER = "finalize_intent.json"
+        private val REQUIRED_EVIDENCE_FILES = ProbeLoggerLifecyclePolicy.requiredEvidenceFiles
+        private val CAPACITY_SCHEDULER_EVIDENCE_FILES =
+            ProbeLoggerLifecyclePolicy.capacitySchedulerEvidenceFiles
         private val RECORD_TIME_FILES = setOf(
             "connection.log",
             "decoded.jsonl",
@@ -94,6 +137,9 @@ internal class ProbeLogger(private val context: Context) {
     private var finalArchiveName: String? = null
     private var finalEndedAt: Instant? = null
     private var finalCompletionKind: LogCompletionKind? = null
+    private var finalizationIntent: SessionFinalizationIntent? = null
+    private var terminalEventsLogged = false
+    private var finalizeRequestLogged = false
 
     private var rawWriter: DurableWriter? = null
     private var eventWriter: DurableWriter? = null
@@ -170,7 +216,7 @@ internal class ProbeLogger(private val context: Context) {
     @Synchronized
     fun start(adapterName: String, adapterAddress: String): File {
         check(!shutdownRequested.get()) { "Logger shutdown was already requested" }
-        check(state != SessionState.ACTIVE && state != SessionState.FINALIZING) {
+        check(state == SessionState.IDLE || state == SessionState.FINALIZED) {
             "Cannot start a second logger session from $state"
         }
         acquireProcessSessionGate()
@@ -184,17 +230,51 @@ internal class ProbeLogger(private val context: Context) {
         } catch (failure: Throwable) {
             stopCheckpointTimer()
             runCatching { closeWriters(durable = true) }
-            state = SessionState.IDLE
-            releaseProcessSessionGate()
+            if (state == SessionState.ACTIVE && sessionDir?.isDirectory == true) {
+                // Keep the partial session and process gate owned. MainActivity's
+                // START_FAILED terminal path will finalize it now; if storage is
+                // still unavailable it remains retryable instead of silently
+                // returning to IDLE and becoming next-launch mystery evidence.
+                markDegraded(
+                    "session start failed ${failure::class.java.simpleName}: ${failure.message}"
+                )
+                state = SessionState.FINALIZE_FAILED
+                runCatching {
+                    writeSessionJson(
+                        status = "finalize_failed",
+                        endedAt = Instant.now(),
+                        endTimeBasis = "start_failure_time",
+                        reason = "START_FAILED",
+                        evidenceComplete = false,
+                        archiveName = null,
+                        pendingCompletionKind = LogCompletionKind.START_FAILED
+                    )
+                }.onFailure {
+                    markDegraded("start failure metadata failed: ${it.message}")
+                }
+            } else {
+                state = SessionState.IDLE
+                releaseProcessSessionGate()
+            }
             throw failure
         }
     }
 
     private fun startWithProcessGate(adapterName: String, adapterAddress: String): File {
-        check(state != SessionState.ACTIVE && state != SessionState.FINALIZING) {
+        check(state == SessionState.IDLE || state == SessionState.FINALIZED) {
             "Cannot start a second logger session from $state"
         }
         closeWriters(durable = true)
+        // Do not let a failure before the new directory is created be mistaken
+        // for a partial version of the previously finalized session.
+        sessionId = null
+        sessionDir = null
+        finalZip = null
+        finalArchiveName = null
+        finalEndedAt = null
+        finalCompletionKind = null
+        finalizationIntent = null
+        state = SessionState.IDLE
         ensureRoot()
         val startedAt = Instant.now()
         val baseId = LogArchiveNaming.sessionId(startedAt)
@@ -210,10 +290,10 @@ internal class ProbeLogger(private val context: Context) {
 
         sessionId = id
         sessionDir = dir
-        finalZip = null
-        finalArchiveName = null
-        finalEndedAt = null
-        finalCompletionKind = null
+        // From this point on, any exception owns recoverable session evidence.
+        state = SessionState.ACTIVE
+        terminalEventsLogged = false
+        finalizeRequestLogged = false
         sessionStartedAtMs = startedAt.toEpochMilli()
         sessionTimeZoneId = ZoneId.systemDefault().id
         lastRecordAtMs = sessionStartedAtMs
@@ -245,8 +325,6 @@ internal class ProbeLogger(private val context: Context) {
         schedulerProjectedCapacityRejections = null
         apkSha256 = runCatching { sha256(File(context.applicationInfo.sourceDir)) }.getOrDefault("unavailable")
         signingCertificateSha256 = signingCertificateSha256()
-        state = SessionState.ACTIVE
-
         rawWriter = writer(dir, "raw_io.jsonl")
         decodedWriter = writer(dir, "decoded.jsonl")
         connectionWriter = writer(dir, "connection.log")
@@ -391,6 +469,7 @@ internal class ProbeLogger(private val context: Context) {
 
     @Synchronized
     fun logConnection(message: String) {
+        if (terminalEventsLogged) return
         if (!isWritable()) return
         if (safeWrite("connection.log") {
             connectionWriter?.apply { write("${Instant.now()} $message\n") }
@@ -415,6 +494,7 @@ internal class ProbeLogger(private val context: Context) {
 
     @Synchronized
     fun logEvent(type: String, note: String = "") {
+        if (terminalEventsLogged) return
         if (!isWritable()) return
         if (safeWrite("events.csv") {
             eventWriter?.apply { write("${System.currentTimeMillis()},${csv(type)},${csv(note)}\n") }
@@ -425,9 +505,106 @@ internal class ProbeLogger(private val context: Context) {
         checkpointIfDue(forceDurable = true, reason = "EVENT_$type")
     }
 
+    /**
+     * Records a wall-clock observation without changing checkpoint cadence or
+     * the wall-derived last-record marker used by interrupted recovery.
+     */
+    @Synchronized
+    fun logClockAdjustment(adjustment: WallClockAdjustment) {
+        if (terminalEventsLogged || !isWritable()) return
+        val note = "direction=${adjustment.direction.name} " +
+            "adjustment_ms=${adjustment.adjustmentMs} " +
+            "anchor_elapsed_ms=${adjustment.anchorElapsedRealtimeMs} " +
+            "observed_elapsed_ms=${adjustment.observedElapsedRealtimeMs} " +
+            "anchor_wall_ms=${adjustment.anchorWallTimeMs} " +
+            "expected_wall_ms=${adjustment.expectedWallTimeMs} " +
+            "observed_wall_ms=${adjustment.observedWallTimeMs}"
+        if (safeWrite("events.csv") {
+                eventWriter?.write(
+                    "${adjustment.observedWallTimeMs},${csv("CLOCK_ADJUSTMENT")},${csv(note)}\n"
+                )
+            }
+        ) {
+            eventCount++
+        }
+    }
+
+    /** Writes the terminal event sequence under one logger lock and one durable checkpoint. */
+    @Synchronized
+    fun logSessionTerminalEvents(
+        endRequestedAtWallMs: Long?,
+        reachedLive: Boolean,
+        reason: String
+    ) {
+        if (terminalEventsLogged) return
+        if (!isWritable()) return
+        writeFinalizeRequestIfNeeded(reason)
+        var writtenRows = 0L
+        val written = safeWrite("events.csv") {
+            endRequestedAtWallMs?.takeIf { it > 0L }?.let { requestedAt ->
+                eventWriter?.write(
+                    "${System.currentTimeMillis()},${csv("END_REQUEST")}," +
+                        "${csv("wall_time_ms=$requestedAt")}\n"
+                )
+                writtenRows++
+            }
+            if (reachedLive) {
+                eventWriter?.write(
+                    "${System.currentTimeMillis()},${csv("LIVE_STOP")},${csv(reason)}\n"
+                )
+                writtenRows++
+            }
+            eventWriter?.write(
+                "${System.currentTimeMillis()},${csv("SESSION_END")},${csv(reason)}\n"
+            )
+            writtenRows++
+        }
+        if (written) {
+            terminalEventsLogged = true
+            eventCount += writtenRows
+            touchRecord()
+        }
+        checkpointIfDue(forceDurable = true, reason = "SESSION_TERMINAL_EVENTS")
+    }
+
+    private fun writeFinalizeRequestIfNeeded(reason: String): Boolean {
+        if (!ProbeLoggerLifecyclePolicy.mayWriteFinalizeRequest(
+                writable = isWritable(),
+                terminalEventsLogged = terminalEventsLogged,
+                finalizeRequestLogged = finalizeRequestLogged
+            )
+        ) {
+            return false
+        }
+        val written = safeWrite("connection.log") {
+            connectionWriter?.write("${Instant.now()} SESSION_FINALIZE_REQUEST reason=$reason\n")
+        }
+        if (written) {
+            finalizeRequestLogged = true
+            touchRecord()
+        }
+        return written
+    }
+
     /** Posts lifecycle bookkeeping without making the Android main thread wait for fsync. */
     fun logEventAsync(type: String, note: String = "") {
-        runCatching { checkpointExecutor.execute { logEvent(type, note) } }
+        val expectedSessionId = synchronized(this) {
+            sessionId?.takeIf { state == SessionState.ACTIVE && !terminalEventsLogged }
+        } ?: return
+        runCatching {
+            checkpointExecutor.execute {
+                synchronized(this) {
+                    if (
+                        sessionId != expectedSessionId ||
+                        state != SessionState.ACTIVE ||
+                        terminalEventsLogged
+                    ) {
+                        return@synchronized
+                    }
+                    logEvent(type, note)
+                }
+            }
+        }
     }
 
     @Synchronized
@@ -659,22 +836,87 @@ internal class ProbeLogger(private val context: Context) {
         return sample
     }
 
+    /** Persists the first terminal intent without making the Activity wait for storage. */
+    fun armFinalizationAsync(candidate: SessionFinalizationIntent) {
+        val expectedSessionId = synchronized(this) {
+            sessionId?.takeIf {
+                state == SessionState.ACTIVE ||
+                    state == SessionState.FINALIZING ||
+                    state == SessionState.FINALIZE_FAILED
+            }
+        } ?: return
+        runCatching {
+            checkpointExecutor.execute {
+                synchronized(this) {
+                    if (sessionId != expectedSessionId || state !in setOf(
+                            SessionState.ACTIVE,
+                            SessionState.FINALIZING,
+                            SessionState.FINALIZE_FAILED
+                        )
+                    ) {
+                        return@synchronized
+                    }
+                    runCatching { armFinalization(candidate) }
+                        .onFailure { markDegraded("finalization intent failed: ${it.message}") }
+                }
+            }
+        }
+    }
+
+    @Synchronized
+    fun armFinalization(candidate: SessionFinalizationIntent): SessionFinalizationIntent {
+        finalizationIntent?.let { return it }
+        val dir = sessionDir ?: error("No session for finalization intent")
+        readFinalizationIntent(dir)?.let { existing ->
+            finalizationIntent = existing
+            return existing
+        }
+        check(state == SessionState.ACTIVE || state == SessionState.FINALIZING || state == SessionState.FINALIZE_FAILED) {
+            "Session cannot arm finalization from state $state"
+        }
+        atomicWriteText(
+            File(dir, FINALIZATION_INTENT_MARKER),
+            JSONObject()
+                .put("session_id", dir.name)
+                .put("completion_kind", candidate.completionKind.name)
+                .put("reason", candidate.reason)
+                .put("requested_at", Instant.ofEpochMilli(candidate.requestedAtWallMs).toString())
+                .put("requested_at_wall_ms", candidate.requestedAtWallMs)
+                .put("requested_at_elapsed_ms", candidate.requestedAtElapsedMs)
+                .put("recorded_at", Instant.now().toString())
+                .toString(2)
+        )
+        finalizationIntent = candidate
+        return candidate
+    }
+
     @Synchronized
     fun finalizeAndZip(
         completionKind: LogCompletionKind = LogCompletionKind.COMPLETED,
         reason: String = "USER_END"
+    ): PendingLogArchive = finalizeAndZip(
+        SessionFinalizationIntent(
+            completionKind = completionKind,
+            reason = reason,
+            requestedAtWallMs = System.currentTimeMillis(),
+            requestedAtElapsedMs = SystemClock.elapsedRealtime()
+        )
+    )
+
+    @Synchronized
+    fun finalizeAndZip(
+        candidate: SessionFinalizationIntent
     ): PendingLogArchive {
         acquireProcessSessionGate()
         return try {
-            finalizeAndZipWithProcessGate(completionKind, reason)
+            finalizeAndZipWithProcessGate(armFinalization(candidate))
         } finally {
             releaseProcessSessionGate()
         }
     }
 
     private fun finalizeAndZipWithProcessGate(
-        completionKind: LogCompletionKind,
-        reason: String
+        intent: SessionFinalizationIntent
     ): PendingLogArchive {
         stopCheckpointTimer()
         finalZip?.takeIf { state == SessionState.FINALIZED && it.isFile }?.let { zip ->
@@ -693,37 +935,46 @@ internal class ProbeLogger(private val context: Context) {
         }
         val dir = sessionDir ?: error("No active session")
         val endedAt = finalEndedAt ?: Instant.now().also { finalEndedAt = it }
-        val kind = finalCompletionKind ?: completionKind.also { finalCompletionKind = it }
-        val archiveName = finalArchiveName ?: LogArchiveNaming.uniqueFile(
-            root,
-            LogArchiveNaming.archiveName(
-                endedAt = endedAt,
-                zoneId = ZoneId.of(sessionTimeZoneId),
-                kind = kind
-            )
-        ).name.also { finalArchiveName = it }
-
-        if (state == SessionState.ACTIVE) {
-            safeWrite("connection.log") {
-                connectionWriter?.write("${Instant.now()} SESSION_FINALIZE_REQUEST reason=$reason\n")
-            }
+        val kind = finalCompletionKind ?: intent.completionKind.also { finalCompletionKind = it }
+        val reason = intent.reason
+        if (state == SessionState.ACTIVE && writeFinalizeRequestIfNeeded(reason)) {
             forceCheckpoint("SESSION_FINALIZE_REQUEST")
         }
         state = SessionState.FINALIZING
-        closeWriters(durable = true)
-
-        val evidenceComplete = kind == LogCompletionKind.COMPLETED &&
-            !loggerDegraded &&
-            capacitySchedulerEvidencePresent(dir) &&
-            currentSessionProvenanceComplete()
-        val status = when (kind) {
-            LogCompletionKind.COMPLETED -> "completed"
-            LogCompletionKind.INTERRUPTED -> "interrupted"
-            LogCompletionKind.START_FAILED -> "start_failed"
-        }
-        val target = File(root, archiveName)
-        val temp = File(root, ".$archiveName.tmp")
         try {
+            val archiveName = finalArchiveName ?: LogArchiveNaming.uniqueFile(
+                root,
+                LogArchiveNaming.archiveName(
+                    endedAt = endedAt,
+                    zoneId = ZoneId.of(sessionTimeZoneId),
+                    kind = kind
+                )
+            ).name.also { finalArchiveName = it }
+            writeSessionJson(
+                status = "finalizing",
+                endedAt = endedAt,
+                endTimeBasis = "finalize_time",
+                reason = reason,
+                evidenceComplete = false,
+                archiveName = archiveName,
+                pendingCompletionKind = kind
+            )
+            closeWriters(durable = true)
+            if (kind == LogCompletionKind.START_FAILED) {
+                ensureStartFailedEvidenceSkeleton(dir)
+            }
+
+            val evidenceComplete = kind == LogCompletionKind.COMPLETED &&
+                !loggerDegraded &&
+                capacitySchedulerEvidencePresent(dir) &&
+                currentSessionProvenanceComplete()
+            val status = when (kind) {
+                LogCompletionKind.COMPLETED -> "completed"
+                LogCompletionKind.INTERRUPTED -> "interrupted"
+                LogCompletionKind.START_FAILED -> "start_failed"
+            }
+            val target = File(root, archiveName)
+            val temp = File(root, ".$archiveName.tmp")
             writePendingErrors(dir)
             writeRequestStats(dir)
             writeSessionJson(
@@ -753,7 +1004,8 @@ internal class ProbeLogger(private val context: Context) {
                     endTimeBasis = "finalize_attempt_time",
                     reason = reason,
                     evidenceComplete = false,
-                    archiveName = archiveName
+                    archiveName = finalArchiveName,
+                    pendingCompletionKind = kind
                 )
             }
             throw e
@@ -765,7 +1017,27 @@ internal class ProbeLogger(private val context: Context) {
     fun stopInterrupted(reason: String) {
         acquireProcessSessionGate()
         try {
-            stopInterruptedWithProcessGate(reason)
+            val armedIntent = finalizationIntent ?: sessionDir
+                ?.let(::readFinalizationIntent)
+                ?.also { finalizationIntent = it }
+            if (
+                armedIntent != null &&
+                (state == SessionState.ACTIVE || state == SessionState.FINALIZE_FAILED)
+            ) {
+                if (state == SessionState.ACTIVE) {
+                    logSessionTerminalEvents(
+                        endRequestedAtWallMs = armedIntent.requestedAtWallMs.takeIf {
+                            armedIntent.reason == "USER_END" ||
+                                armedIntent.reason == "USER_END_BEFORE_LIVE"
+                        },
+                        reachedLive = terminalIntentReachedLive(armedIntent),
+                        reason = armedIntent.reason
+                    )
+                }
+                finalizeAndZipWithProcessGate(armedIntent)
+            } else {
+                stopInterruptedWithProcessGate(reason)
+            }
         } finally {
             releaseProcessSessionGate()
         }
@@ -785,7 +1057,7 @@ internal class ProbeLogger(private val context: Context) {
         }
         closeWriters(durable = true)
         val lastDurable = Instant.ofEpochMilli(lastDurableRecordAtMs.coerceAtLeast(sessionStartedAtMs))
-        runCatching {
+        try {
             writeSessionJson(
                 status = "interrupted",
                 endedAt = lastDurable,
@@ -794,32 +1066,127 @@ internal class ProbeLogger(private val context: Context) {
                 evidenceComplete = false,
                 archiveName = null
             )
+            state = SessionState.IDLE
+        } catch (failure: Exception) {
+            markDegraded("interrupted metadata failed: ${failure.message}")
+            state = SessionState.FINALIZE_FAILED
+            throw failure
         }
-        state = SessionState.IDLE
     }
 
     @Synchronized
     fun stop() = stopInterrupted("LOGGER_STOP")
 
     @Synchronized
-    fun shutdown() {
+    fun shutdown(candidate: SessionFinalizationIntent? = null) {
         shutdownRequested.set(true)
-        stopInterrupted("LOGGER_SHUTDOWN")
-        checkpointExecutor.shutdownNow()
-    }
-
-    /** Never makes the Activity main thread wait for a slow fsync or recovery hash. */
-    fun shutdownAsync() {
-        shutdownRequested.set(true)
-        if (runCatching { checkpointExecutor.execute { shutdown() } }.isFailure) {
-            Thread({ shutdown() }, "rx400h-log-shutdown").apply { isDaemon = true }.start()
+        try {
+            if (
+                candidate != null &&
+                (state == SessionState.ACTIVE || state == SessionState.FINALIZE_FAILED)
+            ) {
+                armFinalization(candidate)
+            }
+            stopInterrupted("LOGGER_SHUTDOWN")
+        } catch (failure: Exception) {
+            stopCheckpointTimer()
+            runCatching { closeWriters(durable = true) }
+            if (candidate != null && sessionDir != null) {
+                runCatching {
+                    writeSessionJson(
+                        status = "finalize_failed",
+                        endedAt = Instant.now(),
+                        endTimeBasis = "shutdown_finalize_attempt_time",
+                        reason = candidate.reason,
+                        evidenceComplete = false,
+                        archiveName = finalArchiveName,
+                        pendingCompletionKind = candidate.completionKind
+                    )
+                }
+                state = SessionState.FINALIZE_FAILED
+            }
+            throw failure
+        } finally {
+            releaseProcessSessionGate()
+            checkpointExecutor.shutdownNow()
         }
     }
 
-    /** Packages incomplete old sessions and returns all V0.3.1 archives still awaiting public export. */
+    /** Never makes the Activity main thread wait for a slow fsync or recovery hash. */
+    fun shutdownAsync(candidate: SessionFinalizationIntent? = null) {
+        shutdownRequested.set(true)
+        if (runCatching { checkpointExecutor.execute { shutdown(candidate) } }.isFailure) {
+            Thread({ shutdown(candidate) }, "rx400h-log-shutdown").apply { isDaemon = true }.start()
+        }
+    }
+
+    private fun terminalIntentReachedLive(intent: SessionFinalizationIntent): Boolean =
+        intent.completionKind == LogCompletionKind.COMPLETED || intent.reason in setOf(
+            "ACTIVITY_DESTROYED",
+            "LIVE_CANCELLED_WITHOUT_TERMINAL_INTENT",
+            "LIVE_ENDED_UNEXPECTEDLY",
+            "LIVE_ERROR"
+        )
+
+    /** Bounded metadata-only startup classification; never hashes or inflates a ZIP. */
     @Synchronized
-    fun recoverInterruptedSessions(): List<PendingLogArchive> {
-        if (state == SessionState.ACTIVE || state == SessionState.FINALIZING) return emptyList()
+    fun scanStartupRecovery(): StartupRecoveryScan {
+        if (state == SessionState.ACTIVE || state == SessionState.FINALIZING) {
+            return StartupRecoveryScan(StartupRecoveryState.OWNER_BUSY, 0, 0, "LOGGER_ACTIVE")
+        }
+        if (!PROCESS_SESSION_IO_GATE.tryAcquire()) {
+            return StartupRecoveryScan(StartupRecoveryState.OWNER_BUSY, 0, 0, "PROCESS_OWNER_BUSY")
+        }
+        return try {
+            ensureRoot()
+            var scanned = 0
+            var alreadyPublished = 0
+            ProbeLoggerLifecyclePolicy.recoveryEntries(root.listFiles())
+                .filter { isTrustedSessionDirectory(it) }
+                .sortedBy { it.name }
+                .forEach { dir ->
+                    val session = readJson(File(dir, "session.json"))
+                    val containsEvidence = File(dir, "raw_io.jsonl").isFile ||
+                        File(dir, "connection.log").isFile
+                    if (!containsEvidence && session == null) return@forEach
+                    scanned++
+                    val archiveName = trustedArchiveName(session)
+                    val existing = archiveName?.let { archiveFileInRoot(it) }
+                    if (hasPublicationReceiptFast(dir, session, existing)) {
+                        alreadyPublished++
+                    } else {
+                        return StartupRecoveryScan(
+                            StartupRecoveryState.PENDING,
+                            scanned,
+                            alreadyPublished,
+                            "SESSION_REQUIRES_DEEP_CLASSIFICATION:${dir.name}"
+                        )
+                    }
+                }
+            StartupRecoveryScan(StartupRecoveryState.CLEAN, scanned, alreadyPublished)
+        } catch (failure: Exception) {
+            StartupRecoveryScan(
+                StartupRecoveryState.FAILED,
+                0,
+                0,
+                "${failure::class.java.simpleName}: ${failure.message}"
+            )
+        } finally {
+            PROCESS_SESSION_IO_GATE.release()
+        }
+    }
+
+    /** Packages incomplete old sessions and reports every failed directory explicitly. */
+    @Synchronized
+    fun recoverInterruptedSessions(): LogRecoveryReport {
+        if (state == SessionState.ACTIVE || state == SessionState.FINALIZING) {
+            return LogRecoveryReport(
+                pendingArchives = emptyList(),
+                failures = listOf(LogRecoveryFailure(sessionId ?: "active", "LOGGER_ACTIVE")),
+                scannedSessions = 0,
+                alreadyPublished = 0
+            )
+        }
         PROCESS_SESSION_IO_GATE.acquireUninterruptibly()
         return try {
             recoverInterruptedSessionsWithProcessGate()
@@ -828,29 +1195,46 @@ internal class ProbeLogger(private val context: Context) {
         }
     }
 
-    private fun recoverInterruptedSessionsWithProcessGate(): List<PendingLogArchive> {
+    private fun recoverInterruptedSessionsWithProcessGate(): LogRecoveryReport {
         ensureRoot()
         val pending = mutableListOf<PendingLogArchive>()
-        root.listFiles()
-            ?.filter { isTrustedSessionDirectory(it) }
-            ?.sortedBy { it.name }
-            ?.forEach { dir ->
+        val failures = mutableListOf<LogRecoveryFailure>()
+        var scanned = 0
+        var alreadyPublished = 0
+        ProbeLoggerLifecyclePolicy.recoveryEntries(root.listFiles())
+            .filter { isTrustedSessionDirectory(it) }
+            .sortedBy { it.name }
+            .forEach { dir ->
                 val session = readJson(File(dir, "session.json"))
+                val containsEvidence = File(dir, "raw_io.jsonl").isFile ||
+                    File(dir, "connection.log").isFile
+                if (!containsEvidence && session == null) return@forEach
+                scanned++
                 val archiveName = trustedArchiveName(session)
                 val existing = archiveName?.let { archiveFileInRoot(it) }
+                if (hasPublicationReceiptFast(dir, session, existing)) {
+                    alreadyPublished++
+                    return@forEach
+                }
                 val published = hasPublicationReceipt(dir, session, existing)
-                if (published && existing?.isFile == true) return@forEach
+                if (published && existing?.isFile == true) {
+                    alreadyPublished++
+                    return@forEach
+                }
                 if (
                     existing != null &&
                     existing.isFile &&
                     runCatching { validateZip(existing, dir.name) }.isSuccess
                 ) {
-                    val metadata = session ?: return@forEach
-                    val createdPending = metadata.optBoolean(
-                        "public_export_pending_at_archive_creation",
-                        metadata.optBoolean("public_export_pending", false)
-                    )
-                    if (!published && createdPending) {
+                    val metadata = session
+                    if (metadata == null) {
+                        failures += LogRecoveryFailure(
+                            dir.name,
+                            "VALID_ARCHIVE_WITHOUT_SESSION_METADATA"
+                        )
+                        return@forEach
+                    }
+                    if (!published) {
                         pending += PendingLogArchive(
                             dir,
                             existing,
@@ -861,7 +1245,6 @@ internal class ProbeLogger(private val context: Context) {
                 }
 
                 val status = session?.optString("status").orEmpty()
-                val containsEvidence = File(dir, "raw_io.jsonl").isFile || File(dir, "connection.log").isFile
                 val incomplete = containsEvidence && status in setOf(
                     "",
                     "active",
@@ -877,10 +1260,23 @@ internal class ProbeLogger(private val context: Context) {
                             val line = "${Instant.now()} RECOVERY_FAILED dir=${dir.name} ${e::class.java.simpleName}: ${e.message}\n"
                             runCatching { File(dir, "recovery_failure.txt").appendText(line) }
                             runCatching { File(context.filesDir, "rx400h_probe_fallback_error.log").appendText(line) }
+                            failures += LogRecoveryFailure(
+                                dir.name,
+                                "${e::class.java.simpleName}: ${e.message}"
+                            )
                         }
+                } else if (session != null && !published) {
+                    failures += LogRecoveryFailure(
+                        dir.name,
+                        if (containsEvidence) {
+                            "UNSUPPORTED_SESSION_STATUS:$status"
+                        } else {
+                            "SESSION_METADATA_WITHOUT_RECOVERABLE_EVIDENCE"
+                        }
+                    )
                 }
             }
-        return pending
+        return LogRecoveryReport(pending, failures, scanned, alreadyPublished)
     }
 
     /** Serializes public copy + receipt across replacement Activity instances. */
@@ -939,8 +1335,18 @@ internal class ProbeLogger(private val context: Context) {
         val preservedManifest = readJson(File(dir, "manifest.pre_recovery.json"))
         val recoverySource = preservedPrevious ?: previous
         val recoveryManifest = preservedManifest ?: currentManifest
-        val recoveryEnd = recoveryEnd(dir, recoverySource, completedButArchiveMissing)
+        val persistedIntent = readFinalizationIntent(dir)
+        val pendingKind = persistedIntent?.completionKind ?: jsonStringOrNull(
+            recoverySource,
+            "pending_completion_kind"
+        )?.let { value -> runCatching { LogCompletionKind.valueOf(value) }.getOrNull() }
+        val recoveryEnd = recoveryEnd(
+            dir,
+            recoverySource,
+            completedButArchiveMissing || recoverySource?.optString("status") == "finalizing"
+        )
         val partialTail = hasPartialEvidenceTail(dir)
+        val terminalEventDurable = hasEventType(File(dir, "events.csv"), "SESSION_END")
         val completedIntegrity = if (completedButArchiveMissing) {
             validateCompletedWorkingSet(
                 dir = dir,
@@ -957,10 +1363,17 @@ internal class ProbeLogger(private val context: Context) {
         val endedAt = recoveryEnd.instant
         val lastRecordAt = endedAt.toEpochMilli()
         val kind = when {
+            pendingKind != null -> pendingKind
             recoverySource?.optString("status") == "start_failed" -> LogCompletionKind.START_FAILED
             completedButArchiveMissing -> LogCompletionKind.COMPLETED
             else -> LogCompletionKind.INTERRUPTED
         }
+        if (kind == LogCompletionKind.START_FAILED) {
+            ensureStartFailedEvidenceSkeleton(dir)
+        }
+        val recoveryReason = persistedIntent?.reason
+            ?: jsonStringOrNull(recoverySource, "status_reason")
+            ?: "PROCESS_INTERRUPTED"
         val originalZone = jsonStringOrNull(recoverySource, "time_zone_id")
             ?.let { runCatching { ZoneId.of(it) }.getOrNull() }
             ?: ZoneId.systemDefault()
@@ -976,19 +1389,30 @@ internal class ProbeLogger(private val context: Context) {
         val provenanceComplete = hasCompleteAcquisitionProvenance(updated)
         val recoveredEvidenceComplete = kind == LogCompletionKind.COMPLETED &&
             completedIntegrity.valid &&
+            terminalEventDurable &&
             provenanceComplete
-        val integrityDowngradeReason = completedIntegrity.reason ?: if (
-            kind == LogCompletionKind.COMPLETED && !provenanceComplete
-        ) {
-            "PROVENANCE_INCOMPLETE"
-        } else {
-            null
+        val integrityDowngradeReason = when {
+            completedIntegrity.reason != null -> completedIntegrity.reason
+            kind == LogCompletionKind.COMPLETED && !terminalEventDurable ->
+                "SESSION_END_EVENT_NOT_DURABLE"
+            kind == LogCompletionKind.COMPLETED && !provenanceComplete ->
+                "PROVENANCE_INCOMPLETE"
+            kind == LogCompletionKind.COMPLETED && !completedIntegrity.valid ->
+                "PROCESS_INTERRUPTED_DURING_FINALIZATION"
+            else -> null
         }
         atomicWriteText(
             File(dir, "recovery.json"),
             JSONObject()
                 .put("recovered_at", Instant.now().toString())
                 .put("previous_status", recoverySource?.optString("status") ?: JSONObject.NULL)
+                .put("pending_completion_kind", pendingKind?.name ?: JSONObject.NULL)
+                .put("pending_completion_reason", persistedIntent?.reason ?: JSONObject.NULL)
+                .put(
+                    "logical_terminal_source",
+                    if (persistedIntent != null) FINALIZATION_INTENT_MARKER else JSONObject.NULL
+                )
+                .put("session_end_event_durable", terminalEventDurable)
                 .put("last_record_at", Instant.ofEpochMilli(lastRecordAt).toString())
                 .put("end_time_basis", recoveryEnd.basis)
                 .put("evidence_complete", recoveredEvidenceComplete)
@@ -1011,6 +1435,8 @@ internal class ProbeLogger(private val context: Context) {
             )
             .put("ended_at", endedAt.toString())
             .put("end_time_basis", recoveryEnd.basis)
+            .put("status_reason", recoveryReason)
+            .put("pending_completion_kind", JSONObject.NULL)
             .put("recovered_at", Instant.now().toString())
             .put("transaction_count", countValidJsonLines(File(dir, "raw_io.jsonl")))
             .put("frame_count", countDataRows(File(dir, "frames.csv")))
@@ -1213,13 +1639,49 @@ internal class ProbeLogger(private val context: Context) {
         }
     }
 
+    /**
+     * A failed start may have opened only a prefix of the evidence streams.
+     * Preserve every byte that exists and create only missing empty containers,
+     * recording the repair in errors.log. START_FAILED always remains incomplete.
+     */
+    private fun ensureStartFailedEvidenceSkeleton(dir: File) {
+        val existing = dir.listFiles()
+            ?.filter { it.isFile }
+            ?.mapTo(linkedSetOf()) { it.name }
+            .orEmpty()
+        val placeholders = ProbeLoggerLifecyclePolicy.startFailedPlaceholderFiles(existing)
+        if (placeholders.isEmpty()) return
+        placeholders.forEach { name ->
+            val target = File(dir, name)
+            require(target.canonicalFile.parentFile == dir.canonicalFile) {
+                "Start-failure evidence target escaped session directory"
+            }
+            if (target.exists()) return@forEach
+            if (name == "device.json") {
+                atomicWriteText(
+                    target,
+                    JSONObject()
+                        .put("status", "unavailable")
+                        .put("reason", "SESSION_START_FAILED_BEFORE_DEVICE_METADATA")
+                        .toString(2)
+                )
+            } else {
+                atomicWriteBytes(target, ByteArray(0))
+            }
+        }
+        File(dir, "errors.log").appendText(
+            "${Instant.now()} START_FAILED_PLACEHOLDERS files=${placeholders.sorted().joinToString(",")}\n"
+        )
+    }
+
     private fun writeSessionJson(
         status: String,
         endedAt: Instant?,
         endTimeBasis: String?,
         reason: String?,
         evidenceComplete: Boolean,
-        archiveName: String?
+        archiveName: String?,
+        pendingCompletionKind: LogCompletionKind? = null
     ) {
         val dir = sessionDir ?: return
         val zoneId = ZoneId.of(sessionTimeZoneId)
@@ -1238,6 +1700,7 @@ internal class ProbeLogger(private val context: Context) {
             .put("utc_offset", zoneId.rules.getOffset(referenceInstant).id)
             .put("status", status)
             .put("status_reason", reason ?: JSONObject.NULL)
+            .put("pending_completion_kind", pendingCompletionKind?.name ?: JSONObject.NULL)
             .put("app_version", APP_VERSION)
             .put("version_name", BuildConfig.VERSION_NAME)
             .put("version_code", BuildConfig.VERSION_CODE)
@@ -1759,9 +2222,51 @@ internal class ProbeLogger(private val context: Context) {
 
     private fun countDataRows(file: File): Long = (countLines(file) - if (file.isFile) 1L else 0L).coerceAtLeast(0L)
 
+    private fun hasEventType(file: File, eventType: String): Boolean = runCatching {
+        if (!file.isFile) return@runCatching false
+        file.useLines(Charsets.UTF_8) { lines ->
+            lines.drop(1).any { row ->
+                row.split(',', limit = 3).getOrNull(1) == eventType
+            }
+        }
+    }.getOrDefault(false)
+
     private fun readJson(file: File): JSONObject? = runCatching {
         AtomicFile(file).openRead().bufferedReader(Charsets.UTF_8).use { JSONObject(it.readText()) }
     }.getOrNull()
+
+    private fun readFinalizationIntent(dir: File): SessionFinalizationIntent? {
+        val json = readJson(File(dir, FINALIZATION_INTENT_MARKER)) ?: return null
+        if (jsonStringOrNull(json, "session_id") != dir.name) return null
+        val kind = jsonStringOrNull(json, "completion_kind")
+            ?.let { value -> runCatching { LogCompletionKind.valueOf(value) }.getOrNull() }
+            ?: return null
+        val reason = jsonStringOrNull(json, "reason") ?: return null
+        val wallMs = jsonLongOrNull(json, "requested_at_wall_ms")?.takeIf { it >= 0L } ?: return null
+        val elapsedMs = jsonLongOrNull(json, "requested_at_elapsed_ms")?.takeIf { it >= 0L } ?: return null
+        return SessionFinalizationIntent(kind, reason, wallMs, elapsedMs)
+    }
+
+    private fun hasPublicationReceiptFast(
+        dir: File,
+        session: JSONObject?,
+        archive: File?
+    ): Boolean {
+        val marker = readJson(File(dir, PUBLICATION_MARKER)) ?: return false
+        return EvidenceRecoveryPolicy.isPublishedTerminalFastPath(
+            expectedSessionId = dir.name,
+            sessionId = jsonStringOrNull(session, "session_id"),
+            status = jsonStringOrNull(session, "status"),
+            sessionArchiveName = trustedArchiveName(session),
+            receiptSessionId = jsonStringOrNull(marker, "session_id"),
+            receiptArchiveName = jsonStringOrNull(marker, "archive_name"),
+            receiptArchiveSize = jsonLongOrNull(marker, "archive_size_bytes"),
+            receiptArchiveSha256 = jsonStringOrNull(marker, "archive_sha256"),
+            actualArchiveName = archive?.name,
+            actualArchiveSize = archive?.takeIf { it.isFile }?.length(),
+            actualArchiveExists = archive?.isFile == true
+        )
+    }
 
     private fun hasPublicationReceipt(dir: File, session: JSONObject?, archive: File?): Boolean {
         val marker = readJson(File(dir, PUBLICATION_MARKER)) ?: return false

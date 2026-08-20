@@ -2,9 +2,11 @@ package com.guanyu.rx400hprobe
 
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
-/** Fixed V0.3.1 session phases used as the single dashboard-control source. */
+/** Fixed V0.3.x session phases used as the single dashboard-control source. */
 internal enum class MonitorSessionPhase {
+    RECOVERING,
     IDLE,
     WAITING_PERMISSION,
     CONNECTING,
@@ -13,6 +15,41 @@ internal enum class MonitorSessionPhase {
     STOPPING,
     SAVING,
     SAVE_FAILED
+}
+
+/**
+ * First-writer-wins terminal intent shared by End, Activity destruction and the
+ * session worker. The worker remains the only code path that performs the
+ * actual finalization/publication work.
+ */
+internal data class SessionFinalizationIntent(
+    val completionKind: LogCompletionKind,
+    val reason: String,
+    val requestedAtWallMs: Long,
+    val requestedAtElapsedMs: Long
+) {
+    init {
+        require(reason.isNotBlank())
+        require(requestedAtWallMs >= 0L)
+        require(requestedAtElapsedMs >= 0L)
+    }
+}
+
+internal class SessionFinalizationLatch {
+    private val intent = AtomicReference<SessionFinalizationIntent?>(null)
+
+    fun claim(candidate: SessionFinalizationIntent): SessionFinalizationIntent {
+        while (true) {
+            intent.get()?.let { return it }
+            if (intent.compareAndSet(null, candidate)) return candidate
+        }
+    }
+
+    fun current(): SessionFinalizationIntent? = intent.get()
+
+    fun reset() {
+        intent.set(null)
+    }
 }
 
 /** Process-local ownership boundary for one Bluetooth/session worker at a time. */
@@ -58,6 +95,11 @@ internal data class MonitorControlState(
 
 internal object MonitorSessionPolicy {
     fun controls(phase: MonitorSessionPhase): MonitorControlState = when (phase) {
+        MonitorSessionPhase.RECOVERING -> MonitorControlState(
+            deviceEnabled = false,
+            startEnabled = false,
+            endEnabled = false
+        )
         MonitorSessionPhase.IDLE -> MonitorControlState(
             deviceEnabled = true,
             startEnabled = true,
@@ -85,6 +127,7 @@ internal object MonitorSessionPolicy {
     }
 
     fun modeCode(phase: MonitorSessionPhase): String = when (phase) {
+        MonitorSessionPhase.RECOVERING -> "RECOVERING"
         MonitorSessionPhase.IDLE -> "IDLE"
         MonitorSessionPhase.WAITING_PERMISSION -> "PERMISSION"
         MonitorSessionPhase.CONNECTING -> "CONNECTING"

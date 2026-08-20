@@ -15,9 +15,24 @@ import android.os.SystemClock
 import android.view.WindowManager
 import java.io.IOException
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+
+internal fun phaseAfterPendingConnectionCloseFailure(
+    current: MonitorSessionPhase,
+    destroying: Boolean
+): MonitorSessionPhase = if (
+    !destroying && current in setOf(
+        MonitorSessionPhase.CONNECTING,
+        MonitorSessionPhase.STOPPING
+    )
+) {
+    MonitorSessionPhase.IDLE
+} else {
+    current
+}
 
 class MainActivity : Activity() {
     companion object {
@@ -32,20 +47,24 @@ class MainActivity : Activity() {
 
     private val worker = Executors.newSingleThreadExecutor()
     private val connectionCancelWorker = Executors.newSingleThreadExecutor()
+    private val pendingConnectionClose = AtomicReference<Future<*>?>(null)
     private val ui = Handler(Looper.getMainLooper())
     private val elm = Elm327Client()
     private lateinit var logger: ProbeLogger
     private lateinit var publicLogExporter: PublicLogExporter
     private lateinit var dashboard: DashboardUi
 
-    private val phase = AtomicReference(MonitorSessionPhase.IDLE)
+    private val phase = AtomicReference(MonitorSessionPhase.RECOVERING)
     private val stopRequested = AtomicBoolean(false)
     private val liveMode = AtomicBoolean(false)
     private val endRequestedFromLive = AtomicBoolean(false)
     private val endRequestedAtWallMs = AtomicLong(0L)
     private val pendingPermissionStart = AtomicBoolean(false)
     private val destroying = AtomicBoolean(false)
-    private val scheduler = DeadlineScheduler(
+    private val recoveryRetryNeeded = AtomicBoolean(false)
+    private val finalizationLatch = SessionFinalizationLatch()
+    private val finalizationTransitionLock = Any()
+    private var scheduler = DeadlineScheduler(
         RequestTable.schedulerSpecs,
         RequestTable.diagnosticCostModel
     )
@@ -64,6 +83,7 @@ class MainActivity : Activity() {
     private val hybrid get() = store.hybrid
     private val idleCheckState = IdleCheckState()
     private val performanceTracker = PerformanceTracker()
+    private val wallClockAdjustmentDetector = WallClockAdjustmentDetector()
 
     private var reconnectCount = 0
     private var consecutiveErrors = 0
@@ -72,8 +92,8 @@ class MainActivity : Activity() {
     private var pendingArchive: PendingLogArchive? = null
     private var pendingPublicationReceipt: PublicLogResult? = null
     private var pendingManualArchive: PendingLogArchive? = null
-    private var retryCompletionKind = LogCompletionKind.COMPLETED
-    private var retryReason = "USER_END"
+    private var retryFinalizationIntent: SessionFinalizationIntent? = null
+    private var retryReachedLive = false
     @Volatile
     private var lastRenderDurationMs = 0L
     private var lastFrameLogMs = 0L
@@ -82,8 +102,8 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        logger = ProbeLogger(this)
-        publicLogExporter = PublicLogExporter(this)
+        logger = ProbeLogger(applicationContext)
+        publicLogExporter = PublicLogExporter(applicationContext)
         setContentView(buildDashboard())
         loadSavedDevice()
         renderDashboard()
@@ -125,20 +145,47 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         destroying.set(true)
         pendingPermissionStart.set(false)
-        stopRequested.set(true)
-        liveMode.set(false)
+        val shutdownIntent = synchronized(finalizationTransitionLock) {
+            val current = phase.get()
+            if (current in setOf(
+                    MonitorSessionPhase.CONNECTING,
+                    MonitorSessionPhase.INITIALIZING,
+                    MonitorSessionPhase.LIVE,
+                    MonitorSessionPhase.STOPPING,
+                    MonitorSessionPhase.SAVING
+                )
+            ) {
+                claimFinalization(
+                    completionKind = LogCompletionKind.INTERRUPTED,
+                    reason = if (current == MonitorSessionPhase.LIVE || endRequestedFromLive.get()) {
+                        "ACTIVITY_DESTROYED"
+                    } else {
+                        "ACTIVITY_DESTROYED_BEFORE_LIVE"
+                    }
+                )
+            }
+            stopRequested.set(true)
+            liveMode.set(false)
+            finalizationLatch.current()
+        }
         closeElmAsync()
-        if (::logger.isInitialized) logger.shutdownAsync()
         ui.removeCallbacksAndMessages(null)
-        worker.shutdownNow()
+        val orderedShutdownQueued = runCatching {
+            worker.execute {
+                if (::logger.isInitialized) runCatching { logger.shutdown(shutdownIntent) }
+            }
+        }.isSuccess
+        worker.shutdown()
+        if (!orderedShutdownQueued && ::logger.isInitialized) logger.shutdownAsync(shutdownIntent)
         connectionCancelWorker.shutdown()
         super.onDestroy()
     }
 
     private val refreshUiRunnable = object : Runnable {
         override fun run() {
+            if (destroying.get()) return
             renderDashboard()
-            ui.postDelayed(this, 500)
+            if (!destroying.get()) ui.postDelayed(this, 500)
         }
     }
 
@@ -164,7 +211,9 @@ class MainActivity : Activity() {
 
     private fun notifyPhaseChanged() {
         if (destroying.get()) return
-        ui.post { if (::dashboard.isInitialized) refreshControls() }
+        ui.post {
+            if (!destroying.get() && ::dashboard.isInitialized) refreshControls()
+        }
         renderDashboard()
     }
 
@@ -258,15 +307,25 @@ class MainActivity : Activity() {
     }
 
     private fun beginSession(expected: MonitorSessionPhase) {
-        endRequestedFromLive.set(false)
-        endRequestedAtWallMs.set(0L)
-        if (!phase.compareAndSet(expected, MonitorSessionPhase.CONNECTING)) return
+        val started = synchronized(finalizationTransitionLock) {
+            if (destroying.get() || !phase.compareAndSet(expected, MonitorSessionPhase.CONNECTING)) {
+                false
+            } else {
+                endRequestedFromLive.set(false)
+                endRequestedAtWallMs.set(0L)
+                finalizationLatch.reset()
+                retryFinalizationIntent = null
+                retryReachedLive = false
+                stopRequested.set(false)
+                true
+            }
+        }
+        if (!started) return
         val address = deviceAddress ?: run {
             setPhase(MonitorSessionPhase.IDLE)
             return
         }
         val name = deviceName ?: "Unknown"
-        stopRequested.set(false)
         lastError = "NONE"
         lastNotice = null
         refreshControls()
@@ -289,17 +348,42 @@ class MainActivity : Activity() {
                 MonitorSessionPhase.CONNECTING,
                 MonitorSessionPhase.INITIALIZING,
                 MonitorSessionPhase.LIVE -> {
-                    if (!phase.compareAndSet(current, MonitorSessionPhase.STOPPING)) continue
-                    if (current == MonitorSessionPhase.LIVE) endRequestedFromLive.set(true)
-                    endRequestedAtWallMs.compareAndSet(0L, System.currentTimeMillis())
-                    stopRequested.set(true)
-                    liveMode.set(false)
+                    val transitionClaimed = synchronized(finalizationTransitionLock) {
+                        if (!phase.compareAndSet(current, MonitorSessionPhase.STOPPING)) {
+                            false
+                        } else {
+                            if (current == MonitorSessionPhase.LIVE) endRequestedFromLive.set(true)
+                            val requestedAtWallMs = System.currentTimeMillis()
+                            endRequestedAtWallMs.compareAndSet(0L, requestedAtWallMs)
+                            claimFinalization(
+                                completionKind = if (current == MonitorSessionPhase.LIVE) {
+                                    LogCompletionKind.COMPLETED
+                                } else {
+                                    LogCompletionKind.INTERRUPTED
+                                },
+                                reason = if (current == MonitorSessionPhase.LIVE) {
+                                    "USER_END"
+                                } else {
+                                    "USER_END_BEFORE_LIVE"
+                                },
+                                requestedAtWallMs = requestedAtWallMs
+                            )
+                            stopRequested.set(true)
+                            liveMode.set(false)
+                            true
+                        }
+                    }
+                    if (!transitionClaimed) continue
                     notifyPhaseChanged()
                     closeElmAsync()
                     return
                 }
                 MonitorSessionPhase.SAVE_FAILED -> {
-                    retrySave()
+                    if (recoveryRetryNeeded.compareAndSet(true, false)) {
+                        recoverPendingLogs(MonitorSessionPhase.SAVE_FAILED)
+                    } else {
+                        retrySave()
+                    }
                     return
                 }
                 else -> return
@@ -307,13 +391,66 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun claimFinalization(
+        completionKind: LogCompletionKind,
+        reason: String,
+        requestedAtWallMs: Long = System.currentTimeMillis()
+    ): SessionFinalizationIntent = synchronized(finalizationTransitionLock) {
+        val claimed = finalizationLatch.claim(
+            SessionFinalizationIntent(
+                completionKind = completionKind,
+                reason = reason,
+                requestedAtWallMs = requestedAtWallMs,
+                requestedAtElapsedMs = SystemClock.elapsedRealtime()
+            )
+        )
+        if (::logger.isInitialized && logger.state in setOf(
+                SessionState.ACTIVE,
+                SessionState.FINALIZING,
+                SessionState.FINALIZE_FAILED
+            )
+        ) {
+            logger.armFinalizationAsync(claimed)
+        }
+        claimed
+    }
+
+    @Synchronized
     private fun closeElmAsync() {
-        runCatching {
-            connectionCancelWorker.execute { runCatching { elm.close() } }
+        val task = runCatching {
+            connectionCancelWorker.submit { runCatching { elm.close() } }
+        }.getOrNull()
+        if (task != null) {
+            pendingConnectionClose.set(task)
+        } else {
+            // Rejection is only expected during Activity teardown. Do not leak
+            // the socket merely because the cancellation executor is closing.
+            runCatching { elm.close() }
+        }
+    }
+
+    /** Prevents a delayed close from an earlier session from reaching a new socket. */
+    private fun awaitPendingElmClose(): Boolean {
+        while (true) {
+            val task = pendingConnectionClose.get() ?: return true
+            try {
+                task.get()
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            } catch (_: Exception) {
+                // closeElmAsync contains its own failure boundary; completion is
+                // still the ordering signal needed before a new connect.
+            }
+            pendingConnectionClose.compareAndSet(task, null)
         }
     }
 
     private fun runOwnedSession(sessionDeviceName: String, sessionDeviceAddress: String) {
+        if (!awaitPendingElmClose()) {
+            settlePendingConnectionCloseFailure()
+            return
+        }
         val ran = PROCESS_VEHICLE_SESSION_LEASE.withCancellableLease(
             shouldContinue = { !stopRequested.get() && !destroying.get() }
         ) {
@@ -329,13 +466,26 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun settlePendingConnectionCloseFailure() {
+        while (true) {
+            val current = phase.get()
+            val settled = phaseAfterPendingConnectionCloseFailure(current, destroying.get())
+            if (settled == current) return
+            if (phase.compareAndSet(current, settled)) {
+                lastNotice = "旧连接关闭等待已中断，本次开始已取消"
+                notifyPhaseChanged()
+                return
+            }
+        }
+    }
+
     private fun runOwnedSessionWithLease(sessionDeviceName: String, sessionDeviceAddress: String) {
         var enteredLive = false
-        var completionKind = LogCompletionKind.COMPLETED
-        var completionReason = "USER_END"
         try {
             resetSessionRuntime()
             logger.start(sessionDeviceName, sessionDeviceAddress)
+            observeWallClockAdjustmentNow()
+            finalizationLatch.current()?.let { logger.armFinalization(it) }
             logger.logEvent("START_REQUEST")
             requireContinue()
 
@@ -352,47 +502,81 @@ class MainActivity : Activity() {
             logger.logEvent("LIVE_START")
             requireContinue()
             runLiveScheduler(sessionDeviceAddress, sessionDeviceName)
-            if (stopRequested.get()) {
-                completionReason = "USER_END"
-            } else {
-                completionKind = LogCompletionKind.INTERRUPTED
-                completionReason = "LIVE_ENDED_UNEXPECTEDLY"
+            if (finalizationLatch.current() == null) {
+                claimFinalization(LogCompletionKind.INTERRUPTED, "LIVE_ENDED_UNEXPECTEDLY")
                 lastError = "实时监控意外结束；日志将作为中断记录保存"
             }
         } catch (_: SessionCancelledException) {
             val reachedLive = enteredLive || endRequestedFromLive.get()
-            if (!reachedLive) completionKind = LogCompletionKind.INTERRUPTED
-            completionReason = if (reachedLive) "USER_END" else "USER_END_BEFORE_LIVE"
+            if (finalizationLatch.current() == null) {
+                claimFinalization(
+                    completionKind = LogCompletionKind.INTERRUPTED,
+                    reason = if (destroying.get()) {
+                        if (reachedLive) "ACTIVITY_DESTROYED" else "ACTIVITY_DESTROYED_BEFORE_LIVE"
+                    } else {
+                        if (reachedLive) {
+                            "LIVE_CANCELLED_WITHOUT_TERMINAL_INTENT"
+                        } else {
+                            "START_CANCELLED_WITHOUT_TERMINAL_INTENT"
+                        }
+                    }
+                )
+            }
         } catch (e: Exception) {
             val reachedLive = enteredLive || endRequestedFromLive.get()
-            if (stopRequested.get()) {
-                if (!reachedLive) completionKind = LogCompletionKind.INTERRUPTED
-                completionReason = if (reachedLive) "USER_END" else "USER_END_BEFORE_LIVE"
-            } else {
+            if (finalizationLatch.current() == null && stopRequested.get()) {
+                claimFinalization(
+                    completionKind = LogCompletionKind.INTERRUPTED,
+                    reason = if (destroying.get()) {
+                        if (reachedLive) "ACTIVITY_DESTROYED" else "ACTIVITY_DESTROYED_BEFORE_LIVE"
+                    } else {
+                        if (reachedLive) {
+                            "LIVE_CANCELLED_WITHOUT_TERMINAL_INTENT"
+                        } else {
+                            "START_CANCELLED_WITHOUT_TERMINAL_INTENT"
+                        }
+                    }
+                )
+            } else if (finalizationLatch.current() == null) {
                 safeLogError(if (reachedLive) "LIVE_MODE_ERROR" else "START_ERROR", e)
                 lastError = if (reachedLive) "实时监控中断: ${e.message}" else "开始失败: ${e.message}"
-                completionKind = if (reachedLive) LogCompletionKind.INTERRUPTED else LogCompletionKind.START_FAILED
-                completionReason = if (reachedLive) "LIVE_ERROR" else "START_FAILED"
+                claimFinalization(
+                    completionKind = if (reachedLive) {
+                        LogCompletionKind.INTERRUPTED
+                    } else {
+                        LogCompletionKind.START_FAILED
+                    },
+                    reason = if (reachedLive) "LIVE_ERROR" else "START_FAILED"
+                )
             }
         } finally {
             liveMode.set(false)
-            elm.close()
+            runCatching { elm.close() }
             currentHeader = null
-            if (destroying.get()) return
             val reachedLive = enteredLive || endRequestedFromLive.get()
             if (logger.state == SessionState.ACTIVE || logger.state == SessionState.FINALIZE_FAILED) {
+                val intent = finalizationLatch.current() ?: claimFinalization(
+                    completionKind = if (reachedLive) {
+                        LogCompletionKind.INTERRUPTED
+                    } else {
+                        LogCompletionKind.START_FAILED
+                    },
+                    reason = if (reachedLive) "LIVE_ENDED_UNEXPECTEDLY" else "START_FAILED"
+                )
                 setPhase(MonitorSessionPhase.SAVING)
-                retryCompletionKind = completionKind
-                retryReason = completionReason
+                retryFinalizationIntent = intent
+                retryReachedLive = reachedLive
                 try {
                     if (logger.state == SessionState.ACTIVE) {
-                        endRequestedAtWallMs.get().takeIf { it > 0L }?.let {
-                            logger.logEvent("END_REQUEST", "wall_time_ms=$it")
-                        }
-                        if (reachedLive) logger.logEvent("LIVE_STOP", completionReason)
-                        logger.logEvent("SESSION_END", completionReason)
+                        logger.armFinalization(intent)
+                        observeWallClockAdjustmentNow()
+                        logger.logSessionTerminalEvents(
+                            endRequestedAtWallMs = endRequestedAtWallMs.get().takeIf { it > 0L },
+                            reachedLive = reachedLive,
+                            reason = intent.reason
+                        )
                     }
-                    val archive = logger.finalizeAndZip(completionKind, completionReason)
+                    val archive = logger.finalizeAndZip(intent)
                     publishArchive(archive, offerUserDestinationOnFailure = true)
                 } catch (e: Exception) {
                     lastError = "保存失败: ${e.message}"
@@ -417,6 +601,11 @@ class MainActivity : Activity() {
         timeoutCount.set(0L)
         busErrorCount.set(0L)
         performanceTracker.reset()
+        wallClockAdjustmentDetector.reset()
+        wallClockAdjustmentDetector.observe(
+            SystemClock.elapsedRealtime(),
+            System.currentTimeMillis()
+        )
         reconnectCount = 0
         consecutiveErrors = 0
         currentHeader = null
@@ -473,9 +662,19 @@ class MainActivity : Activity() {
     }
 
     private fun runLiveScheduler(sessionAddress: String, sessionName: String) {
+        val costModel = RequestTable.schedulerCostModelFor(
+            SchedulerCostApplicabilityContext(
+                apiLevel = Build.VERSION.SDK_INT,
+                manufacturer = Build.MANUFACTURER,
+                model = Build.MODEL,
+                device = Build.DEVICE,
+                adapterName = sessionName
+            )
+        )
+        scheduler = DeadlineScheduler(RequestTable.schedulerSpecs, costModel)
         val admission = CapacityAdmission.assess(
             RequestTable.schedulerSpecs,
-            RequestTable.diagnosticCostModel
+            costModel
         )
         val runMode = if (admission.state == AdmissionState.ADMITTED) {
             SchedulerRunMode.NORMAL
@@ -483,6 +682,7 @@ class MainActivity : Activity() {
             SchedulerRunMode.DIAGNOSTIC_BEST_EFFORT
         }
         val liveEpochMs = SystemClock.elapsedRealtime()
+        observeWallClockAdjustment(liveEpochMs, System.currentTimeMillis())
         scheduler.startRun(liveEpochMs, admission, runMode)
         logger.setSchedulerRunMetadata(
             admissionState = admission.state.name,
@@ -744,6 +944,7 @@ class MainActivity : Activity() {
             if (!liveMode.get() || stopRequested.get()) break
             val cycleDuration = SystemClock.elapsedRealtime() - cycleStart
             val nowAfterCycle = SystemClock.elapsedRealtime()
+            observeWallClockAdjustmentNow()
             if (nowAfterCycle - lastMetricSampleMs >= 5000L) {
                 val deltaMs = (nowAfterCycle - lastMetricSampleMs).coerceAtLeast(1L)
                 val executions = scheduler.executions
@@ -792,10 +993,22 @@ class MainActivity : Activity() {
                 sleepWhileRunning(sleepMs)
             }
         }
-        scheduler.finishRun(SystemClock.elapsedRealtime())
+        val finishedAtMs = SystemClock.elapsedRealtime()
+        scheduler.finishRun(finishedAtMs)
         drainSchedulerTerminalEvents()
-        logSchedulerRequestStats(scheduler.snapshot(SystemClock.elapsedRealtime()))
+        logSchedulerRequestStats(scheduler.snapshot(finishedAtMs))
+        observeWallClockAdjustmentNow()
         logger.logConnection("LIVE_MODE_STOP")
+    }
+
+    private fun observeWallClockAdjustmentNow() {
+        observeWallClockAdjustment(SystemClock.elapsedRealtime(), System.currentTimeMillis())
+    }
+
+    private fun observeWallClockAdjustment(elapsedRealtimeMs: Long, wallTimeMs: Long) {
+        wallClockAdjustmentDetector.observe(elapsedRealtimeMs, wallTimeMs)?.let { adjustment ->
+            logger.logClockAdjustment(adjustment)
+        }
     }
 
     private fun ensureHeader(header: String) {
@@ -1236,11 +1449,25 @@ class MainActivity : Activity() {
             worker.execute { publishArchive(archive, offerUserDestinationOnFailure = true) }
             return
         }
-        if (logger.state == SessionState.FINALIZE_FAILED) {
+        if (logger.state == SessionState.ACTIVE || logger.state == SessionState.FINALIZE_FAILED) {
             setPhase(MonitorSessionPhase.SAVING)
             worker.execute {
                 try {
-                    val rebuilt = logger.finalizeAndZip(retryCompletionKind, retryReason)
+                    val intent = retryFinalizationIntent ?: SessionFinalizationIntent(
+                        completionKind = LogCompletionKind.INTERRUPTED,
+                        reason = "FINALIZE_RETRY_WITHOUT_MEMORY_INTENT",
+                        requestedAtWallMs = System.currentTimeMillis(),
+                        requestedAtElapsedMs = SystemClock.elapsedRealtime()
+                    )
+                    if (logger.state == SessionState.ACTIVE) {
+                        logger.armFinalization(intent)
+                        logger.logSessionTerminalEvents(
+                            endRequestedAtWallMs = endRequestedAtWallMs.get().takeIf { it > 0L },
+                            reachedLive = retryReachedLive,
+                            reason = intent.reason
+                        )
+                    }
+                    val rebuilt = logger.finalizeAndZip(intent)
                     publishArchive(rebuilt, offerUserDestinationOnFailure = true)
                 } catch (e: Exception) {
                     lastError = "保存重试失败: ${e.message}"
@@ -1293,12 +1520,41 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun recoverPendingLogs() {
-        setPhase(MonitorSessionPhase.SAVING)
+    private fun recoverPendingLogs(expectedPhase: MonitorSessionPhase? = null) {
+        if (expectedPhase != null) {
+            if (!phase.compareAndSet(expectedPhase, MonitorSessionPhase.RECOVERING)) return
+            notifyPhaseChanged()
+        } else {
+            setPhase(MonitorSessionPhase.RECOVERING)
+        }
         worker.execute {
             try {
-                val archives = logger.recoverInterruptedSessions()
-                if (archives.isEmpty()) {
+                val scan = logger.scanStartupRecovery()
+                when (scan.state) {
+                    StartupRecoveryState.CLEAN -> {
+                        recoveryRetryNeeded.set(false)
+                        pendingArchive = null
+                        pendingPublicationReceipt = null
+                        lastError = "NONE"
+                        setPhase(MonitorSessionPhase.IDLE)
+                        return@execute
+                    }
+                    StartupRecoveryState.FAILED -> {
+                        recoveryRetryNeeded.set(true)
+                        lastError = "日志恢复检查失败: ${scan.reason}"
+                        setPhase(MonitorSessionPhase.SAVE_FAILED)
+                        return@execute
+                    }
+                    StartupRecoveryState.PENDING,
+                    StartupRecoveryState.OWNER_BUSY -> Unit
+                }
+                pendingArchive = null
+                pendingPublicationReceipt = null
+                val report = logger.recoverInterruptedSessions()
+                val archives = report.pendingArchives
+                if (archives.isEmpty() && report.failures.isEmpty()) {
+                    recoveryRetryNeeded.set(false)
+                    lastError = "NONE"
                     setPhase(MonitorSessionPhase.IDLE)
                     return@execute
                 }
@@ -1319,17 +1575,27 @@ class MainActivity : Activity() {
                         lastError = "恢复日志公共保存失败: ${result.error}"
                     }
                 }
-                if (failed != null) {
+                if (report.failures.isNotEmpty()) {
+                    lastError = "日志恢复失败: " + report.failures.joinToString("; ") {
+                        "${it.sessionId} ${it.reason}"
+                    }
+                }
+                if (failed != null || report.failures.isNotEmpty()) {
+                    recoveryRetryNeeded.set(true)
                     pendingArchive = failed
                     setPhase(MonitorSessionPhase.SAVE_FAILED)
                 } else {
+                    recoveryRetryNeeded.set(false)
+                    pendingArchive = null
+                    pendingPublicationReceipt = null
                     lastNotice = "已恢复并保存 $recovered 份日志"
                     lastError = "NONE"
                     setPhase(MonitorSessionPhase.IDLE)
                 }
             } catch (e: Exception) {
                 lastError = "日志恢复失败: ${e.message}"
-                setPhase(MonitorSessionPhase.IDLE)
+                recoveryRetryNeeded.set(true)
+                setPhase(MonitorSessionPhase.SAVE_FAILED)
             }
         }
     }
@@ -1337,6 +1603,8 @@ class MainActivity : Activity() {
     private fun completePublishedArchive(result: PublicLogResult) {
         pendingArchive = null
         pendingPublicationReceipt = null
+        retryFinalizationIntent = null
+        retryReachedLive = false
         lastError = "NONE"
         lastNotice = "已保存 ${result.displayName}"
         setPhase(MonitorSessionPhase.IDLE)
