@@ -158,7 +158,7 @@ V0.3.2 是仍处于 V0.3.0 Scheduler / Refresh Frontier 工程里程碑内的 Ap
 RX400hProtocolProbe-v0.3.3-recovery-cost-crt-debug-signed
 ```
 
-Gradle 身份为 V0.3.3 / versionCode 25，workflow 名称已同步；在实际提交、触发并验证 exact-commit run 前，不得把本地 APK 称为 GitHub Actions artifact。已安装与既有实车证据仍属于 V0.3.2/v24。
+Gradle 身份为 V0.3.3 / versionCode 25，workflow 名称已同步。本地 exact-clean 实现提交 `c9ad39759021fd8d4ca529b115ab7932aa2bf8d8` 已产出 SHA-256 `2d75bd7d1bc6be8a923495e901c05ce904d58966f8e10ff3e12b2e980a33d0a1` 的固定 v2 证书 APK；它不是 GitHub Actions artifact。在实际 push、触发并验证 exact-commit run 前，不得把本地 APK 称为 CI artifact。已安装与既有实车证据仍属于 V0.3.2/v24。
 
 Gradle 的 Git provenance 采集必须 fail closed：Git 不可执行、命令失败或 commit ID 非 40 位十六进制时，构建直接失败。GitHub Actions 还必须在上传前检查生成的 `BuildConfig`：`GIT_COMMIT == GITHUB_SHA` 且 `GIT_DIRTY == false`。
 

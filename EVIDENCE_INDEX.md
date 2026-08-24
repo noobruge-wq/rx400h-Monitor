@@ -240,27 +240,34 @@ Manifest identity: applicationId com.guanyu.rx400hprobe.debug; versionName 0.3.2
 
 Role: D-046 exact-source build evidence. GitHub Actions rebuilt clean commit `8e55c6a`, passed the configured unit/lint/assemble gates, verified embedded commit/clean provenance, verified the fixed v2 signing certificate and uploaded the named artifact. The scheduler covers epoch-anchored releases, one-transaction header/request replanning, conserved per-request terminal outcomes, transport-down accounting, fail-closed admission, mutually exclusive legacy deadline/skip compatibility counters, streaming evidence and prompt-loss/I/O-failure reconnect enforcement. The seven requests, headers, commands, decoder and target periods are unchanged. Later API 27 paired-OBD sessions listed below validate normal connection → LIVE → End/public-save and same-period behavior. Forced interrupted recovery remained open for the V0.3.2 artifact; D-051 trusted-model integration is implemented only in the later V0.3.3 source candidate.
 
-### V0.3.3 recovery/cost/CRT local source candidate
+### V0.3.3 recovery/cost/CRT exact-clean local candidate
 
 ```text
 Branch: v0.3.0
 Base commit before implementation: 3b48d2dd7ab5d85c99b94336320e19a1b4bd3787
-Implementation commit: pending local commit
+Implementation commit: c9ad39759021fd8d4ca529b115ab7932aa2bf8d8
 App version: 0.3.3
 versionCode: 25
 Protocol profile: rx400h_ha_hci_20260805_002 (unchanged)
 Decoder profile: rx400h-reactive-20260808-002 (unchanged)
 Scheduler profile: v030_capacity_002 (unchanged)
-Candidate artifact: RX400hProtocolProbe-v0.3.3-recovery-cost-crt-debug-signed
+Local APK filename: RX400hProtocolProbe-v0.3.3-recovery-cost-crt-debug-signed.apk
 Remote CI / push: not performed
+Local APK size: 2,589,038 bytes
+Local APK SHA-256: 2d75bd7d1bc6be8a923495e901c05ce904d58966f8e10ff3e12b2e980a33d0a1
+Embedded provenance: GIT_COMMIT=c9ad39759021fd8d4ca529b115ab7932aa2bf8d8; GIT_DIRTY=false
+Production/test compilation: pass
 Compiled direct-JUnit result: 98 passed / 0 failed / 0 errors
 Gradle test worker: host infrastructure failure before test execution (GradleWorkerMain / closed pipe)
 Lint: 0 errors / 9 non-blocking warnings
+assembleDebug: pass
 Manifest identity: applicationId com.guanyu.rx400hprobe.debug; versionName 0.3.3-debug; versionCode 25; minSdk 26; targetSdk 35
 Signature: APK Signature Scheme v2; certificate SHA-256 77ba84b1f4f737a5d61b910bf4386df167548b9c6ce689ed25e994c37b2bc192
+Exact-artifact GUI smoke: debug-only DashboardPreviewActivity on API 26 at 1280x720, 360x800 and 800x360; portrait/landscape scroll reachability and active-only Idle Check captured; this is presentation evidence, not MainActivity/session-flow evidence
+Exact-artifact 4:3 recapture: host-blocked after the API 26 cold-boot image stopped reaching ADB; no 4:3 result is claimed
 ```
 
-Role: local D-047…D-052 implementation evidence before exact-commit packaging. It adds the explicit recovery phase/fast path, first-writer-wins terminal intent and idempotent recovery, pinned API 27 direction-aware cost model, observational clock-step logging and the fixed CRT Green presentation. Protocol, decoder, SignalStore, request whitelist and all seven periods/phases/deadlines remain unchanged. APK size/SHA and embedded clean implementation commit are intentionally deferred until the exact clean build; V0.3.3 target-device normal and forced-recovery evidence is not yet claimed.
+Role: exact-clean local D-047…D-052 implementation evidence. It adds the explicit recovery phase/fast path, first-writer-wins terminal intent and idempotent recovery, pinned API 27 direction-aware cost model, observational clock-step logging and the fixed CRT Green presentation. Protocol, decoder, SignalStore, request whitelist and all seven periods/phases/deadlines remain unchanged. The APK is bound to clean implementation commit `c9ad397`; it is not a GitHub Actions artifact and has not been installed on the target. The earlier D-047 prototype retains an API 26 800x600 visual record, but the exact V0.3.3 4:3 recapture is separately host-blocked and not claimed. V0.3.3 target-device normal and forced-recovery evidence remains pending.
 
 ---
 

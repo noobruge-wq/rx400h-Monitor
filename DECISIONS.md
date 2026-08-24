@@ -610,7 +610,7 @@ Admission is fail-closed. A complete trusted p95 cost model is assessed over the
 
 ## D-047 — CRT Green remains a bounded presentation skin over D-041
 
-**Status:** Integrated in the local V0.3.3 candidate; promotion pending — 2026-08-21
+**Status:** Integrated and exact-clean locally at `c9ad397`; remote/target promotion pending — 2026-08-25
 
 **Decision:** Restyle the existing D-041 dashboard as one fixed CRT Green prototype without introducing a generalized theme system. Keep the stable Android View tree and all responsive geometry policies. Use a near-black surface, a small monochrome phosphor-green palette, thin rectangular frames with restrained corner accents, state-aware terminal-style buttons, subtle static scanlines and a low-radius text glow. Effects must be preallocated or static, must not schedule animation frames, and must not require Compose, WebView, runtime blur, a shader framework or a new dependency.
 
@@ -624,7 +624,7 @@ The renderer continues to consume only `DashboardSnapshot`, `DashboardStatus` an
 
 ## D-048 — V0.3.3/v25 is a bounded reliability, admission-data and CRT integration candidate
 
-**Status:** Implemented as the local V0.3.3/v25 candidate; promotion pending — 2026-08-21
+**Status:** Implemented and exact-clean locally at `c9ad397`; promotion pending — 2026-08-25
 
 **Decision:** Advance the next installable candidate inside the still-open V0.3.0 Scheduler / Refresh Frontier milestone to `versionName = 0.3.3`, `versionCode = 25`. V0.3.3 combines only these already-scoped items:
 
@@ -634,17 +634,17 @@ The renderer continues to consume only `DashboardSnapshot`, `DashboardStatus` an
 4. observational wall-clock-adjustment evidence in D-052; and
 5. integration of the accepted fixed CRT Green presentation from D-047.
 
-The current source and APK remain V0.3.2/v24 until the implementation stage actually changes and verifies build identity. This docs-first decision does not itself promote V0.3.3, close V0.3.0, authorize a rate ladder, or claim a new engineering baseline.
+At this decision's acceptance, source and APK remained V0.3.2/v24 until implementation could change and verify build identity. Implementation has since advanced exact-clean local source/APK identity to V0.3.3/v25 at `c9ad397`, while the installed/vehicle-evidence candidate remains V0.3.2/v24. This decision does not itself promote V0.3.3, close V0.3.0, authorize a rate ladder, or claim a new engineering baseline.
 
 **Reason:** The API 27 same-period sessions show that the reconstructed scheduler can run the frozen demand cleanly, while startup recovery still performs work that is too broad for every launch, `SAVING` does not honestly describe recovery, and End/Activity destruction can compete around finalization. The accepted CRT prototype is ready to ship with those bounded corrections. A new app version is required so evidence cannot be confused with V0.3.2/v24.
 
-**Consequences:** The frozen vehicle contract is unchanged: no new command/header, no protocol-profile or decoder-formula change, no `SignalStore` semantic change, and no request-table period/phase/deadline change. The exact periods remain `std_core=800 ms`, `cd_f3=1000 ms`, `coolant=3000 ms`, `c3=800 ms`, `c4=1500 ms`, `cf=5000 ms`, `atrv=3000 ms`. This decision authorizes local implementation and verification only; it does not authorize commit, push, PR, release publication or vehicle action.
+**Consequences:** The frozen vehicle contract is unchanged: no new command/header, no protocol-profile or decoder-formula change, no `SignalStore` semantic change, and no request-table period/phase/deadline change. The exact periods remain `std_core=800 ms`, `cd_f3=1000 ms`, `coolant=3000 ms`, `c3=800 ms`, `c4=1500 ms`, `cf=5000 ms`, `atrv=3000 ms`. This decision originally authorized local implementation and verification only. Later explicit user continuation authorized the resulting local implementation/evidence commits, but did not authorize push, PR, release publication or vehicle action.
 
 ---
 
 ## D-049 — Startup recovery has an explicit phase and a metadata fast path
 
-**Status:** Implemented locally; target-device validation pending — 2026-08-21
+**Status:** Exact-clean local implementation complete; target-device validation pending — 2026-08-25
 
 **Decision:** Add `RECOVERING` as a first-class monitor/session phase, distinct from normal-session `SAVING`. On cold start the UI enters `RECOVERING`, reports that prior logs are being checked, and keeps all three controls unavailable until classification completes. Recovery work remains off the UI thread and remains serialized against any live/finalizing logger owner.
 
@@ -658,7 +658,7 @@ The startup classifier first reads only bounded atomic metadata. A directory in 
 
 ## D-050 — End, onDestroy and finalize share one exactly-once logical terminalization owner
 
-**Status:** Implemented locally; forced-recovery validation pending — 2026-08-21
+**Status:** Exact-clean local implementation complete; forced-recovery validation pending — 2026-08-25
 
 **Decision:** One session-scoped atomic terminalization claim owns stop reason, transport close, final event sequence, durable checkpoint, archive finalization and automatic publication. User End and `onDestroy` submit intent to that same owner; neither may independently close/reclassify/finalize the logger after the claim is held. A previously latched user End remains `USER_END` if Activity destruction follows it. Activity destruction without a prior normal End is an interruption reason, but, while the process is alive, it still runs through the same idempotent terminalization pipeline instead of bypassing finalization and separately invoking logger shutdown.
 
@@ -672,7 +672,7 @@ Exactly once means one logical terminal transition and at most one promoted inte
 
 ## D-051 — Trusted scheduler costs are versioned API 27 evidence, not period tuning
 
-**Status:** Implemented locally; exact-artifact and target-device holdout pending — 2026-08-21
+**Status:** Exact-clean local artifact complete; remote CI and target-device holdout pending — 2026-08-25
 
 **Decision:** Replace the zero-sample diagnostic seed only with a named, versioned cost-model record derived offline from hash-pinned, provenance-complete, same-period API 27 E1 sessions on the target Spreadtrum head unit and OBDLink adapter. The primary training provenance is the two clean exact-commit 2026-08-15 long runs:
 
@@ -718,7 +718,7 @@ Admission remains fail-closed under D-046: incomplete or hardware-inapplicable c
 
 ## D-052 — Wall-clock adjustment is observational; monotonic truth is unchanged
 
-**Status:** Implemented locally; target-device clock-step observation pending — 2026-08-21
+**Status:** Exact-clean local implementation complete; target-device clock-step observation pending — 2026-08-25
 
 **Decision:** Detect a material divergence between wall-clock progression and elapsed/monotonic progression and emit a bounded `CLOCK_ADJUSTMENT` evidence event containing the observed delta/direction and before/after wall context. Do not reorder or rewrite prior records. Scheduler release/deadline/capacity logic, freshness, Idle Check timers, duration, checkpoint cadence, lifecycle ownership and recovery eligibility continue to use monotonic or already durable state and must not react to a wall-clock step.
 
