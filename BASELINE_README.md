@@ -33,7 +33,7 @@
 - current baseline = V0.2.0 Reactive Core (closed 2026-08-09; historical validated baseline = V0.1.10);
 - active engineering milestone = V0.3.0 High-Performance Scheduler / Refresh Frontier;
 - installed/vehicle-evidence app candidate = V0.3.3 / versionCode 25 (D-047…D-052; exact-clean local commit `c9ad397`; API 27 normal start/LIVE/End/public-save evidenced by the two hash-audited 2026-08-26 archives; forced interrupted recovery and remote CI pending);
-- current local source candidate = V0.3.4 / versionCode 26 (D-053 target natural-first-frame/daylight CRT correction; local compile, 99/99 direct JUnit, lint, assemble and signature pass; exact-clean artifact and target API 27/1280x720 first-frame gate pending, not a promoted baseline);
+- current local source/artifact candidate = V0.3.4 / versionCode 26 (D-053 target natural-first-frame/daylight CRT correction; exact-clean local commit `b60619d`, APK SHA-256 `fa88064b…002b`, compile, 99/99 direct JUnit, lint, assemble and signature pass; target API 27/1280x720 first-frame gate and remote CI pending, not installed or promoted);
 - protocol is whitelist/evidence-driven;
 - Lean Core + high useful refresh are first-class objectives;
 - no expensive dedicated long-trip release gate;

@@ -274,13 +274,16 @@ Role: exact-clean local D-047…D-052 implementation evidence. It adds the expli
 ```text
 Branch: v0.3.0
 Base commit before implementation: 243001dad90fadf9cba7a00fffd6ac5069ada590
-Implementation commit: pending local implementation commit
+Implementation commit: b60619d5c1f4e011508b3cf74de6fee7422ec720
 App version: 0.3.4
 versionCode: 26
 Protocol profile: rx400h_ha_hci_20260805_002 (unchanged)
 Decoder profile: rx400h-reactive-20260808-002 (unchanged)
 Scheduler profile: v030_capacity_002 (unchanged)
-Intended artifact: RX400hProtocolProbe-v0.3.4-target-crt-ui-debug-signed.apk
+Local artifact: RX400hProtocolProbe-v0.3.4-b60619d-target-crt-ui-debug-signed.apk
+APK size: 2,591,078 bytes
+APK SHA-256: fa88064be3450ccb8765217ed0f12e97e01793c66434b07b0901777b4072002b
+Embedded provenance: GIT_COMMIT=b60619d5c1f4e011508b3cf74de6fee7422ec720; GIT_DIRTY=false
 Remote CI / push: not performed
 Production/test compilation: pass
 Compiled direct-JUnit result: 99 passed / 0 failed / 0 errors
@@ -293,7 +296,7 @@ Local GUI: not claimed; API 27 image absent and API 26 emulator stops before ADB
 Target API 27 1280x720 natural-first-frame gate: pending
 ```
 
-Role: local D-053 presentation implementation evidence. The complete real-window layout key covers width, height, safe insets, density and font scale; one attach-scoped listener suppresses at most two pre-draws before removing itself and always releasing the third draw; the debug preview's private three-pass workaround is removed. Static scanlines are strengthened, the green hierarchy is brighter and primary values/titles/buttons use a cached bold monospace. No core, scheduler, request period, protocol, decoder, SignalStore, logger or session-lifecycle source changed. Exact-clean commit/APK provenance will be recorded after the implementation commit and clean rebuild.
+Role: exact-clean local D-053 presentation implementation evidence. The complete real-window layout key covers width, height, safe insets, density and font scale; one attach-scoped listener suppresses at most two pre-draws before removing itself and always releasing the third draw; the debug preview's private three-pass workaround is removed. Static scanlines are strengthened, the green hierarchy is brighter and primary values/titles/buttons use a cached bold monospace. No core, scheduler, request period, protocol, decoder, SignalStore, logger or session-lifecycle source changed. The artifact is bound to clean implementation commit `b60619d`; it is not a GitHub Actions artifact and has not been installed. The actual API 27/1280x720 natural-first-frame gate remains open.
 
 ---
 

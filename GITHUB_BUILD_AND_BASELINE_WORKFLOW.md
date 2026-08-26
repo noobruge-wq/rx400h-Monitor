@@ -166,7 +166,7 @@ Gradle 身份为 V0.3.3 / versionCode 25，workflow 名称已同步。本地 exa
 RX400hProtocolProbe-v0.3.4-target-crt-ui-debug-signed
 ```
 
-Gradle 身份为 V0.3.4 / versionCode 26，workflow 名称已同步。它是 D-053 presentation-only 修正；exact-clean 本地 commit/APK、remote CI 和目标 API 27/1280x720 natural-first-frame gate 必须分别记录，任何 dirty build 或旧 preview screenshot 都不能冒充 exact first-frame evidence。
+Gradle 身份为 V0.3.4 / versionCode 26，workflow 名称已同步。D-053 presentation-only 修正已在 exact-clean 本地提交 `b60619d5c1f4e011508b3cf74de6fee7422ec720` 重编译；本地文件 `RX400hProtocolProbe-v0.3.4-b60619d-target-crt-ui-debug-signed.apk` 为 2,591,078 bytes、SHA-256 `fa88064be3450ccb8765217ed0f12e97e01793c66434b07b0901777b4072002b`，内嵌 `GIT_DIRTY=false` 并通过固定 v2 证书验证。它不是 GitHub Actions artifact，也尚未安装；remote CI 和目标 API 27/1280x720 natural-first-frame gate 仍须分别完成，任何旧 preview screenshot 都不能冒充 exact first-frame evidence。
 
 Gradle 的 Git provenance 采集必须 fail closed：Git 不可执行、命令失败或 commit ID 非 40 位十六进制时，构建直接失败。GitHub Actions 还必须在上传前检查生成的 `BuildConfig`：`GIT_COMMIT == GITHUB_SHA` 且 `GIT_DIRTY == false`。
 
