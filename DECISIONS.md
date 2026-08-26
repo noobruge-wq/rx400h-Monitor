@@ -634,7 +634,7 @@ The renderer continues to consume only `DashboardSnapshot`, `DashboardStatus` an
 4. observational wall-clock-adjustment evidence in D-052; and
 5. integration of the accepted fixed CRT Green presentation from D-047.
 
-At this decision's acceptance, source and APK remained V0.3.2/v24 until implementation could change and verify build identity. Implementation has since advanced exact-clean local source/APK identity to V0.3.3/v25 at `c9ad397`, while the installed/vehicle-evidence candidate remains V0.3.2/v24. This decision does not itself promote V0.3.3, close V0.3.0, authorize a rate ladder, or claim a new engineering baseline.
+At this decision's acceptance, source and APK remained V0.3.2/v24 until implementation could change and verify build identity. Implementation subsequently advanced exact-clean local source/APK identity to V0.3.3/v25 at `c9ad397`; that exact artifact was later installed and produced the two hash-audited 2026-08-26 normal-flow sessions. This decision does not itself promote V0.3.3, close V0.3.0, authorize a rate ladder, or claim a new engineering baseline; forced interrupted recovery remains open.
 
 **Reason:** The API 27 same-period sessions show that the reconstructed scheduler can run the frozen demand cleanly, while startup recovery still performs work that is too broad for every launch, `SAVING` does not honestly describe recovery, and End/Activity destruction can compete around finalization. The accepted CRT prototype is ready to ship with those bounded corrections. A new app version is required so evidence cannot be confused with V0.3.2/v24.
 
@@ -727,3 +727,19 @@ Local archive naming and human-readable timestamps may reflect the wall clock ob
 **Reason:** Vehicle head units may correct time after boot, navigation/network synchronization or user action. A forward/backward wall step is valuable provenance, but treating it as control truth would corrupt deadlines, durations or session semantics.
 
 **Consequences:** Virtual-clock tests must cover forward and backward wall steps while monotonic time advances normally, including steps around End/finalize. Scheduler outcomes and record order remain monotonic; only the additional observational event and subsequent wall timestamps may reflect the adjustment.
+
+---
+
+## D-053 — V0.3.4 fixes the natural first frame and tunes CRT visibility for the target head unit
+
+**Status:** Implemented locally; exact-clean artifact and target first-frame gate pending — 2026-08-27
+
+**Decision:** Advance the next local installable candidate to `versionName = 0.3.4`, `versionCode = 26` for a presentation-only correction. The primary acceptance target is the actual Android 8.1/API 27 Spreadtrum head unit at a 1280x720 framebuffer (approximately 1280x672 application content with its navigation bar). Phone-portrait optimization is deferred; D-041 responsive behavior remains in source but is not a release gate for this correction.
+
+The dashboard must not treat pre-attachment `displayMetrics` as a final window layout. Its invalidation identity includes the real laid-out width/height, density and font scale as well as safe insets. Native text auto-size and custom card/header measurement receive one attach-scoped stabilizer that may suppress at most two pre-draws before it removes itself and always releases the third draw. The debug screenshot Activity must use the same production path and must not recursively force three private extra layout passes.
+
+CRT daylight tuning may brighten the monochrome green hierarchy, selectively apply a cached bold monospace typeface to primary values/titles/enabled controls, and strengthen the static scanline overlay. Scanlines remain preallocated, non-animated and free of draw-time allocation; their spacing should avoid one rigid short pixel period on the target panel. Glow remains small and sharp. No Compose, WebView, runtime blur, shader framework, animation clock, generalized theme system or new dependency is introduced.
+
+**Reason:** The user repeatedly observed that labels overlap values on natural startup and become correct immediately after opening the notification shade or switching Activities. Source review found that V0.3.1 introduced pre-attachment auto-size/custom ViewGroup measurement and a window token that omitted the real viewport. V0.3.3's debug preview then recursively forced three layout passes before screenshots while production `MainActivity` did not, so earlier visual evidence proved only the refreshed steady state. The target car display also shows the original scanline alpha and green palette as effectively invisible or too dim in daylight.
+
+**Consequences:** Natural cold-start first-frame geometry on API 27/1280x720 is the governing GUI gate: label/value sibling bounds must not overlap before any notification-shade, Activity or configuration refresh, and a later inset refresh must not change their settled geometry. Previous V0.3.3 preview screenshots are retained as post-settle styling evidence but are not valid first-frame evidence. The local source compiles, 99/99 direct JUnit tests pass, lint/assemble/signature checks pass, and static review confirms the pre-draw listener is bounded and the scanline path has no draw-time allocation. This host has no API 27 image and its API 26 emulator stops before ADB under both acceleration modes, so no new local GUI pass is claimed. Protocol, decoder, SignalStore, scheduler, request table/periods, transport, logger, session lifecycle, controls, fields, units and active-only Idle Check semantics remain unchanged. Push, installation and vehicle action are not authorized.

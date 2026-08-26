@@ -203,6 +203,35 @@ class ResponsiveLayoutTest {
     }
 
     @Test
+    fun windowGeometryKeyInvalidatesForEveryLayoutRelevantField() {
+        val base = ResponsiveLayout.windowGeometryKey(
+            widthPx = 1280,
+            heightPx = 672,
+            insetLeftPx = 0,
+            insetTopPx = 24,
+            insetRightPx = 0,
+            insetBottomPx = 0,
+            densityDpi = 160,
+            fontScale = 1f,
+            compactHeight = false
+        )
+        val variants = setOf(
+            base,
+            base.copy(widthPx = 1279),
+            base.copy(heightPx = 671),
+            base.copy(insetLeftPx = 1),
+            base.copy(insetTopPx = 23),
+            base.copy(insetRightPx = 1),
+            base.copy(insetBottomPx = 1),
+            base.copy(densityDpi = 161),
+            base.copy(fontScaleBits = 1.1f.toBits()),
+            base.copy(compactHeight = true)
+        )
+
+        assertEquals(10, variants.size)
+    }
+
+    @Test
     fun continuousWidthSweepPreservesAllLayoutInvariants() {
         var previousColumns = 0
         for (width in 0..4096) {

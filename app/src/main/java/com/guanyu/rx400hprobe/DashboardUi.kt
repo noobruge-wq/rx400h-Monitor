@@ -7,6 +7,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -70,14 +71,19 @@ internal class DashboardUi(
     private val glowColor = activity.getColor(R.color.crt_glow)
     private val titleColor = brightColor
     private val surfaceColor = activity.getColor(R.color.crt_surface)
+    private val boldMonospace = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
 
     private var insetLeftPx = 0
     private var insetTopPx = 0
     private var insetRightPx = 0
     private var insetBottomPx = 0
-    private var lastWindowToken: WindowToken? = null
+    private var lastWindowToken: ResponsiveLayout.WindowGeometryKey? = null
     private var lastDensityDpi = activity.resources.configuration.densityDpi
     private var lastFontScale = activity.resources.configuration.fontScale
+    private var firstFramePreDrawListener: ViewTreeObserver.OnPreDrawListener? = null
+    private var firstFrameObserver: ViewTreeObserver? = null
+    private var firstFrameLayoutPasses = 0
+    private var firstFrameGeometrySignature = Long.MIN_VALUE
 
     init {
         val titleColumn = buildTitleColumn()
@@ -143,11 +149,8 @@ internal class DashboardUi(
         }
 
         applyPhysicalMetrics()
-        applyWindowLayout(
-            widthPx = activity.resources.displayMetrics.widthPixels,
-            heightPx = activity.resources.displayMetrics.heightPixels
-        )
         attachInsetsAndResizeHandling()
+        attachFirstFrameLayoutStabilizer()
     }
 
     fun render(snapshot: DashboardSnapshot) {
@@ -236,6 +239,7 @@ internal class DashboardUi(
         gravity = Gravity.START or Gravity.CENTER_VERTICAL
         addView(styledText("RX400h", 1).apply {
             setTextColor(brightColor)
+            typeface = boldMonospace
             letterSpacing = 0.055f
             crtGlow(1.2f)
             autoSize(
@@ -296,6 +300,7 @@ internal class DashboardUi(
         rpmValue = addMetric(powerCard, "引擎转速", "— rpm")
         idleCheckValue = valueText("IDLE CHECK", detail = true).apply {
             setTextColor(valueColor)
+            typeface = boldMonospace
             visibility = View.INVISIBLE
             maxLines = 2
         }
@@ -317,6 +322,7 @@ internal class DashboardUi(
         val titleView = styledText(title, 2).apply {
             gravity = Gravity.CENTER
             setTextColor(titleColor)
+            typeface = boldMonospace
             crtGlow(0.9f)
             autoSize(
                 ResponsiveLayout.TypographyBounds().cardTitleMinSp,
@@ -347,7 +353,7 @@ internal class DashboardUi(
         }
         val labelView = styledText(label, Int.MAX_VALUE).apply {
             gravity = Gravity.CENTER
-            setTextColor(if (detail) dimColor else valueColor)
+            setTextColor(dimColor)
             if (detail) {
                 autoSize(
                     ResponsiveLayout.TypographyBounds().detailMinSp,
@@ -389,7 +395,10 @@ internal class DashboardUi(
     private fun valueText(initial: String, detail: Boolean): TextView = styledText(initial, Int.MAX_VALUE).apply {
         gravity = Gravity.CENTER
         setTextColor(if (detail) dimColor else valueColor)
-        if (!detail) crtGlow(0.8f)
+        if (!detail) {
+            typeface = boldMonospace
+            crtGlow(0.8f)
+        }
         val bounds = ResponsiveLayout.TypographyBounds()
         if (detail) autoSize(bounds.detailMinSp, bounds.detailMaxSp)
         else autoSize(bounds.valueMinSp, bounds.valueMaxSp)
@@ -408,7 +417,7 @@ internal class DashboardUi(
         maxLines = 3
         gravity = Gravity.CENTER
         isAllCaps = false
-        typeface = Typeface.MONOSPACE
+        typeface = boldMonospace
         letterSpacing = 0.08f
         background = crtButtonBackground(activity)
         setTextColor(crtButtonTextColors(activity))
@@ -476,6 +485,93 @@ internal class DashboardUi(
         root.post { ViewCompat.requestApplyInsets(root) }
     }
 
+    /**
+     * API 27 vendor TextView builds can finalize native auto-size one traversal
+     * after their WRAP_CONTENT parents. Hold back only the first visible frame
+     * while that cold-start geometry settles; no listener survives steady state.
+     */
+    private fun attachFirstFrameLayoutStabilizer() {
+        if (root.isAttachedToWindow) {
+            installFirstFrameLayoutStabilizer()
+            return
+        }
+        root.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(view: View) {
+                view.removeOnAttachStateChangeListener(this)
+                installFirstFrameLayoutStabilizer()
+            }
+
+            override fun onViewDetachedFromWindow(view: View) = Unit
+        })
+    }
+
+    private fun installFirstFrameLayoutStabilizer() {
+        if (firstFramePreDrawListener != null) return
+        val observer = root.viewTreeObserver
+        if (!observer.isAlive) return
+        val listener = ViewTreeObserver.OnPreDrawListener {
+            applyWindowLayout(root.width, root.height)
+            val signature = calculateFirstFrameGeometrySignature()
+            val geometryStable =
+                firstFrameLayoutPasses > 0 && signature == firstFrameGeometrySignature
+            if (geometryStable || firstFrameLayoutPasses >= MAX_FIRST_FRAME_LAYOUT_RETRIES) {
+                removeFirstFrameLayoutStabilizer()
+                true
+            } else {
+                firstFrameGeometrySignature = signature
+                if (firstFrameLayoutPasses == 0) applyAutoSizeTargets()
+                firstFrameLayoutPasses++
+                root.forceLayoutTree()
+                root.requestLayout()
+                root.invalidate()
+                false
+            }
+        }
+        firstFrameObserver = observer
+        firstFramePreDrawListener = listener
+        observer.addOnPreDrawListener(listener)
+    }
+
+    private fun removeFirstFrameLayoutStabilizer() {
+        val listener = firstFramePreDrawListener ?: return
+        val installedObserver = firstFrameObserver
+        if (installedObserver?.isAlive == true) {
+            installedObserver.removeOnPreDrawListener(listener)
+        } else {
+            val currentObserver = root.viewTreeObserver
+            if (currentObserver.isAlive) currentObserver.removeOnPreDrawListener(listener)
+        }
+        firstFrameObserver = null
+        firstFramePreDrawListener = null
+    }
+
+    private fun calculateFirstFrameGeometrySignature(): Long {
+        var signature = 1125899906842597L
+        fun mix(value: Int) {
+            signature = signature * 31L + value
+        }
+        mix(root.width)
+        mix(root.height)
+        autoSizeTargets.forEach { target ->
+            val view = target.view
+            mix(view.measuredWidth)
+            mix(view.measuredHeight)
+            mix(view.top)
+            mix(view.bottom)
+            mix(view.textSize.toBits())
+            mix(view.layout?.lineCount ?: -1)
+            mix(view.baseline)
+        }
+        return signature
+    }
+
+    private fun View.forceLayoutTree() {
+        forceLayout()
+        if (this is ViewGroup) {
+            for (index in 0 until childCount) getChildAt(index).forceLayoutTree()
+        }
+    }
+
     private fun applyWindowLayout(widthPx: Int, heightPx: Int) {
         if (widthPx <= 0 || heightPx <= 0) return
         val density = activity.resources.displayMetrics.density.coerceAtLeast(0.1f)
@@ -485,11 +581,16 @@ internal class DashboardUi(
             insetBottom = insetBottomPx,
             density = density
         )
-        val token = WindowToken(
+        val configuration = activity.resources.configuration
+        val token = ResponsiveLayout.windowGeometryKey(
+            widthPx = widthPx,
+            heightPx = heightPx,
             insetLeftPx = insetLeftPx,
             insetTopPx = insetTopPx,
             insetRightPx = insetRightPx,
             insetBottomPx = insetBottomPx,
+            densityDpi = activity.resources.displayMetrics.densityDpi.coerceAtLeast(1),
+            fontScale = configuration.fontScale,
             compactHeight = spacing.compactHeight
         )
         if (token == lastWindowToken) return
@@ -590,11 +691,7 @@ internal class DashboardUi(
 
     private data class GlowTarget(val view: TextView, val radiusDp: Float)
 
-    private data class WindowToken(
-        val insetLeftPx: Int,
-        val insetTopPx: Int,
-        val insetRightPx: Int,
-        val insetBottomPx: Int,
-        val compactHeight: Boolean
-    )
+    private companion object {
+        const val MAX_FIRST_FRAME_LAYOUT_RETRIES = 2
+    }
 }

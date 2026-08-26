@@ -17,9 +17,11 @@ import kotlin.math.min
 /** Lightweight, static CRT treatment. No animation clock or draw-time allocation. */
 internal class CrtScreenLayout(context: Context) : FrameLayout(context) {
     private var density = resources.displayMetrics.density.coerceAtLeast(0.1f)
-    private var scanlineSpacingPx = max(3, dp(4f).toInt())
+    private var scanlineBaseSpacingPx = max(6, dp(4f).toInt())
     private val scanlinePaint = Paint().apply {
         color = context.getColor(R.color.crt_scanline)
+        isAntiAlias = false
+        style = Paint.Style.STROKE
         strokeWidth = 1f
     }
     private val edgePaint = Paint().apply {
@@ -53,18 +55,26 @@ internal class CrtScreenLayout(context: Context) : FrameLayout(context) {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         density = resources.displayMetrics.density.coerceAtLeast(0.1f)
-        scanlineSpacingPx = max(3, dp(4f).toInt())
+        scanlineBaseSpacingPx = max(6, dp(4f).toInt())
         framePaint.strokeWidth = max(1f, dp(1f))
         cornerPaint.strokeWidth = max(1f, dp(1.35f))
         invalidate()
     }
 
     private fun drawScanlines(canvas: Canvas) {
-        var y = paddingTop + scanlineSpacingPx
+        var y = paddingTop + scanlineBaseSpacingPx
+        var useLongStep = false
         val bottom = height - paddingBottom
         while (y < bottom) {
-            canvas.drawLine(paddingLeft.toFloat(), y.toFloat(), (width - paddingRight).toFloat(), y.toFloat(), scanlinePaint)
-            y += scanlineSpacingPx
+            canvas.drawLine(
+                paddingLeft.toFloat(),
+                y + 0.5f,
+                (width - paddingRight).toFloat(),
+                y + 0.5f,
+                scanlinePaint
+            )
+            y += scanlineBaseSpacingPx + if (useLongStep) 1 else 0
+            useLongStep = !useLongStep
         }
     }
 

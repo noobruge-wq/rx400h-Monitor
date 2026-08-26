@@ -375,10 +375,17 @@ Codex 必须先证明它已经能回答：
 
 ## 19. V0.3.3/v25 本地实现候选 — 2026-08-21
 
-- 已安装/既有实车证据仍归属 V0.3.2/v24；当前本地源码、Gradle 与 workflow artifact 身份已推进到 V0.3.3/v25，但尚未 promotion。
+- exact-clean V0.3.3/v25 已安装到目标车机并成为当前实车证据候选，但尚未 promotion。
 - D-049：首屏显式 `RECOVERING`；已发布的稳定终态使用有界 metadata fast path，待恢复、缺失或不一致的记录仍走完整 ZIP/manifest/SHA/session 校验。
 - D-050：End、`onDestroy`、worker finally 与 logger 共享 first-writer-wins 的 `finalize_intent.json`；USER_END 不再被后来的 Activity 销毁改写。终止后普通事件入口关闭，START_FAILED 保留已有字节并以 `evidence_complete=false` 可重试打包。
 - D-051：只在 API27 `sprd/sp7731e_1h10_native/sp7731e_1h10` + 大小写匹配的 `OBDLink MX+` 家族上选择版本化方向成本模型；不适用或缺成本回到 `UNKNOWN`。冻结 60 秒 replay 为 `ADMITTED`、projected utilization `0.906533`、0 miss/0 reject，七个请求周期完全不变。
 - D-052：前后校时只追加 `CLOCK_ADJUSTMENT` 证据，不参与 scheduler、freshness、Idle Check、checkpoint 或生命周期真值。D-047 固定 CRT Green 已整合，仍是轻量 Android View presentation skin。
 - exact-clean 实现提交 `c9ad39759021fd8d4ca529b115ab7932aa2bf8d8` 的生产/测试源码编译通过；刚编译的 98 项 JUnit 直接运行全部通过；lint 0 errors / 9 warnings；V0.3.3-debug/v25 assemble、manifest 与固定 v2 证书验证通过。APK 为 2,589,038 bytes、SHA-256 `2d75bd7d1bc6be8a923495e901c05ce904d58966f8e10ff3e12b2e980a33d0a1`，内嵌 `GIT_DIRTY=false`。Gradle test worker 在当前 Windows/Unicode 路径上因 `GradleWorkerMain`/pipe 启动器故障无法运行，必须与测试失败区分记录。
-- exact-artifact API 26 GUI 已覆盖 1280x720、360x800、800x360、滚动可达与 Idle Check active-only；exact 800x600 重抓因重置后的模拟器冷启动无法到达 ADB 而 host-blocked，不声称通过。下一 gate 是 remote exact-commit CI，以及实际 V0.3.3/v25 API27 connection → LIVE → End/public-save 和强制中断恢复。不得提高频率，不得把本地候选称为 baseline；除非用户另行授权，不 push/PR/release。
+- exact-artifact API 26 GUI 已覆盖 1280x720、360x800、800x360、滚动可达与 Idle Check active-only；exact 800x600 重抓因重置后的模拟器冷启动无法到达 ADB 而 host-blocked，不声称通过。两份 2026-08-26 API 27 exact-artifact 记录（ZIP SHA-256 `c917e183…5201`、`5364e69e…ecda`）均完成 `USER_END`、零错误、完整证据和 public receipt，已证明 normal connection/LIVE/End/public-save；第二份 `4006/4006` release 全部 on-time。下一 gate 是 remote exact-commit CI 与强制中断恢复。不得提高频率，不得把本地候选称为 baseline；除非用户另行授权，不 push/PR/release。
+
+## 20. V0.3.4/v26 目标车机首帧与日光 CRT 修正 — 2026-08-27
+
+- D-053 仅改 presentation：首帧窗口 key 覆盖真实 width/height/insets/density/fontScale；attach-scoped stabilizer 最多压住两次 pre-draw，第三次必定移除并放行；debug preview 的私有三轮 settle workaround 已删除。
+- CRT 改为更亮的绿色层级、主数值/标题/按钮选择性粗体和静态交替间距扫描线；无动画、blur、shader、新依赖或 draw-time allocation。phone portrait 暂不作为 gate。
+- Gradle/Workflow 身份推进为 V0.3.4/v26 和 `RX400hProtocolProbe-v0.3.4-target-crt-ui-debug-signed`。生产/测试源码编译、99/99 direct JUnit、lint 0 errors / 9 warnings、assemble 和固定 v2 证书通过；标准 Gradle test worker 仍受当前 Windows/Unicode `GradleWorkerMain`/pipe 故障影响。
+- 本机没有 API 27 image，API 26 模拟器在 hardware/software 两种路径都停在 ADB 前，因此不声称新的 GUI pass。exact-clean commit/APK 与实际 API 27/1280x720 natural cold-start first-frame gate 仍待完成。未改 scheduler/protocol/decoder/SignalStore/logger/session，未授权 push/install/vehicle action。

@@ -4,8 +4,8 @@
 **Current engineering baseline:** V0.2.0 — Reactive Core (closed 2026-08-09)<br>
 **Historical validated engineering baseline:** V0.1.10 cleanup / real-vehicle validated branch<br>
 **Next major milestone:** V0.3.0 — High-Performance Scheduler / Refresh Frontier (development started 2026-08-10 on branch `v0.3.0`)<br>
-**Current installed/vehicle-evidence candidate:** V0.3.2 — capacity-aware scheduler reconstruction (`versionCode = 24`) with the pre-integration CRT Green prototype<br>
-**Current local source candidate:** V0.3.3 / `versionCode = 25` — bounded recovery/lifecycle/cost-model/clock-observability correction plus CRT integration; not promoted<br>
+**Current installed/vehicle-evidence candidate:** V0.3.3 / `versionCode = 25` exact local artifact `c9ad397` — API 27 normal-start/LIVE/User-End evidence collected; forced recovery still pending; natural first-frame UI overlap confirmed<br>
+**Current authorized local source candidate:** V0.3.4 / `versionCode = 26` — target-head-unit first-frame layout and daylight CRT correction (D-053), implemented locally; exact-clean artifact and target first-frame gate pending; not promoted<br>
 **Repository:** `noobruge-wq/rx400h-Monitor`
 
 > This file is the primary handoff document. Future development must update this document before code changes. A new AI/developer should be able to resume the project from this file + `DECISIONS.md` + `ROADMAP.md` + latest source without relying on chat history.
@@ -613,7 +613,7 @@ Final local gates: 72 JVM tests passed with 0 failures/errors/skips; `lintDebug`
 
 ## 24. V0.3.3/v25 local implementation candidate — 2026-08-21
 
-V0.3.3 is a bounded correction candidate inside the still-open V0.3.0 Scheduler / Refresh Frontier milestone. The local repository source, Gradle identity and workflow artifact name have advanced to V0.3.3/v25 while the installed/vehicle-evidence candidate remains V0.3.2/v24. This implementation is not a promotion and does not close V0.3.0.
+V0.3.3 is a bounded correction candidate inside the still-open V0.3.0 Scheduler / Refresh Frontier milestone. The exact local V0.3.3/v25 artifact was subsequently installed on the target and produced normal-flow evidence; this does not promote the candidate or close V0.3.0.
 
 Authorized work:
 
@@ -633,6 +633,28 @@ Required deterministic verification before any promotion claim:
 - forward/backward wall-clock steps add observation only and do not change monotonic scheduler/lifecycle outcomes;
 - the freshly compiled JVM suite passes 98/98 under direct JUnit execution; `lintDebug` remains 0 errors / 9 warnings and exact-clean V0.3.3-debug/v25 assemble/manifest/v2-signature checks pass. The host Gradle test worker has a separate Windows/Unicode-path `GradleWorkerMain`/closed-pipe launch failure that occurs before test execution;
 - exact-artifact API 26 responsive/scroll/Idle Check smoke is captured at 1280x720, 360x800 and 800x360. The exact 800x600 recapture is host-blocked because the reset API 26 emulator no longer reaches ADB; the earlier D-047 prototype 800x600 record and deterministic layout tests remain supporting evidence, but no exact V0.3.3 4:3 pass is claimed;
-- API 27 connection/LIVE/End/public-save/forced-recovery regressions pass on the actual exact V0.3.3/v25 artifact before promotion.
+- API 27 connection/LIVE/End/public-save regressions pass on the actual exact V0.3.3/v25 artifact; forced interrupted recovery remains a separate promotion gate.
 
-Exact local artifact evidence is now complete for implementation commit `c9ad39759021fd8d4ca529b115ab7932aa2bf8d8`: the APK embeds that commit with `GIT_DIRTY=false`, is 2,589,038 bytes, has SHA-256 `2d75bd7d1bc6be8a923495e901c05ce904d58966f8e10ff3e12b2e980a33d0a1`, and verifies with the fixed APK Signature Scheme v2 certificate. It remains a local candidate only: no push/CI run, installation, target API 27 normal-flow test or forced-recovery test has been performed for V0.3.3.
+Exact local artifact evidence is complete for implementation commit `c9ad39759021fd8d4ca529b115ab7932aa2bf8d8`: the APK embeds that commit with `GIT_DIRTY=false`, is 2,589,038 bytes, has SHA-256 `2d75bd7d1bc6be8a923495e901c05ce904d58966f8e10ff3e12b2e980a33d0a1`, and verifies with the fixed APK Signature Scheme v2 certificate. It was installed on the API 27 target. Two completed `USER_END` archives bind to that exact provenance: `RX400h Monitor log 2026-08-26 09-10-02.zip` SHA-256 `c917e183eddb496e4ccdc5827e63583ea6dca59bc225176b066cd44a66af5201` has 1,725 transactions and scheduler conservation `1268 = 1209 on-time + 1 late + 57 capacity-rejected + 1 session-ended`; `RX400h Monitor log 2026-08-26 19-11-23.zip` SHA-256 `5364e69e85dae8d18358acb14f46e3544b96c73b3d82bba09112b628c1b0ecda` has 5,623 transactions and `4006/4006` on-time releases. Both record zero errors, complete evidence and an external public-export receipt. Target normal start/LIVE/End/public-save is evidenced; forced interrupted recovery and remote exact-commit CI remain open.
+
+---
+
+## 25. V0.3.4/v26 target-head-unit UI correction — local implementation 2026-08-27
+
+The user confirmed that V0.3.3's normal-exit regression is currently resolved, but reiterated a UI defect seen across several responsive candidates: on natural startup, labels can overlap live values; opening the notification shade or switching Activities immediately restores the correct positions. Read-only source/history review confirmed this is a production UI timing defect, not a scheduler or logging problem.
+
+The V0.3.1 responsive reset applies native TextView auto-size before attachment, measures wrap-content text inside custom ViewGroups and seeds window layout from full-screen `displayMetrics`. Its cached window identity omits the actual root width/height. The V0.3.3 debug screenshot Activity then performs three recursive `forceLayout/requestLayout/invalidate` passes after attachment, while `MainActivity` has no equivalent stabilization. Existing screenshots therefore describe a forced post-refresh state and are not valid natural-first-frame evidence.
+
+D-053 authorizes a bounded V0.3.4/v26 presentation correction with these gates:
+
+- primary target: API 27 Spreadtrum head unit, 1280x720 framebuffer and its actual inset-safe app viewport;
+- real viewport/inset/density/font-scale changes invalidate layout deterministically;
+- one attach-scoped text/layout stabilizer suppresses at most two pre-draws, removes itself and always releases the third draw, without an unbounded force-layout loop or steady-state listener;
+- the debug preview no longer hides the defect with three private settle passes;
+- stronger static scanlines, brighter phosphor green and selective bold primary text improve daylight readability without animation, blur, shaders, new dependencies or steady-state allocation;
+- phone portrait is not optimized or required for this correction, though existing fallback code is retained;
+- controls, fields, units, signal contract, active-only Idle Check, protocol, decoder, SignalStore, scheduler/request periods, transport, logger and session semantics remain frozen.
+
+Implementation is now limited to presentation/version/workflow/test files: `DashboardUi` no longer seeds layout from pre-attachment display metrics, the complete real-window geometry key covers width/height/insets/density/font scale, the debug preview's private three-pass settle workaround is removed, primary typography is selectively bold, the palette is brighter and static scanlines use a visible translucent green with alternating 6/7-pixel minimum spacing. No vehicle-core, scheduler, request-period, protocol, decoder, SignalStore, logger or lifecycle source changed.
+
+Pre-commit local evidence: production/test compilation passes; the freshly compiled suite passes 99/99 under direct JUnit; `lintDebug` reports 0 errors / 9 existing warnings; `assembleDebug`, V0.3.4-debug/v26 identity and the fixed v2 signing certificate pass. The standard Gradle worker repeats the known Windows/Unicode `GradleWorkerMain`/closed-pipe failure before test execution. No new GUI result is claimed: this host has no API 27 system image, and API 26 hardware/software emulator attempts stop before ADB. Exact-clean commit/APK provenance is pending. Delivery still requires the target API 27/1280x720 natural cold-start first-frame check before any shade/Activity refresh. Push, installation and vehicle action require separate authorization.

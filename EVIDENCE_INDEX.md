@@ -267,7 +267,33 @@ Exact-artifact GUI smoke: debug-only DashboardPreviewActivity on API 26 at 1280x
 Exact-artifact 4:3 recapture: host-blocked after the API 26 cold-boot image stopped reaching ADB; no 4:3 result is claimed
 ```
 
-Role: exact-clean local D-047…D-052 implementation evidence. It adds the explicit recovery phase/fast path, first-writer-wins terminal intent and idempotent recovery, pinned API 27 direction-aware cost model, observational clock-step logging and the fixed CRT Green presentation. Protocol, decoder, SignalStore, request whitelist and all seven periods/phases/deadlines remain unchanged. The APK is bound to clean implementation commit `c9ad397`; it is not a GitHub Actions artifact and has not been installed on the target. The earlier D-047 prototype retains an API 26 800x600 visual record, but the exact V0.3.3 4:3 recapture is separately host-blocked and not claimed. V0.3.3 target-device normal and forced-recovery evidence remains pending.
+Role: exact-clean local D-047…D-052 implementation evidence. It adds the explicit recovery phase/fast path, first-writer-wins terminal intent and idempotent recovery, pinned API 27 direction-aware cost model, observational clock-step logging and the fixed CRT Green presentation. Protocol, decoder, SignalStore, request whitelist and all seven periods/phases/deadlines remain unchanged. The APK is bound to clean implementation commit `c9ad397`; it is not a GitHub Actions artifact. It was subsequently installed on the target and produced the V0.3.3 normal-flow sessions listed below. The earlier D-047 prototype retains an API 26 800x600 visual record, but the exact V0.3.3 4:3 recapture is separately host-blocked and not claimed. Forced interrupted recovery remains pending.
+
+### V0.3.4 target first-frame/daylight CRT local candidate
+
+```text
+Branch: v0.3.0
+Base commit before implementation: 243001dad90fadf9cba7a00fffd6ac5069ada590
+Implementation commit: pending local implementation commit
+App version: 0.3.4
+versionCode: 26
+Protocol profile: rx400h_ha_hci_20260805_002 (unchanged)
+Decoder profile: rx400h-reactive-20260808-002 (unchanged)
+Scheduler profile: v030_capacity_002 (unchanged)
+Intended artifact: RX400hProtocolProbe-v0.3.4-target-crt-ui-debug-signed.apk
+Remote CI / push: not performed
+Production/test compilation: pass
+Compiled direct-JUnit result: 99 passed / 0 failed / 0 errors
+Gradle test worker: known host infrastructure failure before test execution (GradleWorkerMain / closed pipe)
+Lint: 0 errors / 9 non-blocking warnings
+assembleDebug: pass
+Manifest identity: applicationId com.guanyu.rx400hprobe.debug; versionName 0.3.4-debug; versionCode 26; minSdk 26; targetSdk 35
+Signature: APK Signature Scheme v2; certificate SHA-256 77ba84b1f4f737a5d61b910bf4386df167548b9c6ce689ed25e994c37b2bc192
+Local GUI: not claimed; API 27 image absent and API 26 emulator stops before ADB under hardware and software acceleration
+Target API 27 1280x720 natural-first-frame gate: pending
+```
+
+Role: local D-053 presentation implementation evidence. The complete real-window layout key covers width, height, safe insets, density and font scale; one attach-scoped listener suppresses at most two pre-draws before removing itself and always releasing the third draw; the debug preview's private three-pass workaround is removed. Static scanlines are strengthened, the green hierarchy is brighter and primary values/titles/buttons use a cached bold monospace. No core, scheduler, request period, protocol, decoder, SignalStore, logger or session-lifecycle source changed. Exact-clean commit/APK provenance will be recorded after the implementation commit and clean rebuild.
 
 ---
 
@@ -323,6 +349,26 @@ Declared/local-matched APK SHA-256: af4ce2ba7e9899a4d33bf304038cb4df13f7d4a9986f
 ```
 
 Both are complete `USER_END` archives with full manifest/hash/count/tail checks and no recovery metadata. The longer run crosses a 12.852-second Activity stop/start while acquisition continues. Because the APK records a dirty presentation worktree, these sessions are useful independent holdout/regression evidence but are not the sole or primary trusted-cost training provenance.
+
+### V0.3.3 API 27 exact-local normal-flow regressions — D-048
+
+```text
+RX400h Monitor log 2026-08-26 09-10-02.zip
+SHA-256: c917e183eddb496e4ccdc5827e63583ea6dca59bc225176b066cd44a66af5201
+Session: RX400h_20260825_210526_915; completed USER_END; 1,725 transactions; zero recorded errors
+Scheduler: 1,268 releases = 1,209 on-time + 1 late + 57 capacity-rejected + 1 session-ended
+
+RX400h Monitor log 2026-08-26 19-11-23.zip
+SHA-256: 5364e69e85dae8d18358acb14f46e3544b96c73b3d82bba09112b628c1b0ecda
+Session: RX400h_20260826_065751_666; completed USER_END; 5,623 transactions; zero recorded errors
+Scheduler: 4,006 releases = 4,006 on-time
+
+Source commit: c9ad39759021fd8d4ca529b115ab7932aa2bf8d8
+Exact local APK SHA-256: 2d75bd7d1bc6be8a923495e901c05ce904d58966f8e10ff3e12b2e980a33d0a1
+Device: API 27 sprd sp7731e_1h10_native / sp7731e_1h10; OBDLink MX+ 99905
+```
+
+Both archives bind to the exact clean V0.3.3/v25 artifact, are `evidence_complete=true`, verify their internal manifests, and record an external public-export receipt. Together they evidence target normal start → LIVE → user End → public save. The first run includes bounded admission rejections and one 14 ms late completion; the second is a clean approximately 13-minute same-period run with every release on time. Neither archive is a forced process-death/interrupted-recovery test, so that gate remains open.
 
 ### V0.1.8 first successful run
 

@@ -2,8 +2,6 @@ package com.guanyu.rx400hprobe
 
 import android.app.Activity
 import android.os.Bundle
-import android.view.View
-import android.view.ViewGroup
 
 /** Debug-only deterministic fixture for responsive visual acceptance screenshots. */
 class DashboardPreviewActivity : Activity() {
@@ -67,24 +65,5 @@ class DashboardPreviewActivity : Activity() {
             )
         )
         setContentView(dashboard.root)
-        dashboard.root.post { settlePreviewLayout(dashboard.root, remainingPasses = 3) }
-    }
-
-    private fun settlePreviewLayout(view: View, remainingPasses: Int) {
-        view.forceLayoutRecursively()
-        view.requestLayout()
-        view.invalidate()
-        if (remainingPasses > 1) {
-            view.post { settlePreviewLayout(view, remainingPasses - 1) }
-        }
-    }
-
-    private fun View.forceLayoutRecursively() {
-        forceLayout()
-        if (this is ViewGroup) {
-            for (index in 0 until childCount) {
-                getChildAt(index).forceLayoutRecursively()
-            }
-        }
     }
 }

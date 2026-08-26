@@ -69,6 +69,19 @@ internal object ResponsiveLayout {
         val sectionGapDp: Int
     )
 
+    /** Complete identity for runtime layout work that depends on the real window. */
+    data class WindowGeometryKey(
+        val widthPx: Int,
+        val heightPx: Int,
+        val insetLeftPx: Int,
+        val insetTopPx: Int,
+        val insetRightPx: Int,
+        val insetBottomPx: Int,
+        val densityDpi: Int,
+        val fontScaleBits: Int,
+        val compactHeight: Boolean
+    )
+
     data class TypographyBounds(
         val cardTitleMinSp: Int = 20,
         val cardTitleMaxSp: Int = 28,
@@ -87,6 +100,36 @@ internal object ResponsiveLayout {
         val buttonMinSp: Int = 14,
         val buttonMaxSp: Int = 17
     )
+
+    fun windowGeometryKey(
+        widthPx: Int,
+        heightPx: Int,
+        insetLeftPx: Int,
+        insetTopPx: Int,
+        insetRightPx: Int,
+        insetBottomPx: Int,
+        densityDpi: Int,
+        fontScale: Float,
+        compactHeight: Boolean
+    ): WindowGeometryKey {
+        require(widthPx >= 0 && heightPx >= 0) { "window dimensions must not be negative" }
+        require(insetLeftPx >= 0 && insetTopPx >= 0 && insetRightPx >= 0 && insetBottomPx >= 0) {
+            "safe-area insets must not be negative"
+        }
+        require(densityDpi > 0) { "densityDpi must be positive" }
+        require(fontScale.isFinite() && fontScale > 0f) { "fontScale must be finite and positive" }
+        return WindowGeometryKey(
+            widthPx = widthPx,
+            heightPx = heightPx,
+            insetLeftPx = insetLeftPx,
+            insetTopPx = insetTopPx,
+            insetRightPx = insetRightPx,
+            insetBottomPx = insetBottomPx,
+            densityDpi = densityDpi,
+            fontScaleBits = fontScale.toBits(),
+            compactHeight = compactHeight
+        )
+    }
 
     /** Exact runtime height/inset path shared with JVM boundary tests. */
     fun verticalSpacingUnits(
