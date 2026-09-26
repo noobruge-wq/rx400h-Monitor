@@ -1,5 +1,29 @@
 # RX400h Monitor — CODEX_HANDOFF
 
+## 2026-09-26 项目暂时结束 / 换电脑归档
+
+先读 `PROJECT_ARCHIVE_20260926.md`。用户现已授权把D064源码、资源、测试/编辑工具和文档提交到既有GitHub `v0.3.0` 分支，不覆盖main，不扩展产品功能；旧的“未授权push”是历史检查点。原始日志、APK、R8mapping和输出证据不在源码提交里，卖电脑前另行备份。没有把本地通过冒称实车验收，保留D064报告的全部限制。
+
+## 最新本地交接 — 2026-09-23 / D-064
+
+先读 `D064_LOCAL_REVIEW_20260923.md` 与 `D064_REALTIME_CLOSURE.md`。V0.3.5/v29纯实时仪表本地候选，HA顺序约3Hz；日志/性能统计/保存恢复/稳健策略已经按用户要求删除，不要根据以下历史段落恢复。自动连接一次、侧视车图手动重连、后台采集/停画面、返回取消退出；设备选择在设置，原三个按钮彻底不命中。主源码3525行（−61%），用户assets未动。交付 `../../deliverables/D064-realtime-local-20260923/` 含精确源码、两APK、D063差分和R8mapping。92directJUnit两轮、41143回复、10Android检查、157像素帧、两包lint/build/签名/无适配器GUI通过；标准Gradle worker仍失败单列。真实LIVE/连接中退出/切换/睡眠/音乐及实际3Hz未验证，不是正式基线。电脑日志和D063恢复包保留，无推送/实体安装。旧不确定会话宁可保留，清理不阻挡仪表。下一步只做自然使用验收，不重新索取本版日志ZIP。
+
+## 最新本地交接 — 2026-09-17 / D-063
+
+先读 `D063_LOCAL_REVIEW_20260917.md`。本轮继续用户批准的精简+A/B运行减负，未要求立即上车。main32文件/9044行，D061累计−1757行/16.3%；benchmark R8包6446609字节，累计−22.2%，SHA `bcf47921…a507d`。150directJUnit、41143历史回复、48000调度对照、8Android日志/文件、146像素帧、两包lint/build/signature/nativeGUI通过；标准Gradle worker失败继续单列。29–35%只为稳健搜索局部主机微基准，不是默认HA/实车收益。交付 `../../deliverables/D063-lean-runtime-local-20260917/` 含源码、APK、D062专用diff、manifest及必须保留的R8mapping。UI/请求/周期/公式/Idle/保存策略未变；原D062可回退。无推送/实体安装/固件实验；MX+增强命令仍test-only，R8真LIVE保存、5Hz、扭矩/轮方向等旧gate未关闭。不要据下方旧段落复原已删wrapper或旧启动恢复链。
+
+## 最新本地交接 — 2026-09-17 / D-062
+
+先读 `D062_LOCAL_REVIEW_20260917.md`。用户批准加强精简，已完成本地代码、构建和验收；不要从下方旧检查点恢复旧 UI / 启动恢复链。仍为 `v0.3.0 / 8f1a3b9 + dirty`，保留原D055–D061。主源码净减1,631行/15.1%，上车测试APK7,130,205字节（−13.9%）；`../../deliverables/D062-lean-local-20260917/` 含测试包、debug对照、源码包、D061专用diff与身份清单。144directJUnit、41,143记录回复、148独立oracle帧、7Android文件故障、两种构建/lint/GUI/签名通过；标准Gradle worker仍宿主启动失败，单列。相同debug UI回放CPU9.96%→9.88%，基本持平，不能声称实车明显提速。两策略/default HA、白名单、周期、公式、Idle、用户资源、正常日志保存政策均保留；后台仅停UI发布。旧删减代码可由原D061源码ZIP恢复，原始日志未动。下一步是自然使用的exact-artifact数据，不要求专程测试；真实5Hz/MX+批次/扭矩边界/LIVE切换与长期内存仍未关闭。没有commit/push/CI/实体设备安装或发布。
+
+## 最新本地交接 — 2026-09-12 / D-061
+
+先读 `D061_LOCAL_REVIEW_20260912.md`，不要根据下面旧检查点复原旧源码。当前仍 `v0.3.0 / 8f1a3b9 + dirty`，D061叠在保留的D060之上；`../../deliverables/D061-AB-local-20260912/` 包含非调试测试APK、debug对照、源码快照、完整清单与D060→D061专用diff。165单元测试、13,465事务解析核对、两版独立像素/GUI/文件故障通过；标准Gradle worker失败单列。相同debug模式UI-only CPU约降低31%，不等于实车采集5Hz。实际运行了阻塞接收和共享解析，但STPX/STBC只在测试研究中，未启用。下一步是受控目标适配器取证，不改用户画面、不凭模拟器认定固件支持，不新增四档，不删除原始证据。完整未关闭项及WORK_FOLLOWUP见报告末尾。无Git提交/推送/远端CI/基线晋升。
+
+## 最新本地交接 — 2026-09-08 / D-060
+
+先读 `D060_REQUIREMENTS_CLOSURE.md` 和 `D060_LOCAL_REVIEW_20260908.md`，以其区分实现/本地通过/实车未验证。当前仍为 `v0.3.0 / 8f1a3b9 + dirty`，V0.3.5/v28候选APK `db6b33fa…811297`；没有提交/推送/发布。两策略默认HA、确认自动交接、丢弃未保存旧会话、Idle/新鲜度/像素UI均已实现并分层回归。140 direct JUnit、21 Python、7 Android文件故障及最终像素检查通过；不是全部九组gate关闭。待补真实LIVE连接交接、最新原始Idle回放、跨版本整负载弱机留出拟合及长时内存。不要让下一位代理根据下面历史段落恢复旧保留策略或重新添加四档。
+
 ## 1. 目的
 
 这是从长 ChatGPT 项目对话迁移到 Codex 的正式交接入口。目标是：**Codex 读完本迁移包和仓库后即可完整接手，不需要重新询问几百条聊天历史。**
@@ -389,3 +413,27 @@ Codex 必须先证明它已经能回答：
 - CRT 改为更亮的绿色层级、主数值/标题/按钮选择性粗体和静态交替间距扫描线；无动画、blur、shader、新依赖或 draw-time allocation。phone portrait 暂不作为 gate。
 - Gradle/Workflow 身份推进为 V0.3.4/v26 和 `RX400hProtocolProbe-v0.3.4-target-crt-ui-debug-signed`。生产/测试源码编译、99/99 direct JUnit、lint 0 errors / 9 warnings、assemble 和固定 v2 证书通过；标准 Gradle test worker 仍受当前 Windows/Unicode `GradleWorkerMain`/pipe 故障影响。
 - exact-clean 实现提交 `b60619d5c1f4e011508b3cf74de6fee7422ec720` 已重编译为内嵌 `GIT_DIRTY=false` 的 V0.3.4-debug/v26 APK；文件 `RX400hProtocolProbe-v0.3.4-b60619d-target-crt-ui-debug-signed.apk` 为 2,591,078 bytes、SHA-256 `fa88064be3450ccb8765217ed0f12e97e01793c66434b07b0901777b4072002b`，固定 v2 证书通过。本机没有 API 27 image，API 26 模拟器在 hardware/software 两种路径都停在 ADB 前，因此不声称新的 GUI pass；实际 API 27/1280x720 natural cold-start first-frame gate 仍待完成。未改 scheduler/protocol/decoder/SignalStore/logger/session，未 push/install/执行车辆动作。
+
+## 21. V0.3.5/v27 信号图形、精确对齐与失败恢复解锁 — 2026-08-31
+
+- 本地审查资料足够进行代码级复核：分支/HEAD、dirty diff、源代码、113 项 direct JUnit、lint/assemble、manifest、APK hash/signature 和项目状态文档齐全。完整报告保存为 `CODE_REVIEW_V0.3.5.md`。
+- D-054 的手工布局坐标已被程序化归一：mdpi 1280×720 模型中三卡为 `x=20/440/860`、`400×556`，按钮为 `x=320/518/716`、宽 166、间距 32；窄窗口仍由响应式换行和滚动处理。
+- 三张 PNG 只是构图参考，BAT/VEH/PWR 已改为由 `DashboardSnapshot` 驱动的原生 Canvas 绘图；SOC、温度、速度、冷却液、12V、RPM/ICE 和双向 HV 功率都遵循未知/新鲜语义，显示插值封顶 20 fps，不提高采集 Hz。
+- D-055 让 `SAVE_FAILED` 同时提供 `设备`、`开始` 和 `结束`。只有旧 worker、writer、蓝牙连接和 session lease 安全释放后才允许新 session；旧失败证据不删除、不覆盖、不冒充成功。无法安全关闭 writer 时仍 fail-closed，防止双 owner。
+- 本地结果：V0.3.5-debug/v27 APK 2,612,662 bytes，SHA-256 `0b803f3cf3759d96e350e6ea4f18146ae263c1250cfa557780d8011a84bd533e`，`GIT_DIRTY=true`，固定 v2 签名通过；113/113 direct JUnit、lint 0 errors/9 warnings、assemble 通过。目标 API 27 GUI、OBD 实时流和强制中断恢复仍待车机人工验收，未 push/install/执行车辆动作。
+
+## 22. V0.3.5/v28 用户最终像素布局实现 — 2026-09-01
+
+- D-056 取代 v27 被拒绝的抽象车辆重绘和自动对齐。`RX400h-UI-layout-v035-pixel-v2 (3).json`（SHA-256 `1f391451…518aa`）成为精确合同；640×360 逻辑图统一最近邻放大到 1280×720，用户的俯视/侧视车辆遮罩和独立轮辐直接进入 presentation 资产。
+- 固定中文以 Noto Sans SC 按声明物理像素预栅格化，实时数字继续使用用户位图字形。SOC、轮辐和双向 HV 功率遵循确认过的自检/游标规则；Idle Check 保持 10%/100%。设置浮层只在本机持久化扫描线不透明度/宽度/间隔和辉光强度/半径。
+- 自检只由按 Start 后的新 SOC/HV 功率样本触发，并在自检期间更新最新落点。绘图缓存所有遮罩、字形、轮帧和对象；普通过渡最高 20 fps、轮辐最高 10 fps，后台/静止不持续调度。
+- 本地结果：V0.3.5-debug/v28 APK 2,656,023 bytes，SHA-256 `020a0d9fb05e718e0eef6e100edbdd306dcba244f7b4017b67e2967f048d30f6`；111/111 direct JUnit、lint 0 errors/9 warnings、assemble、manifest/资源哈希和固定 v2 签名通过。完整报告为 `CODE_REVIEW_V0.3.5_V28.md`。
+- 2026-09-01 GUI 重试已清除旧 QEMU 锁，绕过原 userdata，并建立全新隔离的 API 26 / 1280×720 AVD；软件与有效硬件加速均仍在 Android 启动前停止，ADB 缺失或仅为 `offline`。剩余阻塞点已收窄为本机 Emulator/QEMU/WHPX 运行环境，因此不声称本轮 GUI pass。目标车机 UI、配对 OBD 和强制恢复仍待人工验收。未 push、commit、PR、安装或发布；重试证据见 `../../outputs/v28-gui-retry/README.md`。
+
+## 23. V0.3.5/v28 D-057 绘制余量修正 — 2026-09-02
+
+- 五份目标车机记录显示 v28 UI 约占单核 68.6–71.7%，明显高于 v25 的 16.6–18.6%。根因是 10 fps 车轮每步都重建整页、重画八份全屏辉光并逐条画扫描线；不变目标也会重启 300 ms 过渡。
+- D-057 只改 `PixelDashboardView.kt` 的 presentation 绘制：缓存非车轮整页与辉光，车轮作为独立层绘制，扫描线改为单个有界重复位图图案，并抑制无变化的数值/目标。精确坐标、CRT 参数、动画规则、Idle Check、按钮与全部数据语义不变。
+- Android Emulator 36.6.11 在中文用户路径下破坏自身 QEMU/BIOS 路径；通过 `C:\AndroidCodex` 英文 junction 与全新隔离 AVD 修复。原版和候选均在同一 API 26/1280×720/SwiftShader 环境测试。
+- 原版 12 秒窗口为 103/103 卡顿帧、中位 40 ms、9 次慢位图上传；候选为 59/104、中位 20 ms、0 次慢上传，CPU 八次采样 0–8%、平均约 3.5%，PSS 35,894 KB。完整画面和设置浮层截图通过。局部 dirty-rectangle 实验因 API 26 未可靠保留未刷区域而被删除。
+- 最终本地 111/111 direct JUnit、lint 0 errors/9 warnings、assemble、包身份和固定 v2 签名通过。APK 2,656,023 bytes，SHA-256 `b8cfe5d5497e13eb30a8eb4d02695ae2eed9de50a91bac265cd74af2cc28bbab`。完整报告为 `CODE_REVIEW_V0.3.5_V28_D057.md`。目标车机 CPU/配对 OBD 仍是后续 gate；未 push、commit、PR 或发布。

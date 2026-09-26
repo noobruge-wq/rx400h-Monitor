@@ -1,5 +1,9 @@
 # RX400h Monitor — AGENTS.md / Codex Repository Instructions
 
+## 当前状态优先入口（2026-09-26）
+
+项目按用户要求暂时结束，当前源码为D064 / V0.3.5-v29；换电脑归档与恢复见 `PROJECT_ARCHIVE_20260926.md`。后文较早的5Hz frontier、记录/保存/恢复、三按钮和旧版本要求仅是历史背景；与D064合同冲突时以最新用户要求为准。归档不代表实车验收完成，恢复开发先读D064报告，不擅自重启已取消功能。
+
 本文件是 Codex/自动化开发代理的最高层仓库工作规则。项目事实以 `PROJECT_STATE.md` 等基线文档为准；本文件规定“应该怎样工作”。
 
 ## 0. Chat / Work / Codex 三角色协作

@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "source_file": "RX400h Monitor log 2026-09-03 19-48-25.zip",
+  "source_zip_sha256": "aae478739262519ae26ad711b87805f08efaba23c5ab4da4e3a9f54938c79f25",
+  "source_apk_sha256": "b8cfe5d5497e13eb30a8eb4d02695ae2eed9de50a91bac265cd74af2cc28bbab",
+  "frames_sha256": "589a6c33fc3e61dd3bcf4f6c66fca0dddd507b574b63601da05ce481110fac7b",
+  "trace_sha256": "214b1f95151ebc17ea285945fe866721d5a8e5f52dee175ce07e28bb7f97cca9",
+  "samples": 863,
+  "duration_ms": 946308,
+  "limitations": "Recorded display frames (~1Hz), wall-time offsets; no freshness, no original asynchronous publish timing. Non-empty values are treated as fresh for UI workload only. Not an OBD or 5Hz acquisition replay."
+}

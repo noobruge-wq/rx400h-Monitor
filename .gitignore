@@ -8,3 +8,17 @@
 .externalNativeBuild/
 .cxx/
 **/build/
+
+# Local caches, credentials and generated delivery files are not source backups.
+.kotlin/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+*.pem
+*.p12
+*.jks
+*.keystore
+*.apk
+/outputs/
+/deliverables/

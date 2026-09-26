@@ -2,57 +2,85 @@ package com.guanyu.rx400hprobe
 
 import kotlin.math.abs
 
-/**
- * Minimal Idle Check eligibility state (experimental).
- *
- * Candidate conditions from recovered HA evidence:
- * warmup active, 900 < RPM < 1100, ICE mechanical power ~0 kW,
- * speed <= 55 km/h, stable for ~1 s.
- *
- * This is NOT the HA S0-S4 reference state machine. It remains
- * experimental until replay validation against E1 logs and natural
- * real-vehicle observations confirm equivalence.
+/** D-059: strict entry, wider hold, immediate loss of valid prerequisites.
+ * Only a new power-source sample advances numerical entry/exit timers.
+ * This remains an experimental current-activity indicator, not HA S0–S4.
  */
 class IdleCheckState(
     private val stabilityMs: Long = 1000L,
     private val rpmMin: Double = 900.0,
     private val rpmMax: Double = 1100.0,
     private val speedMaxKph: Double = 55.0,
-    private val icePowerToleranceKw: Double = 0.05
+    private val icePowerToleranceKw: Double = 0.05,
+    private val exitDelayMs: Long = 1000L
 ) {
     var active: Boolean = false
         private set
 
-    var stableSinceElapsedMs: Long? = null
-        private set
+    private var stableSinceElapsedMs: Long? = null
 
-    private var conditionsMet = false
+    private var outsideSinceMs: Long? = null
+    private var lastPowerSampleMs: Long? = null
 
     fun update(
         warmupActive: Boolean?,
         rpm: Double?,
         icePowerKw: Double?,
         speedKph: Double?,
-        nowMs: Long
+        nowMs: Long,
+        powerSampleMs: Long = nowMs
     ) {
-        val met = warmupActive == true &&
-            rpm != null && rpm > rpmMin && rpm < rpmMax &&
-            icePowerKw != null && abs(icePowerKw) <= icePowerToleranceKw &&
-            speedKph != null && speedKph <= speedMaxKph
-        if (met) {
-            if (!conditionsMet) stableSinceElapsedMs = nowMs
-            conditionsMet = true
-            active = (nowMs - stableSinceElapsedMs!!) >= stabilityMs
+        if (warmupActive != true || rpm?.isFinite() != true ||
+            icePowerKw?.isFinite() != true || speedKph?.isFinite() != true
+        ) {
+            clear()
+            return
+        }
+        val previousSample = lastPowerSampleMs
+        if (powerSampleMs > nowMs || (previousSample != null && powerSampleMs < previousSample)) {
+            clear()
+            return
+        }
+        if (nowMs - powerSampleMs > 5000L) {
+            clear()
+            return
+        }
+        if (powerSampleMs == previousSample) return
+        if (previousSample != null && powerSampleMs - previousSample > 5000L) clear()
+        lastPowerSampleMs = powerSampleMs
+        if (!active) {
+            val enters = rpm > rpmMin && rpm < rpmMax &&
+                abs(icePowerKw) <= icePowerToleranceKw && speedKph <= speedMaxKph
+            if (!enters) {
+                stableSinceElapsedMs = null
+            } else {
+                if (stableSinceElapsedMs == null) stableSinceElapsedMs = powerSampleMs
+                active = powerSampleMs - stableSinceElapsedMs!! >= stabilityMs
+            }
+            return
+        }
+        val outside = rpm <= 850.0 || rpm >= 1200.0 ||
+            abs(icePowerKw) > 0.30 || speedKph > speedMaxKph
+        if (!outside) {
+            outsideSinceMs = null
         } else {
-            conditionsMet = false
-            stableSinceElapsedMs = null
-            active = false
+            if (outsideSinceMs == null) outsideSinceMs = powerSampleMs
+            if (powerSampleMs - outsideSinceMs!! >= exitDelayMs) {
+                active = false
+                stableSinceElapsedMs = null
+                outsideSinceMs = null
+            }
         }
     }
 
     fun reset() {
-        conditionsMet = false
+        clear()
+    }
+
+    private fun clear() {
         stableSinceElapsedMs = null
         active = false
+        outsideSinceMs = null
+        lastPowerSampleMs = null
     }
 }

@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-val appVersionName = "0.3.4"
+val appVersionName = "0.3.5"
 
 val gitExecutable = providers.environmentVariable("RX400H_GIT_EXECUTABLE")
     .orElse("git")
@@ -39,7 +39,7 @@ android {
         applicationId = "com.guanyu.rx400hprobe"
         minSdk = 26
         targetSdk = 35
-        versionCode = 26
+        versionCode = 29
         versionName = appVersionName
         buildConfigField("String", "APP_VERSION_NAME", "\"$appVersionName\"")
         buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")
@@ -68,6 +68,15 @@ android {
             versionNameSuffix = "-debug"
             signingConfig = signingConfigs.getByName("githubDebug")
         }
+        // Car-test package: same runtime/signature, no product telemetry, no debug fixture entrypoints.
+        create("benchmark") {
+            initWith(getByName("debug"))
+            isDebuggable = false
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            matchingFallbacks += listOf("debug")
+            versionNameSuffix = "-D064-realtime-3hz"
+        }
     }
 
     compileOptions {
@@ -80,6 +89,5 @@ android {
 
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.15.0")
     testImplementation("junit:junit:4.13.2")
 }

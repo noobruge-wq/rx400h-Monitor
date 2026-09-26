@@ -8,12 +8,11 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.view.WindowInsets
 import android.widget.ArrayAdapter
 import android.widget.ListView
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 
 class DevicePickerActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,20 +63,33 @@ class DevicePickerActivity : Activity() {
         setContentView(list)
     }
 
+    @Suppress("DEPRECATION")
     private fun applySafeInsets(view: View, horizontalDp: Int, verticalDp: Int) {
-        ViewCompat.setOnApplyWindowInsetsListener(view) { target, insets ->
-            val safe = insets.getInsets(
-                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
-            )
-            target.setPadding(
-                safe.left + dp(horizontalDp),
-                safe.top + dp(verticalDp),
-                safe.right + dp(horizontalDp),
-                safe.bottom + dp(verticalDp)
-            )
+        val horizontal = dp(horizontalDp)
+        val vertical = dp(verticalDp)
+        view.setOnApplyWindowInsetsListener { target, insets ->
+            if (Build.VERSION.SDK_INT >= 30) {
+                val safe = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+                target.setPadding(safe.left + horizontal, safe.top + vertical,
+                    safe.right + horizontal, safe.bottom + vertical)
+            } else {
+                var left = insets.systemWindowInsetLeft
+                var top = insets.systemWindowInsetTop
+                var right = insets.systemWindowInsetRight
+                var bottom = minOf(insets.systemWindowInsetBottom, insets.stableInsetBottom)
+                if (Build.VERSION.SDK_INT >= 28) {
+                    insets.displayCutout?.let { cutout ->
+                        left = maxOf(left, cutout.safeInsetLeft)
+                        top = maxOf(top, cutout.safeInsetTop)
+                        right = maxOf(right, cutout.safeInsetRight)
+                        bottom = maxOf(bottom, cutout.safeInsetBottom)
+                    }
+                }
+                target.setPadding(left + horizontal, top + vertical, right + horizontal, bottom + vertical)
+            }
             insets
         }
-        view.post { ViewCompat.requestApplyInsets(view) }
+        view.post { view.requestApplyInsets() }
     }
 
     private fun dp(value: Int): Int =

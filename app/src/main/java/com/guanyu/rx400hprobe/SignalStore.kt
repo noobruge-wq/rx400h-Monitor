@@ -5,7 +5,7 @@ import android.os.SystemClock
 /**
  * V0.2.0 typed single-writer signal store.
  *
- * All runtime vehicle signals live here. UI, logging and derived state read
+ * All runtime vehicle signals live here. UI and derived state read
  * from this store; only the acquisition/decoder path writes to it.
  */
 class SignalStore(
@@ -13,6 +13,14 @@ class SignalStore(
 ) {
     val baseline = BaselineData()
     val hybrid = HybridData()
+    private val fastSignals = arrayOf(
+        baseline.rpm, baseline.speedKph, baseline.coolantC, baseline.adapterVoltageV,
+        hybrid.socPct, hybrid.hvPowerKw,
+        hybrid.iceTorqueNm, hybrid.warmupActive, hybrid.idleCheckActive
+    )
+    private val temperatureSignals = arrayOf(
+        hybrid.batteryTempMinC, hybrid.batteryTempMaxC, hybrid.batteryTempAvgC
+    )
 
     fun <T> update(signal: SignalValue<T>, value: T?, command: String, result: CommandResult) {
         signal.source = command
@@ -20,7 +28,6 @@ class SignalStore(
             val now = clock()
             signal.value = value
             signal.updatedAtElapsedMs = now
-            signal.sourceTimestampElapsedMs = now
             signal.version++
             signal.status = SignalStatus.VALID
         } else {
@@ -38,12 +45,10 @@ class SignalStore(
         val targetStatus = if (value != null) SignalStatus.VALID else SignalStatus.STALE
         if (signal.value == value && signal.status == targetStatus) {
             signal.updatedAtElapsedMs = now
-            signal.sourceTimestampElapsedMs = now
             return
         }
         signal.value = value
         signal.updatedAtElapsedMs = now
-        signal.sourceTimestampElapsedMs = now
         signal.version++
         signal.status = targetStatus
     }
@@ -68,13 +73,8 @@ class SignalStore(
     }
 
     fun refreshStaleStates(now: Long) {
-        listOf(
-            baseline.rpm, baseline.speedKph, baseline.coolantC, baseline.adapterVoltageV,
-            hybrid.socPct, hybrid.hvVoltageV, hybrid.hvCurrentA, hybrid.hvPowerKw,
-            hybrid.iceTorqueNm, hybrid.warmupActive, hybrid.idleCheckActive
-        ).forEach { markStale(it, now, 5000L) }
-        listOf(hybrid.batteryTempsC, hybrid.batteryTempMinC, hybrid.batteryTempMaxC, hybrid.batteryTempAvgC)
-            .forEach { markStale(it, now, 12_000L) }
+        for (signal in fastSignals) markStale(signal, now, 5000L)
+        for (signal in temperatureSignals) markStale(signal, now, 12_000L)
     }
 
     fun clear() {
@@ -83,10 +83,7 @@ class SignalStore(
         clearSignal(baseline.coolantC)
         clearSignal(baseline.adapterVoltageV)
         clearSignal(hybrid.socPct)
-        clearSignal(hybrid.hvVoltageV)
-        clearSignal(hybrid.hvCurrentA)
         clearSignal(hybrid.hvPowerKw)
-        clearSignal(hybrid.batteryTempsC)
         clearSignal(hybrid.batteryTempMinC)
         clearSignal(hybrid.batteryTempMaxC)
         clearSignal(hybrid.batteryTempAvgC)
@@ -100,7 +97,6 @@ class SignalStore(
         signal.status = SignalStatus.IDLE
         signal.source = null
         signal.updatedAtElapsedMs = null
-        signal.sourceTimestampElapsedMs = null
         signal.version = 0L
     }
 

@@ -1,6 +1,65 @@
 # RX400h Monitor — EVIDENCE_INDEX
 
+## D-064 pure realtime candidate — 2026-09-23
+
+- Scope/review: `D064_REALTIME_CLOSURE.md`, `D064_LOCAL_REVIEW_20260923.md`.
+- Artifacts/source/D063diff/manifest/R8mapping: `../../deliverables/D064-realtime-local-20260923/`; benchmarkSHA `3a4ed745b18eb19843b04e3d038047d383301182161d41b67f835ac8376496f5`, debugSHA `748151c02125f928c4010c120275ca3321fa2fc0ce6c7a57effaeeec567ae902`.
+- Evidence: `../../outputs/d064-realtime-20260923/`: `build-final.log`, `junit-final-sep14.log` and `junit-final-sep09.log`92each/41,143replies; `native-smoke-final/`10checks; `pixel-final/`40samples/157frames; `gui-debug-final/` and `gui-benchmark-final/` matching8stableimages; signature and manifest files.
+- `gradle-unit.log` is host-worker startup failure, NOT a pass. Immediate screenshot captures system transition, NOT actual-first-frame proof. Real LIVE/Bluetooth/music/sleep not checked by this emulator. Earlier failed/partial tooling outputs retained as history; only final named results apply.
+
+## D-063 local lean/runtime candidate — 2026-09-17
+
+- Review/scope: `D063_LOCAL_REVIEW_20260917.md`, `D063_LEAN_RUNTIME_PLAN.md`, `D063_MXPLUS_RESEARCH.md`.
+- Artifacts/source/D062diff/exactmanifest/R8mapping: `../../deliverables/D063-lean-runtime-local-20260917/`; benchmarkSHA `bcf479211dc29f01d45ff17ec6efabd0f1bb165d3e80a914791c4e4d5f3a507d`, debugSHA `10da73a8b7353d93419436dd0f9f42a0b70650e36ce98cb0372718ba4c0b70f5`.
+- Evidence root `../../outputs/d063-lean-runtime-20260917/`: `build-final-02.log`; `junit-final-02-sep14.log` and `junit-final-02-historical.log`150each with27,678+13,465replies/48,000schedulersteps; `file-json-smoke-final/`8/8; `pixel-oracle-final/`146frames; `native-gui-debug-final/` and `native-gui-benchmark/` six identical screenshots; `strategy-gui-debug/` same-production pre-fixture-strengtheningdebug persistence; final signature files.
+- `gradle-unit-attempt.log`: known host worker class startup failure, not product-test pass. `junit-final-02-*.log` contains raw microbenchmark rounds; restricted to steady-search work, no new whole-app/car speed claim.
+- Benchmark excludes debug fixtures: Android JSON/file suite ran debug; exact shrunk benchmark ran main/device/settings/resume, not actual LIVE/end/export. Original D062/evidence kept.
+
+## D-062 local lean candidate — 2026-09-17
+
+- Review/gates/limitations: `D062_LOCAL_REVIEW_20260917.md`; approved scope `D062_LEAN_PLAN.md`.
+- Source/APKs/manifest/D061 diff: `../../deliverables/D062-lean-local-20260917/`.
+- Evidence: `../../outputs/d062-lean-20260916/`: `build-final-03.log`, final JUnit logs for27,678+13,465transactions, `pixel-oracle/`148frames, `lifecycle/`7/7, `gui-debug/`, `native-gui-debug/`, `native-gui-benchmark/`, `native-gui-d061-control/`, `runtime-summary.json` and exact-APK replay directories/signature/manifest logs.
+- Standard Gradle worker failure in `gradle-tests.log` is not a product test pass. Main source−15.1%, car-test APK−13.9%, UI-only CPU essentially flat9.96→9.88%. No real-car5Hz or calibrated80% emulator claim.
+
 This is a compact evidence locator. Original evidence files must not be edited in place.
+
+## D-061 A+B local candidate — 2026-09-12
+
+- Scope/results/open gates: `D061_AB_PLAN.md`, `D061_LOCAL_REVIEW_20260912.md`.
+- Candidates/source/manifest/D060-only delta: `../../deliverables/D061-AB-local-20260912/`; benchmark SHA256 `ea2525dc148dfc5247bc3f1ed7c623cfd17e6213a421330d1838c820522d8835`, debug `56779960efde0668f0aaf33d366cb229133c48ac3e6dac6b69a7ccec23cf4db7`.
+- Evidence root `../../outputs/d061-ab-20260911/`: `pre-change/`, `build-final.log`, `junit-final.log`165pass, `standard-test-01.log`hostworkerfailure, `signature-*.log`, `python-tests.log`, `summary-tests.log`. Preserve earlier failed build/tool-environment outputs separately.
+- `parser-corpus.tsv`:13,465transactions derived from unchanged September9ZIP; original archive SHA `b8e7ea50…996e3`, corpusSHA `50691468…bb68`; generator/test source checked in local snapshot, corpus not embedded in source.
+- `pixel-debug-final`148frames / `pixel-benchmark-final`146frames independent full-sharp+halo oracle. `gui-debug-final` / `gui-benchmark-final` authored1280×720/actualView1280×672 settings+persistence; benchmark preview excludes two unsynchronized wheels, other screenshots compare full frame. `smoke-debug-final` / `smoke-benchmark-final` isolatedAndroidfilefault7/7each.
+- `perf-old-debug-1`, `perf-new-debug-1`, `perf-new-debug-2`, `perf-new-benchmark-1`: exact installed SHA/runId/config/rawlogs; `runtime-summary.json` final weighted metrics. All are UI-only, same1core/actual1.5GB/SwiftShader, not MX+ throughput or80% car-fit. Synthetic frame/publish counts are not ECU Hz.
+
+## D-060 local closure checkpoint — 2026-09-08
+
+- Review and remaining gates: `D060_LOCAL_REVIEW_20260908.md`; exact nine-group ledger: `D060_REQUIREMENTS_CLOSURE.md`.
+- Candidate APK/source hash inventory: `../../deliverables/D060-local-20260908/`; APK SHA-256 `db6b33fa2038ae6f9711fc87e0d83907d99fb09d42d1d3b8f156f51965811297`. Includes untracked source/assets in manifest, not just tracked diff.
+- Build/140 direct JUnit/21 Python/signature logs: `../../outputs/d060-validation-20260907/` (`*-final.log`). Standard Gradle worker failure is not relabeled as a pass.
+- Final APK's Android isolated file-fault7/7: `lifecycle-final/`; true close-fault reproduction: `lifecycle-close-red-corrected/` by UUID; initial `lifecycle-close-red/` is a test setup failure, not product root cause.
+- Final settings/1280x720 PNG and persistence: `gui-final/`; whole720p dynamic exact composition100frames: `pixel-oracle-final/`.
+- Same-APK full-software/cached stress5 controls: `stress5-tiles-*`(4core/2GB) and `stress5-final-1core-*`(1core/actual1.5GB). Current delivery repeat: `stress5-delivery-1core-01/`. `runtime-summary.json` retains all runs, including earlier nonfresh-process controls which are excluded from the main comparison.
+- Approx22% UI-only CPU reduction and pixel parity do not certify real OBD5Hz, full LIVE handoff or80% calibrated vehicle equivalence. Original host logs/layout/vehicle art untouched.
+
+## D-058 actual runtime and visual hold — 2026-09-06
+
+- Latest report: `../../outputs/d058-runtime-20260906/D058_RUNTIME_REPORT.md`.
+- Six completed controls (3 stress5, 1 each parked/wheel/recorded), exact installed identity, screenshots/logcat/gfxinfo/meminfo: `../../outputs/d058-runtime-20260906/`; all 3,868 inputs accounted for, no skips.
+- Per-window and per-scenario statistics with raw log SHA: `summary.json`; new offline-analysis regression log `analysis-tests.log` (10/10).
+- GUI settings/Idle/self-test evidence: `gui-01/`; no-wheel settings restoration pixels match exactly.
+- Exact D-057 same-emulator static control: `d057-same-avd-preview/metadata.json`. Full R1 visual equivalence NOT PASSED: `gui-01/same-avd-pixel-checks.json` shows halo differences; old-versus-old historical/current non-wheel pixels match.
+- Runtime confirmed only on local API 26 / x86_64 / SwiftShader; not target API 27, dynamic D-057 A/B or weak-car fit. No source/APK change or promotion. Earlier no-install/no-GUI statements below describe 2026-09-05.
+
+## D-058 local dynamic validation follow-up — 2026-09-05
+
+- Review/run instructions: `D058_DYNAMIC_VALIDATION.md`.
+- Build/direct-JUnit/Python/preflight logs: `../../outputs/d058-dynamic-validation/`.
+- Corrected exact-APK/monotonic/scenario analysis: `../../outputs/emulator-calibration-v2/REAL_CAR_BASELINE.md` and `inventory.json` (21 sessions, 7 exact APKs + 1 legacy group).
+- Recorded display input: `app/src/debug/assets/renderer_replay/recorded.csv`, SHA-256 `214b1f95151ebc17ea285945fe866721d5a8e5f52dee175ce07e28bb7f97cca9`, with source provenance in `recorded.json`.
+- Debug validation APK: `../../deliverables/RX400h-Monitor-v0.3.5-v28-D058-dynamic-validation-debug.apk`, SHA-256 `b388efed7e3a09153d8b2c2428d130ea07b963e0e14d01ced65b0193220e68b7`.
+- 120/120 direct JUnit, 11/11 Python checks, lint 0 errors/9 warnings and assemble/signature pass. No installation, GUI, frame-rate or dynamic CPU pass; acceleration preflight remains blocked. This is not a promoted baseline.
 
 ---
 
@@ -297,6 +356,56 @@ Target API 27 1280x720 natural-first-frame gate: pending
 ```
 
 Role: exact-clean local D-053 presentation implementation evidence. The complete real-window layout key covers width, height, safe insets, density and font scale; one attach-scoped listener suppresses at most two pre-draws before removing itself and always releasing the third draw; the debug preview's private three-pass workaround is removed. Static scanlines are strengthened, the green hierarchy is brighter and primary values/titles/buttons use a cached bold monospace. No core, scheduler, request period, protocol, decoder, SignalStore, logger or session-lifecycle source changed. The artifact is bound to clean implementation commit `b60619d`; it is not a GitHub Actions artifact and has not been installed. The actual API 27/1280x720 natural-first-frame gate remains open.
+
+### V0.3.5/v27 signal-driven CRT + non-blocking recovery local candidate
+
+```text
+Branch: v0.3.0
+Base HEAD: 8f1a3b9fb49359484c283ea6c3eaf69c631b4b45
+App version: 0.3.5-debug
+versionCode: 27
+Local artifact: ../../deliverables/RX400h-Monitor-v0.3.5-v27-signal-ui-recovery-debug.apk
+APK size: 2,612,662 bytes
+APK SHA-256: 0b803f3cf3759d96e350e6ea4f18146ae263c1250cfa557780d8011a84bd533e
+Embedded provenance: GIT_COMMIT=8f1a3b9fb49359484c283ea6c3eaf69c631b4b45; GIT_DIRTY=true
+Production/test compilation: pass
+Compiled direct-JUnit result: 113 passed / 0 failed / 0 errors
+Gradle test worker: known Windows/Unicode-path launch failure before test execution
+Lint: 0 errors / 9 non-blocking warnings
+assembleDebug: pass
+Manifest: applicationId com.guanyu.rx400hprobe.debug; minSdk 26; targetSdk 35
+Signature: APK Signature Scheme v2; certificate SHA-256 77ba84b1f4f737a5d61b910bf4386df167548b9c6ce689ed25e994c37b2bc192
+GUI / paired-OBD / forced-recovery smoke: pending manual target-device verification
+Review: CODE_REVIEW_V0.3.5.md
+```
+
+Role: local D-054/D-055 implementation evidence. Manual JSON offsets are normalized into exact target-landscape geometry; the three picture references are recreated as signal-driven native Canvas schematics; Idle Check uses dim/full brightness levels while preserving core thresholds; `SAVE_FAILED` permits Device/Start/End after safe ownership release and retains old evidence. Protocol, decoder, SignalStore, scheduler, request periods and evidence-integrity rules remain unchanged. The worktree is intentionally dirty and this is not a remote CI artifact or promoted baseline.
+
+### V0.3.5/v28 exact pixel dashboard local candidate
+
+```text
+Branch: v0.3.0
+Base HEAD: 8f1a3b9fb49359484c283ea6c3eaf69c631b4b45
+App version: 0.3.5-debug
+versionCode: 28
+Local artifact: ../../deliverables/RX400h-Monitor-v0.3.5-v28-pixel-dashboard-debug.apk
+APK size: 2,656,023 bytes
+APK SHA-256: 020a0d9fb05e718e0eef6e100edbdd306dcba244f7b4017b67e2967f048d30f6
+Final layout JSON SHA-256: 1f3914510943261f3c2d29f4d8eaf4abca7236b5676e0584948c2839b63518aa
+Embedded provenance: GIT_COMMIT=8f1a3b9fb49359484c283ea6c3eaf69c631b4b45; GIT_DIRTY=true
+Production/test compilation: pass
+Compiled direct-JUnit result: 111 passed / 0 failed / 0 errors
+Gradle test worker: known Windows/Unicode-path launch failure before test execution
+Lint: 0 errors / 9 non-blocking warnings
+assembleDebug: pass
+Manifest: applicationId com.guanyu.rx400hprobe.debug; minSdk 26; targetSdk 35
+Signature: APK Signature Scheme v2; certificate SHA-256 77ba84b1f4f737a5d61b910bf4386df167548b9c6ce689ed25e994c37b2bc192
+API 26 GUI: 2026-09-01 retry cleared the stale lock, bypassed original userdata and reproduced the pre-boot failure on a clean isolated 1280x720 AVD with software and valid hardware acceleration; ADB remained absent/offline, local Emulator/QEMU/WHPX runtime is the remaining blocker, and no GUI pass is claimed (`../../outputs/v28-gui-retry/README.md`)
+Target GUI / paired-OBD / forced-recovery smoke: pending manual verification
+Review: CODE_REVIEW_V0.3.5_V28.md
+```
+
+Role: local D-055/D-056 implementation evidence. The final user JSON is byte-identical to the packaged source asset and supplies exact positions, masks and effect defaults. Android uses fixed nearest-neighbour 2× logical rendering, physical Noto labels, confirmed SOC/wheel/power animation semantics and local-only CRT settings. Core scheduler/request/protocol/decoder/SignalStore/Idle eligibility sources have no diff. This is not a remote CI artifact or promoted baseline.
 
 ---
 
@@ -630,3 +739,30 @@ A direct attempt to create `AGENTS.md` through the ChatGPT GitHub contents integ
 ```
 
 This is why Codex write automation uses local Git/`gh` credentials instead of relying on connector write scopes.
+
+---
+
+## J. V0.3.5/v28 D-057 renderer comparison — 2026-09-02
+
+Local artifact/evidence root:
+
+```text
+../../outputs/v28-gui-retry/isolated-avd-home/artifacts/
+```
+
+Key files:
+
+```text
+v28-debug.apk                 exact pre-D057 v28 artifact
+v28-first.png                 pre-D057 first preview
+v28-steady.png                pre-D057 steady preview
+v28-d057-debug.apk            final D057 candidate
+v28-d057-first.png            final first preview
+v28-d057-steady.png           final steady preview
+v28-d057-settings.png         final settings-overlay smoke
+v28-d057-gfxinfo.txt          final 12-second graphics window
+v28-d057-meminfo.txt          final memory snapshot
+v28-d057-top.txt              final CPU samples
+```
+
+The exact pre-D057 fixture records 103/103 janky frames, 40 ms median and 9 slow bitmap uploads. The final candidate records 59/104, 20 ms median and zero slow bitmap uploads; its total PSS is 35,894 KB. Final APK SHA-256 is `b8cfe5d5497e13eb30a8eb4d02695ae2eed9de50a91bac265cd74af2cc28bbab`, package `com.guanyu.rx400hprobe.debug`, versionCode 28, versionName `0.3.5-debug`, fixed v2 certificate SHA-256 `77ba84b1f4f737a5d61b910bf4386df167548b9c6ce689ed25e994c37b2bc192`.

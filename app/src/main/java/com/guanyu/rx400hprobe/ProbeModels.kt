@@ -16,17 +16,9 @@ enum class TransactionStatus {
 data class CommandResult(
     val command: String,
     val rawLines: List<String>,
-    val normalizedHex: String,
-    val latencyMs: Long,
     val status: TransactionStatus,
     val promptSeen: Boolean,
-    val responsePendingSeen: Boolean = false,
-    val firstByteLatencyMs: Long? = null,
-    val promptLatencyMs: Long? = null,
-    val minimumGapMs: Long = 0,
-    val gapWaitMs: Long = 0,
-    val quietWindowMs: Long = 0,
-    val preDrainMs: Long = 0
+    val canFrames: List<CanFrame>? = null
 )
 
 enum class SignalStatus {
@@ -44,7 +36,6 @@ data class SignalValue<T>(
     var status: SignalStatus = SignalStatus.IDLE,
     var source: String? = null,
     var updatedAtElapsedMs: Long? = null,
-    var sourceTimestampElapsedMs: Long? = null,
     var version: Long = 0L
 ) {
     fun ageMs(nowMs: Long): Long? = updatedAtElapsedMs?.let { nowMs - it }
@@ -59,10 +50,7 @@ data class BaselineData(
 
 data class HybridData(
     val socPct: SignalValue<Double> = SignalValue(),
-    val hvVoltageV: SignalValue<Double> = SignalValue(),
-    val hvCurrentA: SignalValue<Double> = SignalValue(),
     val hvPowerKw: SignalValue<Double> = SignalValue(),
-    val batteryTempsC: SignalValue<List<Double>> = SignalValue(),
     val batteryTempMinC: SignalValue<Double> = SignalValue(),
     val batteryTempMaxC: SignalValue<Double> = SignalValue(),
     val batteryTempAvgC: SignalValue<Double> = SignalValue(),
@@ -80,7 +68,13 @@ data class IsoTpMessage(
     val complete: Boolean = true
 ) {
     val payloadHex: String
-        get() = payload.joinToString("") { "%02X".format(it) }
+        get() = buildString(payload.size * 2) {
+            val digits = "0123456789ABCDEF"
+            for (byte in payload) {
+                append(digits[(byte ushr 4) and 15])
+                append(digits[byte and 15])
+            }
+        }
 }
 
 data class StandardDecoded(
@@ -93,24 +87,20 @@ data class ToyotaC3Decoded(
     val socPct: Double,
     val hvVoltageV: Double,
     val hvCurrentA: Double,
-    val hvPowerKw: Double,
-    val rawDataHex: String
+    val hvPowerKw: Double
 )
 
 data class ToyotaC4Decoded(
-    val warmupActive: Boolean,
-    val rawDataHex: String
+    val warmupActive: Boolean
 )
 
 data class ToyotaCfDecoded(
     val batteryTempsC: List<Double>,
     val batteryTempMinC: Double,
     val batteryTempMaxC: Double,
-    val batteryTempAvgC: Double,
-    val rawDataHex: String
+    val batteryTempAvgC: Double
 )
 
 data class ToyotaCdF3Decoded(
-    val iceTorqueNm: Double,
-    val rawDataHex: String
+    val iceTorqueNm: Double
 )

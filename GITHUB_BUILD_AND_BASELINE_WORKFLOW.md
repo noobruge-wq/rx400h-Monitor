@@ -1,5 +1,19 @@
 # RX400h Monitor — GitHub 自动编译、固定签名与基线文档上传
 
+## 2026-09-26 归档授权
+
+用户已授权源码提交/上传到 `v0.3.0`，见 `PROJECT_ARCHIVE_20260926.md`。本次不改main、不发布APK、不手动启动收费/远端构建；现有工作流仅监听main/master push，因此归档上传本身不等于CI通过。新电脑需Gradle8.9（本库没有wrapper）、JDK17和SDK35。下段“仅本地授权”是9月23日历史状态。
+
+## 当前本地候选：D064 / v0.3.5-v29（2026-09-23）
+
+本轮用户仅授权本地工作，未提交/推送/远端构建。工作流已改为先运行标准
+testDebugUnitTest、lintDebug、lintBenchmark，再构建 debug 与非调试/R8 的 benchmark。
+主交付为 benchmark，名字 RX400h-Monitor-v0.3.5-v29-D064-realtime-3hz；
+仍使用 com.guanyu.rx400hprobe.debug 和原固定测试签名，不是商店 release key。
+发布时同时保留 R8 mapping 和 APK hash；本地 dirty 源码以源码包/hash 清单定位。
+无 logger/performance/recovery，不再要求导出日志作为交付验证。
+下面版本流程保留作历史参考，当前身份和范围以 D064 报告为准。
+
 本文件是项目交接的一部分。新对话/新开发者不应依赖聊天历史来恢复“怎么编译、怎么保持 APK 可覆盖安装、怎么把项目基线文档推回 GitHub”。
 
 ---

@@ -1,0 +1,14 @@
+{
+  "source": "NotoSansSC-VF.ttf",
+  "source_sha256": "763146584cf0710223441356b4395e279021b0806c196614377a7a0174ae074a",
+  "source_bytes": 17773244,
+  "output_bytes": 10373024,
+  "output_sha256": "71443847616dc6b4ce64639bf4ec3dc7a833e5d8841f6199e64ef07ead293cab",
+  "weight": 500,
+  "unicode_count": 30890,
+  "coverage_dropped": 0,
+  "fonttools_version": "4.64.0",
+  "copyright": "© 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'.",
+  "license_notice": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+  "purpose": "Physical-pixel dynamic Chinese/status/settings; fixed authored sprites unchanged"
+}
