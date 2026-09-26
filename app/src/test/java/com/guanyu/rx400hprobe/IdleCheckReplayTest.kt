@@ -35,15 +35,15 @@ class IdleCheckReplayTest {
         state.update(true, 903.0, 0.0, 9.0, 11780L)
         assertTrue(state.active)
 
-        // idx 145 (t=14802): RPM falls to 889 (< 900) -> exit
+        // D-059: below entry but inside hold; do not flicker.
         state.update(true, 889.0, 0.0, 9.0, 14802L)
-        assertFalse(state.active)
+        assertTrue(state.active)
 
-        // stays inactive on the following frame
+        // Hold until warmup actually ends.
         state.update(true, 889.0, 0.0, 9.0, 17658L)
-        assertFalse(state.active)
+        assertTrue(state.active)
 
-        // warmup ends -> remains inactive
+        // warmup ends -> immediately becomes inactive
         state.update(false, 874.0, 0.0, 5.0, 20169L)
         assertFalse(state.active)
     }

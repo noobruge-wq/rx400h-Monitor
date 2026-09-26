@@ -3,19 +3,43 @@ package com.guanyu.rx400hprobe
 object ObdParsers {
     const val DECODER_VERSION = "rx400h-reactive-20260808-002"
 
-    private val canLine = Regex("^([0-9A-F]{3})([0-9A-F]{2,})$")
+    private val voltagePattern = Regex("([0-9]+(?:\\.[0-9]+)?)\\s*V", RegexOption.IGNORE_CASE)
+    private val standardSizes = mapOf(0x04 to 1, 0x05 to 1, 0x06 to 1, 0x07 to 1,
+        0x0C to 2, 0x0D to 1, 0x0E to 1, 0x10 to 2)
+    private const val HEX = "0123456789ABCDEF"
 
-    fun parseCanFrames(lines: List<String>): List<CanFrame> = lines.mapNotNull { line ->
-        val compact = line.replace(Regex("\\s+"), "").uppercase()
-        val match = canLine.matchEntire(compact) ?: return@mapNotNull null
-        val body = match.groupValues[2]
-        if (body.length % 2 != 0) return@mapNotNull null
-        val bytes = body.chunked(2).mapNotNull { it.toIntOrNull(16) }
-        if (bytes.size * 2 != body.length) null else CanFrame(match.groupValues[1], bytes)
+    fun parseCanFrames(lines: List<String>): List<CanFrame> {
+        val frames = ArrayList<CanFrame>(lines.size)
+        for (line in lines) {
+            var digits = 0
+            var id = 0
+            var high = -1
+            var valid = true
+            val bytes = ArrayList<Int>(8)
+            for (ch in line) {
+                if (ch == ' ' || ch in '\t'..'\r') continue // Same ASCII whitespace as the old regex.
+                val value = when (ch) {
+                    in '0'..'9' -> ch - '0'
+                    in 'a'..'f' -> ch - 'a' + 10
+                    in 'A'..'F' -> ch - 'A' + 10
+                    else -> { valid = false; break }
+                }
+                if (digits < 3) id = (id shl 4) or value
+                else if (high < 0) high = value
+                else { bytes.add((high shl 4) or value); high = -1 }
+                digits++
+            }
+            if (valid && digits >= 5 && high == -1) {
+                val canId = "${HEX[(id ushr 8) and 15]}${HEX[(id ushr 4) and 15]}${HEX[id and 15]}"
+                frames.add(CanFrame(canId, bytes))
+            }
+        }
+        return frames
     }
 
-    fun isoTpMessage(lines: List<String>, expectedCanId: String? = null, allowPartial: Boolean = false): IsoTpMessage? {
-        val frames = parseCanFrames(lines)
+    fun isoTpMessage(lines: List<String>, expectedCanId: String? = null, allowPartial: Boolean = false,
+                     parsedFrames: List<CanFrame>? = null): IsoTpMessage? {
+        val frames = parsedFrames ?: parseCanFrames(lines)
         val ids = if (expectedCanId == null) frames.map { it.canId }.distinct() else listOf(expectedCanId.uppercase())
         for (id in ids) {
             val sameId = frames.filter { it.canId == id && it.bytes.isNotEmpty() }
@@ -47,8 +71,12 @@ object ObdParsers {
         return null
     }
 
-    fun decodeStandard(lines: List<String>, expectedCanId: String = "7E8"): StandardDecoded? {
-        val payload = isoTpMessage(lines, expectedCanId)?.payload ?: return null
+    fun decodeStandard(lines: List<String>, expectedCanId: String = "7E8", parsedFrames: List<CanFrame>? = null): StandardDecoded? {
+        val payload = isoTpMessage(lines, expectedCanId, parsedFrames = parsedFrames)?.payload ?: return null
+        return decodeStandardPayload(payload)
+    }
+
+    fun decodeStandardPayload(payload: List<Int>): StandardDecoded? {
         if (payload.firstOrNull() != 0x41) return null
         var i = 1
         var coolant: Double? = null
@@ -56,13 +84,9 @@ object ObdParsers {
         var speed: Double? = null
         // Keep the full standard-block size table so unknown-to-UI PIDs are
         // skipped instead of aborting the parse before RPM/speed are reached.
-        val sizes = mapOf(
-            0x04 to 1, 0x05 to 1, 0x06 to 1, 0x07 to 1,
-            0x0C to 2, 0x0D to 1, 0x0E to 1, 0x10 to 2
-        )
         while (i < payload.size) {
             val pid = payload[i++]
-            val size = sizes[pid] ?: break
+            val size = standardSizes[pid] ?: break
             if (i + size > payload.size) break
             val values = payload.subList(i, i + size)
             i += size
@@ -75,8 +99,8 @@ object ObdParsers {
         return StandardDecoded(coolant, rpm, speed)
     }
 
-    fun decode21C3(lines: List<String>): ToyotaC3Decoded? {
-        val payload = isoTpMessage(lines, "7EA")?.payload ?: return null
+    fun decode21C3(lines: List<String>, parsedFrames: List<CanFrame>? = null): ToyotaC3Decoded? {
+        val payload = isoTpMessage(lines, "7EA", parsedFrames = parsedFrames)?.payload ?: return null
         if (payload.size < 39 || payload[0] != 0x61 || payload[1] != 0xC3) return null
         val d = payload.drop(2)
         if (d.size < 33) return null
@@ -86,24 +110,22 @@ object ObdParsers {
             socPct = d[14] / 2.55,
             hvVoltageV = voltage,
             hvCurrentA = current,
-            hvPowerKw = voltage * current / 1000.0,
-            rawDataHex = hex(d)
+            hvPowerKw = voltage * current / 1000.0
         )
     }
 
-    fun decode21C4(lines: List<String>): ToyotaC4Decoded? {
-        val payload = isoTpMessage(lines, "7EA")?.payload ?: return null
+    fun decode21C4(lines: List<String>, parsedFrames: List<CanFrame>? = null): ToyotaC4Decoded? {
+        val payload = isoTpMessage(lines, "7EA", parsedFrames = parsedFrames)?.payload ?: return null
         if (payload.size < 29 || payload[0] != 0x61 || payload[1] != 0xC4) return null
         val d = payload.drop(2)
         if (d.size < 25) return null
         return ToyotaC4Decoded(
-            warmupActive = (d[1] and 0x01) != 0,
-            rawDataHex = hex(d)
+            warmupActive = (d[1] and 0x01) != 0
         )
     }
 
-    fun decode21CF(lines: List<String>): ToyotaCfDecoded? {
-        val payload = isoTpMessage(lines, "7EA", allowPartial = true)?.payload ?: return null
+    fun decode21CF(lines: List<String>, parsedFrames: List<CanFrame>? = null): ToyotaCfDecoded? {
+        val payload = isoTpMessage(lines, "7EA", allowPartial = true, parsedFrames = parsedFrames)?.payload ?: return null
         if (payload.size < 27 || payload[0] != 0x61 || payload[1] != 0xCF) return null
         val d = payload.drop(2)
         if (d.size < 24) return null
@@ -114,28 +136,24 @@ object ObdParsers {
             batteryTempsC = temps,
             batteryTempMinC = temps.minOrNull() ?: return null,
             batteryTempMaxC = temps.maxOrNull() ?: return null,
-            batteryTempAvgC = temps.average(),
-            rawDataHex = hex(d)
+            batteryTempAvgC = temps.average()
         )
     }
 
-    fun decode21CdF3(lines: List<String>): ToyotaCdF3Decoded? {
-        val payload = isoTpMessage(lines, "7E8")?.payload ?: return null
+    fun decode21CdF3(lines: List<String>, parsedFrames: List<CanFrame>? = null): ToyotaCdF3Decoded? {
+        val payload = isoTpMessage(lines, "7E8", parsedFrames = parsedFrames)?.payload ?: return null
         if (payload.size < 19 || payload[0] != 0x61 || payload[1] != 0xCD) return null
         val d = payload.drop(2)
         if (d.size < 14 || d[11] != 0xF3) return null
         return ToyotaCdF3Decoded(
-            iceTorqueNm = ((d[3] - 128) * 2).toDouble(),
-            rawDataHex = hex(d)
+            iceTorqueNm = ((d[3] - 128) * 2).toDouble()
         )
     }
 
     fun adapterVoltage(lines: List<String>): Double? {
         val text = lines.joinToString(" ")
-        return Regex("([0-9]+(?:\\.[0-9]+)?)\\s*V", RegexOption.IGNORE_CASE)
-            .find(text)?.groupValues?.getOrNull(1)?.toDoubleOrNull()
+        return voltagePattern.find(text)?.groupValues?.getOrNull(1)?.toDoubleOrNull()
     }
 
     private fun u16(data: List<Int>, index: Int): Int = (data[index] shl 8) or data[index + 1]
-    private fun hex(data: List<Int>): String = data.joinToString("") { "%02X".format(it) }
 }

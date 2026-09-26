@@ -1,0 +1,7 @@
+<resources>
+    <color name="crt_black">#000000</color>
+
+    <color name="crt_green_primary">#A0FFAE</color>
+    <color name="crt_green_dim">#70DF88</color>
+
+</resources>

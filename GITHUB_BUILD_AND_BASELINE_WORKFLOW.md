@@ -1,5 +1,19 @@
 # RX400h Monitor — GitHub 自动编译、固定签名与基线文档上传
 
+## 2026-09-26 归档授权
+
+用户已授权源码提交/上传到 `v0.3.0`，见 `PROJECT_ARCHIVE_20260926.md`。本次不改main、不发布APK、不手动启动收费/远端构建；现有工作流仅监听main/master push，因此归档上传本身不等于CI通过。新电脑需Gradle8.9（本库没有wrapper）、JDK17和SDK35。下段“仅本地授权”是9月23日历史状态。
+
+## 当前本地候选：D064 / v0.3.5-v29（2026-09-23）
+
+本轮用户仅授权本地工作，未提交/推送/远端构建。工作流已改为先运行标准
+testDebugUnitTest、lintDebug、lintBenchmark，再构建 debug 与非调试/R8 的 benchmark。
+主交付为 benchmark，名字 RX400h-Monitor-v0.3.5-v29-D064-realtime-3hz；
+仍使用 com.guanyu.rx400hprobe.debug 和原固定测试签名，不是商店 release key。
+发布时同时保留 R8 mapping 和 APK hash；本地 dirty 源码以源码包/hash 清单定位。
+无 logger/performance/recovery，不再要求导出日志作为交付验证。
+下面版本流程保留作历史参考，当前身份和范围以 D064 报告为准。
+
 本文件是项目交接的一部分。新对话/新开发者不应依赖聊天历史来恢复“怎么编译、怎么保持 APK 可覆盖安装、怎么把项目基线文档推回 GitHub”。
 
 ---
@@ -44,6 +58,7 @@ Gradle: 8.9
 Android compile/target SDK: 35（除非后续版本文档明确修改）
 Build task: :app:assembleDebug
 Unit tests: :app:testDebugUnitTest (before assembleDebug)
+Static analysis: :app:lintDebug
 APK verification: apksigner verify
 ```
 
@@ -112,6 +127,7 @@ Keystore file historical SHA-256:
 ```text
 Gradle build PASS
 :app:testDebugUnitTest PASS
+:app:lintDebug PASS
 :app:assembleDebug PASS
 APK exists
 apksigner verify PASS
@@ -135,6 +151,38 @@ V0.2.1 UI patch：
 ```text
 RX400hProtocolProbe-v0.2.1-ui-debug-signed
 ```
+
+V0.3.0 开发分支候选：
+
+```text
+RX400hProtocolProbe-v0.3.0-bottom-align-debug-signed
+```
+
+当前 V0.3.2 capacity-aware scheduler 候选：
+
+```text
+RX400hProtocolProbe-v0.3.2-capacity-scheduler-debug-signed
+```
+
+V0.3.2 是仍处于 V0.3.0 Scheduler / Refresh Frontier 工程里程碑内的 App 版本；Artifact、Gradle `versionName/versionCode` 与 session build provenance 必须指向同一 exact commit。`UNKNOWN`/`OVERLOADED` admission 不得解锁 rate ladder。
+
+当前本地 V0.3.3 recovery/cost/CRT 候选：
+
+```text
+RX400hProtocolProbe-v0.3.3-recovery-cost-crt-debug-signed
+```
+
+Gradle 身份为 V0.3.3 / versionCode 25，workflow 名称已同步。本地 exact-clean 实现提交 `c9ad39759021fd8d4ca529b115ab7932aa2bf8d8` 已产出 SHA-256 `2d75bd7d1bc6be8a923495e901c05ce904d58966f8e10ff3e12b2e980a33d0a1` 的固定 v2 证书 APK；它不是 GitHub Actions artifact。在实际 push、触发并验证 exact-commit run 前，不得把本地 APK 称为 CI artifact。该 exact APK 已安装并有 API 27 normal start/LIVE/End/public-save 证据；强制中断恢复仍待完成。
+
+当前本地 V0.3.4 target CRT UI 候选：
+
+```text
+RX400hProtocolProbe-v0.3.4-target-crt-ui-debug-signed
+```
+
+Gradle 身份为 V0.3.4 / versionCode 26，workflow 名称已同步。D-053 presentation-only 修正已在 exact-clean 本地提交 `b60619d5c1f4e011508b3cf74de6fee7422ec720` 重编译；本地文件 `RX400hProtocolProbe-v0.3.4-b60619d-target-crt-ui-debug-signed.apk` 为 2,591,078 bytes、SHA-256 `fa88064be3450ccb8765217ed0f12e97e01793c66434b07b0901777b4072002b`，内嵌 `GIT_DIRTY=false` 并通过固定 v2 证书验证。它不是 GitHub Actions artifact，也尚未安装；remote CI 和目标 API 27/1280x720 natural-first-frame gate 仍须分别完成，任何旧 preview screenshot 都不能冒充 exact first-frame evidence。
+
+Gradle 的 Git provenance 采集必须 fail closed：Git 不可执行、命令失败或 commit ID 非 40 位十六进制时，构建直接失败。GitHub Actions 还必须在上传前检查生成的 `BuildConfig`：`GIT_COMMIT == GITHUB_SHA` 且 `GIT_DIRTY == false`。
 
 版本进入正式 Monitor 阶段后可以调整命名，但必须保持“从 Artifact 名就能识别 app version / candidate”的原则。
 
@@ -223,6 +271,8 @@ Push 后 GitHub Actions 自动开始构建。
 
 ```text
 BASELINE_README.md
+CHAT_ROLE.md
+WORK_ROLE.md
 PROJECT_STATE.md
 CHANGELOG.md
 DECISIONS.md
@@ -268,14 +318,20 @@ BASELINE_MANIFEST.sha256
 cd ~/rx400h-Monitor
 
 sha256sum \
+  AGENTS.md \
   BASELINE_README.md \
-  PROJECT_STATE.md \
+  CHAT_ROLE.md \
   CHANGELOG.md \
+  CODEX_HANDOFF.md \
   DECISIONS.md \
-  ROADMAP.md \
   DEVELOPMENT_PROTOCOL.md \
   EVIDENCE_INDEX.md \
+  FULL_PROJECT_CONTEXT.md \
   GITHUB_BUILD_AND_BASELINE_WORKFLOW.md \
+  PROJECT_STATE.md \
+  REPO_ACCESS_AND_AUTH.md \
+  ROADMAP.md \
+  WORK_ROLE.md \
   > BASELINE_MANIFEST.sha256
 ```
 
@@ -334,6 +390,8 @@ sha256sum -c BASELINE_MANIFEST.sha256
 ```bash
 git add \
   BASELINE_README.md \
+  CHAT_ROLE.md \
+  WORK_ROLE.md \
   PROJECT_STATE.md \
   CHANGELOG.md \
   DECISIONS.md \
@@ -388,6 +446,7 @@ git rev-parse origin/main
 
 ```text
 GitHub repository + latest commit
+CHAT_ROLE.md or WORK_ROLE.md (according to the receiving role)
 PROJECT_STATE.md
 DECISIONS.md
 ROADMAP.md

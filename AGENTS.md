@@ -1,10 +1,24 @@
 # RX400h Monitor — AGENTS.md / Codex Repository Instructions
 
+## 当前状态优先入口（2026-09-26）
+
+项目按用户要求暂时结束，当前源码为D064 / V0.3.5-v29；换电脑归档与恢复见 `PROJECT_ARCHIVE_20260926.md`。后文较早的5Hz frontier、记录/保存/恢复、三按钮和旧版本要求仅是历史背景；与D064合同冲突时以最新用户要求为准。归档不代表实车验收完成，恢复开发先读D064报告，不擅自重启已取消功能。
+
 本文件是 Codex/自动化开发代理的最高层仓库工作规则。项目事实以 `PROJECT_STATE.md` 等基线文档为准；本文件规定“应该怎样工作”。
 
-## 0. 启动纪律
+## 0. Chat / Work / Codex 三角色协作
 
-任何新 Codex 会话在修改代码前必须按顺序读取：
+- Chat：产品经理、需求分析、技术顾问与任务路由；使用 `CHAT_ROLE.md`。
+- Work：日常实施工程师、测试员与本机操作员；使用 `WORK_ROLE.md`。
+- Codex：高级软件工程师 / repository 级疑难问题专家，集中处理架构、高风险重构、复杂状态机、并发/生命周期、性能核心、CAN/ISO-TP/ELM327/Bluetooth、协议解析和 Work 无法可靠解决的问题。
+
+Codex 不再默认承担普通 GUI、文件移动、简单 UI/配置、重复 Gradle、APK 安装、截图、普通 logcat 或已有明确步骤的机械任务；核心问题解决后，应输出可执行的 `WORK_FOLLOWUP`，把 build/install/GUI/普通回归交回 Work。
+
+资源原则是减少无效 Codex 消耗，而不是回避有价值的 Codex：Work 一旦进入复杂架构、底层通信、疑难根因或高回归风险，应准备 `WORK_ROLE.md` 中的 `CODEX_ESCALATION_PACKET` 并及时升级。
+
+## 0A. 启动纪律
+
+第一次完整接管、major baseline 审计或没有可靠 escalation packet 时，Codex 在修改代码前必须按顺序读取：
 
 1. `AGENTS.md`
 2. `CODEX_HANDOFF.md`
@@ -31,7 +45,9 @@
 - 文档与源码是否存在不一致；
 - GitHub 读/写和自动签名构建是否可用。
 
-**第一次接手时不要立刻重构或提高轮询频率。恢复状态并检查一致性后，再等用户确认开发任务。**
+如果 Work 已提供结构完整、HEAD/diff明确的 `CODEX_ESCALATION_PACKET`，Codex 应先读 `AGENTS.md`、`PROJECT_STATE.md`、相关 `DECISIONS.md`、指定文件/调用链/错误/diff；只有证据不足才扩大读取，不应为局部问题无目的扫描全仓。
+
+**第一次接手时不要立刻重构或提高轮询频率。恢复状态并检查一致性；已有明确授权的任务可继续执行，否则等待用户确认。**
 
 ## 1. 产品范围
 
@@ -206,4 +222,6 @@ local git
 
 下一大版本：**V0.3.0 High-Performance Scheduler / Refresh Frontier**。
 
-V0.2.0 已由用户授权开始；按 `DEVELOPMENT_PROTOCOL.md` 的 docs-first 顺序执行，不得在文档/基线更新前改源码。
+V0.3.0 已由用户授权并在分支 `v0.3.0` 开始；按 `DEVELOPMENT_PROTOCOL.md` 的 docs-first 顺序执行，不得在文档/基线更新前改源码。V0.2.0 已关闭，不得把历史“开始 V0.2.0”提示当作当前任务。
+
+当前已安装/既有实车取证 App 候选是 **V0.3.3 / versionCode 25**（D-047…D-052），仍属于未关闭的 V0.3.0 Scheduler / Refresh Frontier 工程里程碑。exact-clean 本地实现提交 `c9ad397`、APK SHA-256 `2d75bd7d…33d0a1`、本地测试/lint/签名和 API 26 post-settle GUI 证据已完成；两份 2026-08-26 API 27 exact-artifact `USER_END` 记录已证明正常 start/LIVE/End/public-save，强制中断恢复与 remote exact-commit CI 仍待完成。当前本地源码/制品候选已推进为 **V0.3.4 / versionCode 26**（D-053）：只修复目标车机自然首帧布局并增强日光 CRT 可见性；exact-clean 提交 `b60619d`、APK SHA-256 `fa88064b…002b`、99/99 direct JUnit、lint/assemble/v2 signature 已完成，本机模拟器在 ADB 前停滞，因此目标 API 27/1280x720 natural-first-frame gate 仍待完成，且该 APK 尚未安装或推送。不得改协议、decoder、SignalStore、logger/session 语义或七个 target periods，也不得把任一本地候选称为已验证 baseline。

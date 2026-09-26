@@ -1,0 +1,27 @@
+// Host fallback only: obtain the exact Gradle-compiled debug test runtime.
+// Does not replace or report success for Gradle's test worker task.
+gradle.projectsEvaluated {
+    def app = gradle.rootProject.project(':app')
+    app.tasks.register('exportDebugTestRuntime') {
+        // The exported classpath uses the runtime JAR, not the compile JAR.
+        // Rebuild it as well, otherwise a direct run silently loads old product classes.
+        dependsOn ':app:compileDebugUnitTestKotlin', ':app:bundleDebugClassesToRuntimeJar'
+        doLast {
+            def unit = app.tasks.named('testDebugUnitTest').get()
+            def out = new File(app.layout.buildDirectory.get().asFile, 'direct-junit')
+            out.mkdirs()
+            new File(out, 'classpath.txt').setText(unit.classpath.asPath, 'UTF-8')
+            def classes = []
+            unit.testClassesDirs.files.each { root ->
+                if (root.exists()) {
+                    app.fileTree(root).matching { include '**/*Test.class' }.files.each { file ->
+                        classes.add(root.toPath().relativize(file.toPath()).toString()
+                            .replace('\\', '.').replace('/', '.').replaceAll(/\.class$/, ''))
+                    }
+                }
+            }
+            new File(out, 'classes.txt').setText(classes.unique().sort().join('\n'), 'UTF-8')
+            println "Debug runtime exported: ${classes.unique().size()} test classes"
+        }
+    }
+}

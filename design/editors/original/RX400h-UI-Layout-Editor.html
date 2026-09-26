@@ -1,0 +1,1717 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RX400h UI Layout Editor</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+      background: #151719;
+      color: #e8eaed;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    button, input, select, textarea { font: inherit; }
+
+    button {
+      min-height: 32px;
+      padding: 5px 10px;
+      color: #e8eaed;
+      background: #292d31;
+      border: 1px solid #4b5157;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    button:hover { background: #343a40; }
+    button:disabled { opacity: .42; cursor: default; }
+    button.primary { background: #176b3a; border-color: #2a9a58; }
+    button.danger { color: #ffb8b8; border-color: #794040; }
+
+    input, select, textarea {
+      width: 100%;
+      color: #f3f4f5;
+      background: #1e2124;
+      border: 1px solid #474d52;
+      border-radius: 3px;
+      padding: 5px 7px;
+    }
+
+    input[type="checkbox"] { width: auto; }
+    input[type="color"] { height: 32px; padding: 2px; }
+    textarea { min-height: 76px; resize: vertical; }
+
+    #editorApp {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      width: 100%;
+      height: 100%;
+      background: #151719;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 7px;
+      min-height: 48px;
+      padding: 7px 10px;
+      background: #202327;
+      border-bottom: 1px solid #3b4045;
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding-right: 8px;
+      border-right: 1px solid #40454a;
+    }
+
+    .toolbar-group:last-child { border-right: 0; }
+    .toolbar label { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+    .toolbar input[type="range"] { width: 110px; }
+
+    .workbench {
+      display: grid;
+      grid-template-columns: 224px minmax(0, 1fr) 286px;
+      min-height: 0;
+    }
+
+    .sidebar {
+      min-height: 0;
+      overflow: auto;
+      padding: 10px;
+      background: #1c1f22;
+    }
+
+    .sidebar-left { border-right: 1px solid #3b4045; }
+    .sidebar-right { border-left: 1px solid #3b4045; }
+
+    .sidebar h2,
+    .sidebar h3 {
+      margin: 4px 0 9px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .sidebar h3 {
+      margin-top: 16px;
+      padding-top: 10px;
+      border-top: 1px solid #353a3f;
+    }
+
+    .button-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .layers {
+      display: grid;
+      gap: 3px;
+      margin-top: 10px;
+    }
+
+    .layer-row {
+      display: grid;
+      grid-template-columns: 28px 28px minmax(0, 1fr);
+      align-items: center;
+      min-height: 34px;
+      border: 1px solid transparent;
+      border-radius: 3px;
+      background: #24282c;
+    }
+
+    .layer-row.selected { border-color: #e0a33b; background: #32302a; }
+    .layer-row.child .layer-name { padding-left: 14px; }
+
+    .layer-icon {
+      min-height: 30px;
+      padding: 0;
+      background: transparent;
+      border: 0;
+    }
+
+    .layer-name {
+      overflow: hidden;
+      padding: 6px;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .workspace {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      background: #0e1012;
+    }
+
+    .canvas-center {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      min-width: 100%;
+      min-height: 100%;
+      padding: 24px;
+    }
+
+    #canvasScaler {
+      position: relative;
+      flex: none;
+    }
+
+    #designCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1280px;
+      height: 720px;
+      overflow: hidden;
+      transform-origin: top left;
+      background: #000704;
+      border: 2px solid #2e8b4d;
+      user-select: none;
+      touch-action: none;
+    }
+
+    #designCanvas.show-grid {
+      background-image:
+        linear-gradient(rgba(120, 255, 150, .075) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(120, 255, 150, .075) 1px, transparent 1px),
+        linear-gradient(rgba(120, 255, 150, .13) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(120, 255, 150, .13) 1px, transparent 1px);
+      background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px;
+    }
+
+    #scanlineOverlay {
+      position: absolute;
+      inset: 0;
+      z-index: 9000;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent 5px,
+        rgba(100, 255, 135, .06) 6px,
+        transparent 7px
+      );
+    }
+
+    #safeGuide {
+      position: absolute;
+      left: 0;
+      top: 671px;
+      z-index: 8990;
+      width: 100%;
+      height: 0;
+      color: #d6a546;
+      border-top: 2px dashed currentColor;
+      pointer-events: none;
+    }
+
+    #safeGuide span {
+      position: absolute;
+      right: 8px;
+      bottom: 4px;
+      padding: 2px 5px;
+      color: #f0c76e;
+      background: rgba(0, 7, 4, .9);
+      font: 14px ui-monospace, monospace;
+    }
+
+    .design-item {
+      position: absolute;
+      min-width: 2px;
+      min-height: 2px;
+      transform-origin: center;
+      cursor: move;
+    }
+
+    .design-item.locked { cursor: default; }
+    .design-item.item-text { display: flex; white-space: pre-wrap; overflow: hidden; }
+    .design-item.item-button { display: flex; align-items: center; justify-content: center; }
+    .design-item.item-image img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+    .design-item.item-svg svg { display: block; width: 100%; height: 100%; pointer-events: none; }
+
+    .design-item.selected::after {
+      content: "";
+      position: absolute;
+      inset: -3px;
+      z-index: 10001;
+      border: 2px solid #f0a832;
+      pointer-events: none;
+    }
+
+    .resize-handle {
+      position: absolute;
+      z-index: 10002;
+      width: 12px;
+      height: 12px;
+      background: #f4b84e;
+      border: 2px solid #1d1305;
+      border-radius: 2px;
+      pointer-events: auto;
+    }
+
+    .resize-handle.nw { left: -8px; top: -8px; cursor: nwse-resize; }
+    .resize-handle.n  { left: calc(50% - 6px); top: -8px; cursor: ns-resize; }
+    .resize-handle.ne { right: -8px; top: -8px; cursor: nesw-resize; }
+    .resize-handle.e  { right: -8px; top: calc(50% - 6px); cursor: ew-resize; }
+    .resize-handle.se { right: -8px; bottom: -8px; cursor: nwse-resize; }
+    .resize-handle.s  { left: calc(50% - 6px); bottom: -8px; cursor: ns-resize; }
+    .resize-handle.sw { left: -8px; bottom: -8px; cursor: nesw-resize; }
+    .resize-handle.w  { left: -8px; top: calc(50% - 6px); cursor: ew-resize; }
+
+    .inspector-empty {
+      padding: 18px 8px;
+      color: #aab0b6;
+      text-align: center;
+    }
+
+    .field {
+      display: grid;
+      gap: 4px;
+      margin-bottom: 9px;
+    }
+
+    .field label { color: #bfc4c8; font-size: 12px; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .field-row.four { grid-template-columns: repeat(4, 1fr); }
+
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 9px 0;
+    }
+
+    .check-row label { display: inline-flex; align-items: center; gap: 5px; }
+
+    .statusbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 28px;
+      padding: 4px 10px;
+      color: #bac0c5;
+      background: #202327;
+      border-top: 1px solid #3b4045;
+      font-size: 12px;
+    }
+
+    .status-ok { color: #75e69b; }
+    .status-error { color: #ff9797; }
+
+    .preview-mode #editorToolbar,
+    .preview-mode .sidebar,
+    .preview-mode .statusbar {
+      display: none;
+    }
+
+    .preview-mode #editorApp { grid-template-rows: minmax(0, 1fr); }
+    .preview-mode .workbench { grid-template-columns: minmax(0, 1fr); }
+    .preview-mode .workspace { grid-column: 1; }
+    .preview-mode .canvas-center { padding: 0; align-items: center; }
+    .preview-mode .design-item.selected::after,
+    .preview-mode .resize-handle,
+    .preview-mode #designCanvas {
+      border-color: transparent;
+    }
+    .preview-mode #safeGuide { display: none !important; }
+    .preview-mode #designCanvas.show-grid { background-image: none; }
+
+    @media (max-width: 980px) {
+      .workbench { grid-template-columns: 184px minmax(0, 1fr) 242px; }
+      .toolbar { max-height: 92px; overflow: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div id="editorApp">
+    <header class="toolbar" id="editorToolbar">
+      <div class="toolbar-group">
+        <button type="button" id="fitButton" class="primary">适合窗口</button>
+        <button type="button" data-zoom="0.5">50%</button>
+        <button type="button" data-zoom="0.75">75%</button>
+        <button type="button" data-zoom="1">100%</button>
+        <label>缩放 <input type="range" id="zoomRange" min="20" max="125" step="1" value="60"></label>
+      </div>
+      <div class="toolbar-group">
+        <button type="button" id="undoButton">撤销</button>
+        <button type="button" id="redoButton">重做</button>
+        <button type="button" id="previewButton">干净预览</button>
+      </div>
+      <div class="toolbar-group">
+        <label><input type="checkbox" id="gridToggle" checked> 网格</label>
+        <label><input type="checkbox" id="safeToggle" checked> 672安全线</label>
+        <label><input type="checkbox" id="scanlineToggle" checked> 扫描线</label>
+        <label>吸附
+          <select id="snapSelect">
+            <option value="1">1 px</option>
+            <option value="2" selected>2 px</option>
+            <option value="10">10 px</option>
+            <option value="20">20 px</option>
+          </select>
+        </label>
+      </div>
+      <div class="toolbar-group">
+        <button type="button" id="importButton">导入JSON</button>
+        <button type="button" id="exportJsonButton">下载JSON</button>
+        <button type="button" id="exportSvgButton">下载SVG</button>
+        <button type="button" id="exportPngButton">下载PNG</button>
+        <button type="button" id="resetButton" class="danger">恢复初始</button>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+      </div>
+    </header>
+
+    <main class="workbench">
+      <aside class="sidebar sidebar-left">
+        <h2>添加与图层</h2>
+        <div class="button-grid">
+          <button type="button" id="addTextButton">添加文字</button>
+          <button type="button" id="addRectButton">添加边框</button>
+          <button type="button" id="addImageButton">添加图片/SVG</button>
+          <button type="button" id="duplicateButton">复制元素</button>
+          <button type="button" id="deleteButton" class="danger">删除元素</button>
+          <button type="button" id="deselectButton">取消选择</button>
+          <input type="file" id="imageFile" accept="image/*,.svg" hidden>
+        </div>
+        <h3>图层（由上到下）</h3>
+        <div id="layerList" class="layers" aria-label="图层列表"></div>
+      </aside>
+
+      <section class="workspace" id="workspace" aria-label="设计画布工作区">
+        <div class="canvas-center">
+          <div id="canvasScaler">
+            <div id="designCanvas" class="show-grid" aria-label="1280乘720设计画布">
+              <div id="itemLayer"></div>
+              <div id="safeGuide"><span>目标车机应用区下限：672 px</span></div>
+              <div id="scanlineOverlay"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="sidebar sidebar-right">
+        <h2>属性</h2>
+        <div id="inspector"></div>
+        <h3>全局显示</h3>
+        <div class="field-row">
+          <div class="field">
+            <label for="screenColor">屏幕底色</label>
+            <input type="color" id="screenColor" value="#000704">
+          </div>
+          <div class="field">
+            <label for="phosphorColor">荧光主色</label>
+            <input type="color" id="phosphorColor" value="#76ff96">
+          </div>
+        </div>
+        <div class="field">
+          <label for="scanlineOpacity">扫描线强度</label>
+          <input type="range" id="scanlineOpacity" min="0" max="0.18" step="0.01" value="0.06">
+        </div>
+        <p style="color:#aab0b6;font-size:12px;margin:8px 0 0;">双击文字可直接编辑。方向键移动1px，Shift+方向键移动10px；按住Alt拖动时暂时关闭吸附。</p>
+      </aside>
+    </main>
+
+    <footer class="statusbar">
+      <span id="statusText" class="status-ok">已自动暂存</span>
+      <span id="selectionText">未选择元素</span>
+      <span id="zoomText">缩放 60%</span>
+    </footer>
+  </div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const CANVAS_W = 1280;
+      const CANVAS_H = 720;
+      const STORAGE_KEY = 'rx400h-ui-layout-editor-v1';
+      const LEVEL_ALPHA = { 1: 1, 2: 0.88, 3: 0.72, 4: 0.5, 5: 0.31, 6: 0.1 };
+
+      const app = document.getElementById('editorApp');
+      const workspace = document.getElementById('workspace');
+      const canvas = document.getElementById('designCanvas');
+      const scaler = document.getElementById('canvasScaler');
+      const itemLayer = document.getElementById('itemLayer');
+      const layerList = document.getElementById('layerList');
+      const inspector = document.getElementById('inspector');
+      const statusText = document.getElementById('statusText');
+      const selectionText = document.getElementById('selectionText');
+      const zoomText = document.getElementById('zoomText');
+      const zoomRange = document.getElementById('zoomRange');
+      const importFile = document.getElementById('importFile');
+      const imageFile = document.getElementById('imageFile');
+
+      let zoom = 0.6;
+      let autoFit = true;
+      let selectedIds = new Set();
+      let primarySelectedId = null;
+      let interaction = null;
+      let history = [];
+      let historyIndex = -1;
+      let inputCommitTimer = null;
+      let idCounter = 1;
+      let lastStationaryClick = { id: null, at: 0 };
+
+      function makeItem(id, name, type, x, y, w, h, options = {}) {
+        return {
+          id, name, type, x, y, w, h,
+          parentId: options.parentId || null,
+          z: options.z ?? 1,
+          visible: options.visible ?? true,
+          locked: options.locked ?? false,
+          rotation: options.rotation ?? 0,
+          text: options.text ?? '',
+          svgKey: options.svgKey ?? null,
+          imageData: options.imageData ?? null,
+          bindingKey: options.bindingKey ?? '',
+          style: {
+            level: options.level ?? 3,
+            fontSize: options.fontSize ?? 20,
+            fontWeight: options.fontWeight ?? 500,
+            lineHeight: options.lineHeight ?? 1.15,
+            align: options.align ?? 'left',
+            valign: options.valign ?? 'center',
+            borderWidth: options.borderWidth ?? 2,
+            opacity: options.opacity ?? 1,
+            fillAlpha: options.fillAlpha ?? 0
+          }
+        };
+      }
+
+      function metricPair(items, prefix, parentId, x, y, label, value, bindingKey, valueSize = 34) {
+        items.push(makeItem(prefix + '-label', label + ' 标签', 'text', x, y, 150, 38, {
+          parentId, z: 20, level: 3, fontSize: 18, text: label, bindingKey: bindingKey + '.label'
+        }));
+        items.push(makeItem(prefix + '-value', label + ' 数值', 'text', x + 154, y - 5, 205, 50, {
+          parentId, z: 21, level: 1, fontSize: valueSize, fontWeight: 700,
+          align: 'right', text: value, bindingKey
+        }));
+      }
+
+      function makeInitialState() {
+        const items = [];
+        items.push(makeItem('header-divider', '顶部区域分隔线', 'rect', 20, 126, 1240, 2, {
+          z: 2, level: 4, borderWidth: 0, fillAlpha: 1
+        }));
+        items.push(makeItem('brand', '产品名称', 'text', 30, 22, 240, 46, {
+          z: 20, level: 1, fontSize: 32, fontWeight: 700, text: 'RX400h'
+        }));
+        items.push(makeItem('brand-sub', '产品副标题', 'text', 32, 66, 260, 28, {
+          z: 20, level: 3, fontSize: 17, text: 'VEHICLE MONITOR'
+        }));
+        items.push(makeItem('brand-version', '系统版本', 'text', 32, 94, 280, 24, {
+          z: 20, level: 4, fontSize: 14, text: 'SYSTEM 03.5 / CRT MFD'
+        }));
+
+        items.push(makeItem('button-device', '设备按钮', 'button', 350, 34, 166, 62, {
+          z: 20, level: 3, fontSize: 22, text: '设备'
+        }));
+        items.push(makeItem('button-start', '开始按钮', 'button', 536, 34, 166, 62, {
+          z: 20, level: 3, fontSize: 22, text: '开始'
+        }));
+        items.push(makeItem('button-end', '结束按钮', 'button', 722, 34, 166, 62, {
+          z: 20, level: 1, fontSize: 22, text: '结束'
+        }));
+        items.push(makeItem('status-block', '连接状态', 'text', 962, 20, 286, 98, {
+          z: 20, level: 2, fontSize: 17, align: 'right', valign: 'start',
+          text: 'OBDLink MX+ 99905\n蓝牙已连接 / BT LINK\n协议就绪 / CAN 500K\n数据记录中 / LIVE'
+        }));
+
+        const panels = [
+          ['battery-panel', '电池面板', 20],
+          ['vehicle-panel', '车辆面板', 440],
+          ['power-panel', '动力面板', 860]
+        ];
+        for (const [id, name, x] of panels) {
+          items.push(makeItem(id, name, 'group', x, 150, 400, 326, {
+            z: 4, level: 4, borderWidth: 2
+          }));
+        }
+        items.push(makeItem('battery-title', '电池标题', 'text', 72, 166, 296, 38, {
+          parentId: 'battery-panel', z: 18, level: 2, fontSize: 24, fontWeight: 700,
+          align: 'center', text: '电池 / BAT'
+        }));
+        items.push(makeItem('vehicle-title', '车辆标题', 'text', 492, 166, 296, 38, {
+          parentId: 'vehicle-panel', z: 18, level: 2, fontSize: 24, fontWeight: 700,
+          align: 'center', text: '车辆 / VEH'
+        }));
+        items.push(makeItem('power-title', '动力标题', 'text', 912, 166, 296, 38, {
+          parentId: 'power-panel', z: 18, level: 2, fontSize: 24, fontWeight: 700,
+          align: 'center', text: '动力 / PWR'
+        }));
+
+        metricPair(items, 'soc', 'battery-panel', 48, 220, 'SOC / 电量', '61.5 %', 'battery.soc');
+        metricPair(items, 'temp', 'battery-panel', 48, 308, 'TEMP / 平均', '29.8 °C', 'battery.tempAvg');
+        metricPair(items, 'minmax', 'battery-panel', 48, 396, 'MAX / MIN', '33.0 / 27.0°', 'battery.tempRange', 22);
+
+        metricPair(items, 'speed', 'vehicle-panel', 468, 220, 'SPD / 速度', '42 km/h', 'vehicle.speed');
+        metricPair(items, 'coolant', 'vehicle-panel', 468, 308, 'ECT / 冷却液', '86 °C', 'vehicle.coolant');
+        metricPair(items, 'obd12v', 'vehicle-panel', 468, 396, '12V OBD', '13.8 V', 'vehicle.obdVoltage');
+
+        metricPair(items, 'icepower', 'power-panel', 888, 220, 'ICE PWR', '18.7 kW', 'power.iceMechanical');
+        metricPair(items, 'rpm', 'power-panel', 888, 308, 'RPM', '1340 rpm', 'power.rpm');
+        metricPair(items, 'hvpower', 'power-panel', 888, 396, 'HV PWR', '−8.4 kW', 'power.hvBattery');
+        items.push(makeItem('idle-check', 'Idle Check', 'text', 1020, 445, 206, 24, {
+          parentId: 'power-panel', z: 22, level: 2, fontSize: 17, fontWeight: 700,
+          align: 'right', text: 'IDLE CHECK', bindingKey: 'power.idleCheck', visible: false
+        }));
+
+        items.push(makeItem('schematic-panel', '车辆示意区域', 'group', 20, 506, 1240, 148, {
+          z: 3, level: 4, borderWidth: 2
+        }));
+        items.push(makeItem('schematic-title', '车辆示意标题', 'text', 46, 488, 560, 34, {
+          parentId: 'schematic-panel', z: 19, level: 2, fontSize: 21, fontWeight: 700,
+          text: 'RX400h HYBRID SYSTEM / VEHICLE SCHEMATIC'
+        }));
+        items.push(makeItem('vehicle-side', 'RX400h侧面轮廓', 'svg', 54, 526, 700, 116, {
+          parentId: 'schematic-panel', z: 15, level: 4, svgKey: 'vehicle-side'
+        }));
+        items.push(makeItem('vehicle-top', '混动底盘图', 'svg', 820, 520, 350, 126, {
+          parentId: 'schematic-panel', z: 15, level: 4, svgKey: 'vehicle-top'
+        }));
+
+        return {
+          version: 1,
+          canvas: { width: CANVAS_W, height: CANVAS_H },
+          globals: {
+            background: '#000704',
+            phosphor: '#76ff96',
+            scanlineOpacity: 0.06,
+            showGrid: true,
+            showSafe: true,
+            showScanlines: true,
+            snap: 2
+          },
+          items
+        };
+      }
+
+      function deepCopy(value) { return JSON.parse(JSON.stringify(value)); }
+
+      function validState(value) {
+        if (!value || typeof value !== 'object' || !value.canvas || !value.globals || !Array.isArray(value.items)) return false;
+        if (value.canvas.width !== CANVAS_W || value.canvas.height !== CANVAS_H || value.items.length > 2000) return false;
+        const globals = value.globals;
+        const isHex = input => typeof input === 'string' && /^#[0-9a-f]{6}$/i.test(input);
+        const finite = input => typeof input === 'number' && Number.isFinite(input);
+        if (!isHex(globals.background) || !isHex(globals.phosphor) ||
+            !finite(globals.scanlineOpacity) || globals.scanlineOpacity < 0 || globals.scanlineOpacity > 0.5 ||
+            typeof globals.showGrid !== 'boolean' || typeof globals.showSafe !== 'boolean' ||
+            typeof globals.showScanlines !== 'boolean' || !finite(globals.snap) || globals.snap < 1) return false;
+
+        const allowedTypes = new Set(['group', 'text', 'rect', 'button', 'svg', 'image']);
+        const ids = new Set();
+        for (const item of value.items) {
+          if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !item.id || ids.has(item.id)) return false;
+          ids.add(item.id);
+          if (typeof item.name !== 'string' || !allowedTypes.has(item.type) ||
+              !['x', 'y', 'w', 'h', 'z', 'rotation'].every(key => finite(item[key])) || item.w <= 0 || item.h <= 0 ||
+              typeof item.visible !== 'boolean' || typeof item.locked !== 'boolean' ||
+              (item.parentId !== null && typeof item.parentId !== 'string') || !item.style || typeof item.style !== 'object') return false;
+          const style = item.style;
+          if (!['level', 'fontSize', 'fontWeight', 'lineHeight', 'borderWidth', 'opacity', 'fillAlpha'].every(key => finite(style[key])) ||
+              !['left', 'center', 'right'].includes(style.align) || !['start', 'center', 'end'].includes(style.valign)) return false;
+          if ((item.type === 'text' || item.type === 'button') && (typeof item.text !== 'string' || typeof item.bindingKey !== 'string')) return false;
+          if (item.type === 'svg' && !['vehicle-side', 'vehicle-top'].includes(item.svgKey)) return false;
+          if (item.type === 'image' && (typeof item.imageData !== 'string' || !item.imageData.startsWith('data:image/'))) return false;
+        }
+
+        const byId = new Map(value.items.map(item => [item.id, item]));
+        for (const item of value.items) {
+          let parentId = item.parentId;
+          const visited = new Set([item.id]);
+          while (parentId) {
+            if (!byId.has(parentId) || visited.has(parentId)) return false;
+            visited.add(parentId);
+            parentId = byId.get(parentId).parentId;
+          }
+        }
+        return true;
+      }
+
+      function loadSavedState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          return validState(parsed) ? parsed : null;
+        } catch (_) {
+          return null;
+        }
+      }
+
+      let state = loadSavedState() || makeInitialState();
+
+      function saveState() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          setStatus('已自动暂存', false);
+        } catch (_) {
+          setStatus('自动暂存失败，请下载JSON保存', true);
+        }
+      }
+
+      function snapshot() { return JSON.stringify(state); }
+
+      function commitHistory() {
+        const snap = snapshot();
+        if (history[historyIndex] === snap) return;
+        history = history.slice(0, historyIndex + 1);
+        history.push(snap);
+        if (history.length > 100) history.shift();
+        historyIndex = history.length - 1;
+        saveState();
+        updateUndoButtons();
+      }
+
+      function restoreHistory(index) {
+        if (index < 0 || index >= history.length) return;
+        historyIndex = index;
+        state = JSON.parse(history[historyIndex]);
+        selectedIds.clear();
+        primarySelectedId = null;
+        syncGlobalControls();
+        renderAll();
+        saveState();
+        updateUndoButtons();
+      }
+
+      function updateUndoButtons() {
+        document.getElementById('undoButton').disabled = historyIndex <= 0;
+        document.getElementById('redoButton').disabled = historyIndex >= history.length - 1;
+      }
+
+      function setStatus(message, isError) {
+        statusText.textContent = message;
+        statusText.className = isError ? 'status-error' : 'status-ok';
+      }
+
+      function itemById(id) { return state.items.find(item => item.id === id); }
+
+      function childrenOf(parentId) {
+        return state.items.filter(item => item.parentId === parentId);
+      }
+
+      function descendantsOf(parentId) {
+        const result = [];
+        const visit = id => {
+          for (const child of childrenOf(id)) {
+            result.push(child);
+            visit(child.id);
+          }
+        };
+        visit(parentId);
+        return result;
+      }
+
+      function selectedMovableItems() {
+        const selected = [...selectedIds].map(itemById).filter(Boolean);
+        const selectedSet = new Set(selected.map(item => item.id));
+        const roots = selected.filter(item => {
+          let parent = item.parentId;
+          while (parent) {
+            if (selectedSet.has(parent)) return false;
+            parent = itemById(parent)?.parentId || null;
+          }
+          return true;
+        });
+        const result = [];
+        const seen = new Set();
+        for (const root of roots) {
+          for (const item of [root, ...descendantsOf(root.id)]) {
+            if (!seen.has(item.id) && !item.locked) {
+              seen.add(item.id);
+              result.push(item);
+            }
+          }
+        }
+        return result;
+      }
+
+      function hexToRgb(hex) {
+        const normalized = hex.replace('#', '');
+        return {
+          r: parseInt(normalized.slice(0, 2), 16),
+          g: parseInt(normalized.slice(2, 4), 16),
+          b: parseInt(normalized.slice(4, 6), 16)
+        };
+      }
+
+      function levelColor(level, opacity = 1) {
+        const rgb = hexToRgb(state.globals.phosphor);
+        const alpha = (LEVEL_ALPHA[level] ?? 0.72) * opacity;
+        return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+      }
+
+      function colorWithAlpha(hex, alpha) {
+        const rgb = hexToRgb(hex);
+        return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+      }
+
+      function svgMarkup(key, color) {
+        if (key === 'vehicle-side') {
+          return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 150" aria-label="RX400h侧面轮廓">
+            <g fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke">
+              <path d="M38 111 L74 88 L132 79 L181 43 L288 26 L397 29 L468 51 L531 78 L615 88 L655 108 L646 128 L590 129 C585 107 568 96 547 96 C524 96 506 110 501 130 L206 130 C201 108 183 96 161 96 C138 96 120 110 115 130 L52 127 Z"/>
+              <path opacity=".55" d="M187 46 L283 35 L314 77 L142 77 Z M298 35 L390 38 L449 77 L326 77 Z M468 57 L520 78 L463 77 Z"/>
+              <path opacity=".4" d="M214 85 H496 M315 86 V125 M410 86 V125"/>
+              <circle cx="161" cy="128" r="27"/><circle cx="547" cy="128" r="27"/>
+              <circle opacity=".45" cx="161" cy="128" r="13"/><circle opacity=".45" cx="547" cy="128" r="13"/>
+            </g>
+          </svg>`;
+        }
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 150" aria-label="简化混动底盘图">
+          <g fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke">
+            <rect x="82" y="17" width="256" height="116" rx="45"/>
+            <path opacity=".45" d="M61 34 H95 M61 116 H95 M325 34 H359 M325 116 H359"/>
+            <rect x="112" y="52" width="64" height="38"/><rect x="214" y="52" width="76" height="38"/>
+            <rect x="181" y="103" width="101" height="26"/>
+            <path d="M176 71 H214 M252 90 V103 M290 71 H327 M144 52 V34 H327"/>
+          </g>
+          <g fill="${color}" font-family="monospace" font-size="14" text-anchor="middle">
+            <text x="144" y="76">ICE</text><text x="252" y="76">INV</text><text x="231" y="121">HV BAT</text>
+          </g>
+        </svg>`;
+      }
+
+      function applyItemStyle(element, item) {
+        const style = item.style;
+        const color = levelColor(style.level, style.opacity);
+        element.style.left = item.x + 'px';
+        element.style.top = item.y + 'px';
+        element.style.width = item.w + 'px';
+        element.style.height = item.h + 'px';
+        element.style.zIndex = item.z;
+        element.style.transform = `rotate(${item.rotation || 0}deg)`;
+        const imageOpacity = style.opacity * (LEVEL_ALPHA[style.level] ?? 1);
+        element.style.opacity = item.visible ? (item.type === 'image' ? String(imageOpacity) : '1') : '0';
+        element.style.pointerEvents = item.visible ? 'auto' : 'none';
+        element.style.color = color;
+        element.style.fontFamily = 'ui-monospace, "Cascadia Mono", "Courier New", monospace';
+        element.style.fontSize = style.fontSize + 'px';
+        element.style.fontWeight = style.fontWeight;
+        element.style.lineHeight = style.lineHeight;
+        element.style.textAlign = style.align;
+        element.style.justifyContent = style.align === 'center' ? 'center' : (style.align === 'right' ? 'flex-end' : 'flex-start');
+        element.style.alignItems = style.valign === 'start' ? 'flex-start' : (style.valign === 'end' ? 'flex-end' : 'center');
+        element.style.border = '0';
+        element.style.background = 'transparent';
+
+        if (item.type === 'group' || item.type === 'rect' || item.type === 'button') {
+          element.style.border = `${style.borderWidth}px solid ${color}`;
+          element.style.background = colorWithAlpha(
+            state.globals.phosphor,
+            style.fillAlpha * style.opacity * (LEVEL_ALPHA[style.level] ?? 0.72)
+          );
+        }
+      }
+
+      function makeHandle(direction, item) {
+        const handle = document.createElement('span');
+        handle.className = 'resize-handle ' + direction;
+        handle.dataset.direction = direction;
+        handle.setAttribute('aria-hidden', 'true');
+        handle.addEventListener('pointerdown', event => beginResize(event, item, direction));
+        return handle;
+      }
+
+      function renderItems() {
+        itemLayer.replaceChildren();
+        const sorted = [...state.items].sort((a, b) => a.z - b.z);
+        for (const item of sorted) {
+          const element = document.createElement('div');
+          element.className = `design-item item-${item.type}`;
+          element.dataset.id = item.id;
+          if (item.locked) element.classList.add('locked');
+          if (selectedIds.has(item.id)) element.classList.add('selected');
+          applyItemStyle(element, item);
+
+          if (item.type === 'text' || item.type === 'button') {
+            element.textContent = item.text;
+          } else if (item.type === 'svg') {
+            element.innerHTML = svgMarkup(item.svgKey, levelColor(item.style.level, item.style.opacity));
+          } else if (item.type === 'image') {
+            const image = document.createElement('img');
+            image.src = item.imageData;
+            image.alt = item.name;
+            image.draggable = false;
+            element.appendChild(image);
+          }
+
+          element.addEventListener('pointerdown', event => beginDrag(event, item));
+          if (primarySelectedId === item.id && selectedIds.size === 1 && !item.locked) {
+            for (const direction of ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']) {
+              element.appendChild(makeHandle(direction, item));
+            }
+          }
+          itemLayer.appendChild(element);
+        }
+      }
+
+      function renderLayers() {
+        layerList.replaceChildren();
+        const sorted = [...state.items].sort((a, b) => b.z - a.z || a.name.localeCompare(b.name));
+        for (const item of sorted) {
+          const row = document.createElement('div');
+          row.className = 'layer-row';
+          if (item.parentId) row.classList.add('child');
+          if (selectedIds.has(item.id)) row.classList.add('selected');
+
+          const visibility = document.createElement('button');
+          visibility.type = 'button';
+          visibility.className = 'layer-icon';
+          visibility.textContent = item.visible ? '●' : '○';
+          visibility.setAttribute('aria-label', item.visible ? '隐藏图层' : '显示图层');
+          visibility.addEventListener('click', event => {
+            event.stopPropagation();
+            item.visible = !item.visible;
+            commitHistory();
+            renderAll();
+          });
+
+          const lock = document.createElement('button');
+          lock.type = 'button';
+          lock.className = 'layer-icon';
+          lock.textContent = item.locked ? '◆' : '◇';
+          lock.setAttribute('aria-label', item.locked ? '解锁图层' : '锁定图层');
+          lock.addEventListener('click', event => {
+            event.stopPropagation();
+            item.locked = !item.locked;
+            commitHistory();
+            renderAll();
+          });
+
+          const name = document.createElement('div');
+          name.className = 'layer-name';
+          name.textContent = item.name;
+          name.addEventListener('click', event => selectItem(item.id, event.shiftKey));
+
+          row.append(visibility, lock, name);
+          layerList.appendChild(row);
+        }
+      }
+
+      function inspectorField(label, key, value, type = 'number', options = {}) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'field';
+        const caption = document.createElement('label');
+        caption.textContent = label;
+        const input = document.createElement(type === 'textarea' ? 'textarea' : 'input');
+        if (type !== 'textarea') input.type = type;
+        input.value = value;
+        input.dataset.key = key;
+        if (options.min != null) input.min = options.min;
+        if (options.max != null) input.max = options.max;
+        if (options.step != null) input.step = options.step;
+        input.addEventListener('input', onInspectorInput);
+        input.addEventListener('change', scheduleInspectorCommit);
+        wrapper.append(caption, input);
+        return wrapper;
+      }
+
+      function inspectorSelect(label, key, value, choices) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'field';
+        const caption = document.createElement('label');
+        caption.textContent = label;
+        const select = document.createElement('select');
+        select.dataset.key = key;
+        for (const [choiceValue, choiceLabel] of choices) {
+          const option = document.createElement('option');
+          option.value = choiceValue;
+          option.textContent = choiceLabel;
+          if (String(choiceValue) === String(value)) option.selected = true;
+          select.appendChild(option);
+        }
+        select.addEventListener('change', event => {
+          onInspectorInput(event);
+          commitHistory();
+        });
+        wrapper.append(caption, select);
+        return wrapper;
+      }
+
+      function renderInspector() {
+        inspector.replaceChildren();
+        const selected = [...selectedIds].map(itemById).filter(Boolean);
+        if (selected.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'inspector-empty';
+          empty.textContent = '在画布或图层列表选择元素';
+          inspector.appendChild(empty);
+          return;
+        }
+        if (selected.length > 1) {
+          const multi = document.createElement('div');
+          multi.className = 'inspector-empty';
+          multi.textContent = `已选择 ${selected.length} 个元素。可拖动、方向键移动、复制或删除。`;
+          inspector.appendChild(multi);
+          return;
+        }
+
+        const item = selected[0];
+        inspector.appendChild(inspectorField('图层名称', 'name', item.name, 'text'));
+        if (item.type === 'text' || item.type === 'button') {
+          inspector.appendChild(inspectorField('显示文字', 'text', item.text, 'textarea'));
+          inspector.appendChild(inspectorField('信号绑定标识（不会显示）', 'bindingKey', item.bindingKey, 'text'));
+        }
+
+        const positionRow = document.createElement('div');
+        positionRow.className = 'field-row four';
+        positionRow.append(
+          inspectorField('X', 'x', item.x, 'number', { step: 1 }),
+          inspectorField('Y', 'y', item.y, 'number', { step: 1 }),
+          inspectorField('W', 'w', item.w, 'number', { min: 2, step: 1 }),
+          inspectorField('H', 'h', item.h, 'number', { min: 2, step: 1 })
+        );
+        inspector.appendChild(positionRow);
+
+        const commonRow = document.createElement('div');
+        commonRow.className = 'field-row';
+        commonRow.append(
+          inspectorField('旋转角度', 'rotation', item.rotation, 'number', { step: 1 }),
+          inspectorField('层级 Z', 'z', item.z, 'number', { step: 1 })
+        );
+        inspector.appendChild(commonRow);
+
+        if (item.type === 'text' || item.type === 'button') {
+          const typeRow = document.createElement('div');
+          typeRow.className = 'field-row';
+          typeRow.append(
+            inspectorField('字号', 'style.fontSize', item.style.fontSize, 'number', { min: 8, max: 96 }),
+            inspectorSelect('字重', 'style.fontWeight', item.style.fontWeight, [
+              [400, '正常 400'], [500, '中等 500'], [700, '粗体 700']
+            ])
+          );
+          inspector.appendChild(typeRow);
+          inspector.appendChild(inspectorSelect('水平对齐', 'style.align', item.style.align, [
+            ['left', '左'], ['center', '中'], ['right', '右']
+          ]));
+          inspector.appendChild(inspectorField('行高', 'style.lineHeight', item.style.lineHeight, 'number', { min: 0.8, max: 2, step: 0.05 }));
+        }
+
+        inspector.appendChild(inspectorSelect('绿色亮度层级', 'style.level', item.style.level, [
+          [1, '1 主数值 100%'], [2, '2 活动状态 88%'], [3, '3 标签 72%'],
+          [4, '4 车辆轮廓 50%'], [5, '5 刻度 31%'], [6, '6 纹理 10%']
+        ]));
+        inspector.appendChild(inspectorField('透明度', 'style.opacity', item.style.opacity, 'number', { min: 0, max: 1, step: 0.05 }));
+        if (item.type === 'group' || item.type === 'rect' || item.type === 'button') {
+          inspector.appendChild(inspectorField('边框宽度', 'style.borderWidth', item.style.borderWidth, 'number', { min: 0, max: 8, step: 1 }));
+          inspector.appendChild(inspectorField('内部填充', 'style.fillAlpha', item.style.fillAlpha, 'number', { min: 0, max: 0.4, step: 0.01 }));
+        }
+
+        const checks = document.createElement('div');
+        checks.className = 'check-row';
+        for (const [key, label, checked] of [['visible', '显示', item.visible], ['locked', '锁定', item.locked]]) {
+          const checkLabel = document.createElement('label');
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.checked = checked;
+          checkbox.dataset.key = key;
+          checkbox.addEventListener('change', event => {
+            item[key] = event.target.checked;
+            commitHistory();
+            renderAll();
+          });
+          checkLabel.append(checkbox, document.createTextNode(label));
+          checks.appendChild(checkLabel);
+        }
+        inspector.appendChild(checks);
+
+        const orderButtons = document.createElement('div');
+        orderButtons.className = 'button-grid';
+        const front = document.createElement('button');
+        front.type = 'button';
+        front.textContent = '移到最前';
+        front.addEventListener('click', () => moveLayer(item, true));
+        const back = document.createElement('button');
+        back.type = 'button';
+        back.textContent = '移到最后';
+        back.addEventListener('click', () => moveLayer(item, false));
+        orderButtons.append(front, back);
+        inspector.appendChild(orderButtons);
+      }
+
+      function getNested(object, path) {
+        return path.split('.').reduce((value, key) => value[key], object);
+      }
+
+      function setNested(object, path, value) {
+        const keys = path.split('.');
+        const last = keys.pop();
+        const target = keys.reduce((current, key) => current[key], object);
+        target[last] = value;
+      }
+
+      function onInspectorInput(event) {
+        if (selectedIds.size !== 1) return;
+        const item = itemById(primarySelectedId);
+        if (!item) return;
+        const key = event.target.dataset.key;
+        const current = getNested(item, key);
+        let value = event.target.value;
+        if (typeof current === 'number') value = Number(value);
+        setNested(item, key, value);
+        constrainItem(item);
+        renderItems();
+        renderLayers();
+        updateSelectionStatus();
+        scheduleInspectorCommit();
+      }
+
+      function scheduleInspectorCommit() {
+        clearTimeout(inputCommitTimer);
+        inputCommitTimer = setTimeout(() => commitHistory(), 350);
+      }
+
+      function renderCanvasChrome() {
+        canvas.style.backgroundColor = state.globals.background;
+        canvas.classList.toggle('show-grid', state.globals.showGrid);
+        document.getElementById('safeGuide').style.display = state.globals.showSafe ? 'block' : 'none';
+        const scanlines = document.getElementById('scanlineOverlay');
+        scanlines.style.display = state.globals.showScanlines ? 'block' : 'none';
+        scanlines.style.background = `repeating-linear-gradient(to bottom, transparent 0, transparent 5px, ${colorWithAlpha(state.globals.phosphor, state.globals.scanlineOpacity)} 6px, transparent 7px)`;
+      }
+
+      function renderAll() {
+        renderCanvasChrome();
+        renderItems();
+        renderLayers();
+        renderInspector();
+        updateSelectionStatus();
+      }
+
+      function updateSelectionStatus() {
+        const selected = [...selectedIds].map(itemById).filter(Boolean);
+        if (!selected.length) {
+          selectionText.textContent = '未选择元素';
+        } else if (selected.length === 1) {
+          const item = selected[0];
+          selectionText.textContent = `${item.name}  X:${item.x} Y:${item.y} W:${item.w} H:${item.h}`;
+        } else {
+          selectionText.textContent = `已选择 ${selected.length} 个元素`;
+        }
+      }
+
+      function selectItem(id, additive = false) {
+        if (!additive) selectedIds.clear();
+        if (additive && selectedIds.has(id)) {
+          selectedIds.delete(id);
+          if (primarySelectedId === id) primarySelectedId = [...selectedIds].at(-1) || null;
+        } else {
+          selectedIds.add(id);
+          primarySelectedId = id;
+        }
+        renderAll();
+      }
+
+      function canvasPoint(event) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: (event.clientX - rect.left) * CANVAS_W / rect.width,
+          y: (event.clientY - rect.top) * CANVAS_H / rect.height
+        };
+      }
+
+      function snapValue(value, event) {
+        if (event.altKey) return Math.round(value);
+        const snap = Number(state.globals.snap) || 1;
+        return Math.round(value / snap) * snap;
+      }
+
+      function beginDrag(event, item) {
+        if (event.button !== 0 || event.target.classList.contains('resize-handle')) return;
+        if (event.target.isContentEditable) return;
+        const now = performance.now();
+        if ((item.type === 'text' || item.type === 'button') &&
+            lastStationaryClick.id === item.id && now - lastStationaryClick.at < 500) {
+          lastStationaryClick = { id: null, at: 0 };
+          event.preventDefault();
+          event.stopPropagation();
+          beginInlineTextEdit(event, item, event.currentTarget);
+          return;
+        }
+        if (!selectedIds.has(item.id)) selectItem(item.id, event.shiftKey);
+        if (item.locked) return;
+        event.preventDefault();
+        const start = canvasPoint(event);
+        const moving = selectedMovableItems();
+        interaction = {
+          type: 'drag', itemId: item.id, changed: false,
+          start,
+          items: moving.map(entry => ({ item: entry, x: entry.x, y: entry.y }))
+        };
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', endInteraction, { once: true });
+        window.addEventListener('pointercancel', endInteraction, { once: true });
+        window.addEventListener('blur', endInteraction, { once: true });
+      }
+
+      function beginResize(event, item, direction) {
+        if (item.locked) return;
+        event.stopPropagation();
+        event.preventDefault();
+        interaction = {
+          type: 'resize', direction, item, itemId: item.id, changed: false,
+          start: canvasPoint(event),
+          x: item.x, y: item.y, w: item.w, h: item.h
+        };
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', endInteraction, { once: true });
+        window.addEventListener('pointercancel', endInteraction, { once: true });
+        window.addEventListener('blur', endInteraction, { once: true });
+      }
+
+      function onPointerMove(event) {
+        if (!interaction) return;
+        const point = canvasPoint(event);
+        const dx = point.x - interaction.start.x;
+        const dy = point.y - interaction.start.y;
+        if (!interaction.changed && Math.hypot(dx, dy) < 1.5) return;
+        interaction.changed = true;
+
+        if (interaction.type === 'drag') {
+          for (const entry of interaction.items) {
+            entry.item.x = snapValue(entry.x + dx, event);
+            entry.item.y = snapValue(entry.y + dy, event);
+            constrainItem(entry.item);
+          }
+        } else {
+          const data = interaction;
+          let x = data.x;
+          let y = data.y;
+          let w = data.w;
+          let h = data.h;
+          if (data.direction.includes('e')) w = data.w + dx;
+          if (data.direction.includes('s')) h = data.h + dy;
+          if (data.direction.includes('w')) { x = data.x + dx; w = data.w - dx; }
+          if (data.direction.includes('n')) { y = data.y + dy; h = data.h - dy; }
+          if (w < 8) { if (data.direction.includes('w')) x -= 8 - w; w = 8; }
+          if (h < 8) { if (data.direction.includes('n')) y -= 8 - h; h = 8; }
+          data.item.x = snapValue(x, event);
+          data.item.y = snapValue(y, event);
+          data.item.w = Math.max(8, snapValue(w, event));
+          data.item.h = Math.max(8, snapValue(h, event));
+          constrainItem(data.item);
+        }
+        renderItems();
+        renderInspector();
+        updateSelectionStatus();
+      }
+
+      function endInteraction() {
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', endInteraction);
+        window.removeEventListener('pointercancel', endInteraction);
+        window.removeEventListener('blur', endInteraction);
+        const finished = interaction;
+        interaction = null;
+        if (!finished) return;
+        if (!finished.changed) {
+          if (finished.type === 'drag') lastStationaryClick = { id: finished.itemId, at: performance.now() };
+          return;
+        }
+        lastStationaryClick = { id: null, at: 0 };
+        commitHistory();
+        renderAll();
+      }
+
+      function constrainItem(item) {
+        item.w = Math.max(2, Math.round(item.w));
+        item.h = Math.max(2, Math.round(item.h));
+        item.x = Math.round(Math.max(-item.w + 2, Math.min(CANVAS_W - 2, item.x)));
+        item.y = Math.round(Math.max(-item.h + 2, Math.min(CANVAS_H - 2, item.y)));
+      }
+
+      function beginInlineTextEdit(event, item, element) {
+        if ((item.type !== 'text' && item.type !== 'button') || item.locked) return;
+        event.stopPropagation();
+        element.contentEditable = 'true';
+        element.spellcheck = false;
+        element.focus();
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        const finish = () => {
+          item.text = element.innerText.replace(/\r/g, '').replace(/\u00a0/g, ' ');
+          element.contentEditable = 'false';
+          commitHistory();
+          renderAll();
+        };
+        element.addEventListener('blur', finish, { once: true });
+      }
+
+      function moveLayer(item, toFront) {
+        const values = state.items.map(entry => entry.z);
+        item.z = toFront ? Math.max(...values) + 1 : Math.min(...values) - 1;
+        commitHistory();
+        renderAll();
+      }
+
+      function nextId(prefix) {
+        let id;
+        do { id = `${prefix}-${Date.now()}-${idCounter++}`; } while (itemById(id));
+        return id;
+      }
+
+      function nextZ() {
+        return state.items.length ? Math.max(...state.items.map(item => item.z)) + 1 : 1;
+      }
+
+      function addText() {
+        const id = nextId('text');
+        const item = makeItem(id, '新文字', 'text', 500, 330, 260, 50, {
+          z: nextZ(),
+          level: 2, fontSize: 28, text: '双击编辑文字'
+        });
+        state.items.push(item);
+        selectedIds = new Set([id]);
+        primarySelectedId = id;
+        commitHistory();
+        renderAll();
+      }
+
+      function addRect() {
+        const id = nextId('rect');
+        const item = makeItem(id, '新边框', 'rect', 440, 260, 400, 220, {
+          z: nextZ(),
+          level: 4, borderWidth: 2
+        });
+        state.items.push(item);
+        selectedIds = new Set([id]);
+        primarySelectedId = id;
+        commitHistory();
+        renderAll();
+      }
+
+      function duplicateSelected() {
+        if (!selectedIds.size) return;
+        const selected = [...selectedIds].map(itemById).filter(Boolean);
+        const selectedSet = new Set(selected.map(item => item.id));
+        const roots = selected.filter(item => {
+          let parentId = item.parentId;
+          while (parentId) {
+            if (selectedSet.has(parentId)) return false;
+            parentId = itemById(parentId)?.parentId || null;
+          }
+          return true;
+        });
+        const selectedWithChildren = [];
+        const seen = new Set();
+        for (const root of roots) {
+          for (const item of [root, ...descendantsOf(root.id)]) {
+            if (!seen.has(item.id)) {
+              seen.add(item.id);
+              selectedWithChildren.push(item);
+            }
+          }
+        }
+        const idMap = new Map();
+        for (const item of selectedWithChildren) idMap.set(item.id, nextId(item.type));
+        const copies = selectedWithChildren.map(item => {
+          const copy = deepCopy(item);
+          copy.id = idMap.get(item.id);
+          copy.name += ' 副本';
+          copy.x += 20;
+          copy.y += 20;
+          copy.z += 1;
+          if (copy.parentId && idMap.has(copy.parentId)) copy.parentId = idMap.get(copy.parentId);
+          return copy;
+        });
+        state.items.push(...copies);
+        const copiedRoots = roots.map(item => idMap.get(item.id));
+        selectedIds = new Set(copiedRoots);
+        primarySelectedId = copiedRoots.at(-1) || null;
+        commitHistory();
+        renderAll();
+      }
+
+      function deleteSelected() {
+        if (!selectedIds.size) return;
+        const removeIds = new Set(selectedIds);
+        for (const id of selectedIds) {
+          for (const child of descendantsOf(id)) removeIds.add(child.id);
+        }
+        state.items = state.items.filter(item => !removeIds.has(item.id));
+        selectedIds.clear();
+        primarySelectedId = null;
+        commitHistory();
+        renderAll();
+      }
+
+      function handleImageFile(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const id = nextId('image');
+          state.items.push(makeItem(id, file.name, 'image', 390, 230, 500, 280, {
+            z: nextZ(),
+            imageData: reader.result, level: 1
+          }));
+          selectedIds = new Set([id]);
+          primarySelectedId = id;
+          commitHistory();
+          renderAll();
+          imageFile.value = '';
+        };
+        reader.onerror = () => setStatus('读取图片失败', true);
+        reader.readAsDataURL(file);
+      }
+
+      function nudgeSelection(dx, dy) {
+        for (const item of selectedMovableItems()) {
+          item.x += dx;
+          item.y += dy;
+          constrainItem(item);
+        }
+        commitHistory();
+        renderAll();
+      }
+
+      function setZoom(value) {
+        zoom = Math.max(0.2, Math.min(1.25, value));
+        canvas.style.transform = `scale(${zoom})`;
+        scaler.style.width = (CANVAS_W * zoom) + 'px';
+        scaler.style.height = (CANVAS_H * zoom) + 'px';
+        zoomRange.value = Math.round(zoom * 100);
+        zoomText.textContent = `缩放 ${Math.round(zoom * 100)}%`;
+      }
+
+      function fitCanvas() {
+        const rect = workspace.getBoundingClientRect();
+        const padding = document.body.classList.contains('preview-mode') ? 6 : 52;
+        const availableW = Math.max(200, rect.width - padding);
+        const availableH = Math.max(160, rect.height - padding);
+        autoFit = true;
+        setZoom(Math.min(availableW / CANVAS_W, availableH / CANVAS_H, 1));
+      }
+
+      function syncGlobalControls() {
+        document.getElementById('gridToggle').checked = state.globals.showGrid;
+        document.getElementById('safeToggle').checked = state.globals.showSafe;
+        document.getElementById('scanlineToggle').checked = state.globals.showScanlines;
+        document.getElementById('snapSelect').value = state.globals.snap;
+        document.getElementById('screenColor').value = state.globals.background;
+        document.getElementById('phosphorColor').value = state.globals.phosphor;
+        document.getElementById('scanlineOpacity').value = state.globals.scanlineOpacity;
+      }
+
+      function downloadBlob(blob, name) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = name;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      function exportJson() {
+        downloadBlob(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }), 'RX400h-UI-layout-v035.json');
+        setStatus('布局JSON已下载', false);
+      }
+
+      function importJson(file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const previousState = state;
+          try {
+            const parsed = JSON.parse(reader.result);
+            if (!validState(parsed)) throw new Error('文件结构不完整或不安全，未替换当前布局');
+            if (!confirm('导入会替换当前布局。继续吗？')) return;
+            state = deepCopy(parsed);
+            selectedIds.clear();
+            primarySelectedId = null;
+            syncGlobalControls();
+            renderAll();
+            fitCanvas();
+            commitHistory();
+            setStatus('布局JSON导入成功', false);
+          } catch (error) {
+            state = previousState;
+            selectedIds.clear();
+            primarySelectedId = null;
+            syncGlobalControls();
+            renderAll();
+            setStatus('导入失败：' + error.message, true);
+          } finally {
+            importFile.value = '';
+          }
+        };
+        reader.readAsText(file, 'utf-8');
+      }
+
+      function escapeXml(value) {
+        return String(value).replace(/[&<>"']/g, char => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;'
+        })[char]);
+      }
+
+      function svgText(item, color) {
+        const lines = item.text.split('\n');
+        const anchor = item.style.align === 'center' ? 'middle' : (item.style.align === 'right' ? 'end' : 'start');
+        const x = item.style.align === 'center' ? item.x + item.w / 2 : (item.style.align === 'right' ? item.x + item.w : item.x);
+        const linePx = item.style.fontSize * item.style.lineHeight;
+        const blockHeight = linePx * lines.length;
+        let startY = item.y + item.style.fontSize;
+        if (item.style.valign === 'center') startY = item.y + (item.h - blockHeight) / 2 + item.style.fontSize;
+        if (item.style.valign === 'end') startY = item.y + item.h - blockHeight + item.style.fontSize;
+        const tspans = lines.map((line, index) => `<tspan x="${x}" y="${startY + index * linePx}">${escapeXml(line)}</tspan>`).join('');
+        const alpha = (LEVEL_ALPHA[item.style.level] ?? 0.72) * item.style.opacity;
+        return `<text fill="${color}" font-family="monospace" font-size="${item.style.fontSize}" font-weight="${item.style.fontWeight}" text-anchor="${anchor}" opacity="${alpha}" transform="rotate(${item.rotation || 0} ${item.x + item.w / 2} ${item.y + item.h / 2})">${tspans}</text>`;
+      }
+
+      function exportSvgString() {
+        const visible = state.items.filter(item => item.visible).sort((a, b) => a.z - b.z);
+        const parts = [`<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">`, `<rect width="1280" height="720" fill="${state.globals.background}"/>`];
+        if (state.globals.showScanlines && state.globals.scanlineOpacity > 0) {
+          parts.push(`<defs><pattern id="scan" width="1" height="7" patternUnits="userSpaceOnUse"><rect y="6" width="1" height="1" fill="${state.globals.phosphor}" opacity="${state.globals.scanlineOpacity}"/></pattern></defs>`);
+        }
+        for (const item of visible) {
+          const color = levelColor(item.style.level, 1).replace('rgba', 'rgb').replace(/, [^)]+\)$/, ')');
+          const alpha = (LEVEL_ALPHA[item.style.level] ?? .72) * item.style.opacity;
+          const rotate = `rotate(${item.rotation || 0} ${item.x + item.w / 2} ${item.y + item.h / 2})`;
+          if (item.type === 'text') {
+            parts.push(svgText(item, color));
+          } else if (item.type === 'button') {
+            parts.push(`<g transform="${rotate}" opacity="${alpha}"><rect x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" fill="${state.globals.phosphor}" fill-opacity="${item.style.fillAlpha}" stroke="${color}" stroke-width="${item.style.borderWidth}"/><text x="${item.x + item.w / 2}" y="${item.y + item.h / 2 + item.style.fontSize * .35}" fill="${color}" font-family="monospace" font-size="${item.style.fontSize}" font-weight="${item.style.fontWeight}" text-anchor="middle">${escapeXml(item.text)}</text></g>`);
+          } else if (item.type === 'group' || item.type === 'rect') {
+            parts.push(`<rect x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" fill="${state.globals.phosphor}" fill-opacity="${item.style.fillAlpha}" stroke="${color}" stroke-width="${item.style.borderWidth}" opacity="${alpha}" transform="${rotate}"/>`);
+          } else if (item.type === 'svg') {
+            const markup = svgMarkup(item.svgKey, color).replace('<svg ', `<svg x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" opacity="${alpha}" `);
+            parts.push(`<g transform="${rotate}">${markup}</g>`);
+          } else if (item.type === 'image') {
+            parts.push(`<image href="${item.imageData}" x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" preserveAspectRatio="xMidYMid meet" opacity="${alpha}" transform="${rotate}"/>`);
+          }
+        }
+        if (state.globals.showScanlines && state.globals.scanlineOpacity > 0) parts.push('<rect width="1280" height="720" fill="url(#scan)"/>');
+        parts.push('</svg>');
+        return parts.join('');
+      }
+
+      function exportSvg() {
+        downloadBlob(new Blob([exportSvgString()], { type: 'image/svg+xml' }), 'RX400h-UI-layout-v035.svg');
+        setStatus('SVG已下载，可继续在Figma/Inkscape中编辑', false);
+      }
+
+      function drawMultilineText(ctx, item, color) {
+        ctx.save();
+        ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
+        ctx.rotate((item.rotation || 0) * Math.PI / 180);
+        ctx.translate(-(item.x + item.w / 2), -(item.y + item.h / 2));
+        ctx.globalAlpha = item.style.opacity * (LEVEL_ALPHA[item.style.level] ?? .72);
+        ctx.fillStyle = color;
+        ctx.font = `${item.style.fontWeight} ${item.style.fontSize}px monospace`;
+        ctx.textAlign = item.style.align;
+        ctx.textBaseline = 'alphabetic';
+        const x = item.style.align === 'center' ? item.x + item.w / 2 : (item.style.align === 'right' ? item.x + item.w : item.x);
+        const lines = item.text.split('\n');
+        const linePx = item.style.fontSize * item.style.lineHeight;
+        const blockHeight = linePx * lines.length;
+        let y = item.y + item.style.fontSize;
+        if (item.style.valign === 'center') y = item.y + (item.h - blockHeight) / 2 + item.style.fontSize;
+        if (item.style.valign === 'end') y = item.y + item.h - blockHeight + item.style.fontSize;
+        for (const line of lines) { ctx.fillText(line, x, y); y += linePx; }
+        ctx.restore();
+      }
+
+      function loadImage(src) {
+        return new Promise((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = reject;
+          image.src = src;
+        });
+      }
+
+      async function exportPng() {
+        try {
+          const output = document.createElement('canvas');
+          output.width = CANVAS_W;
+          output.height = CANVAS_H;
+          const ctx = output.getContext('2d');
+          ctx.fillStyle = state.globals.background;
+          ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+          const visible = state.items.filter(item => item.visible).sort((a, b) => a.z - b.z);
+          const rgb = hexToRgb(state.globals.phosphor);
+
+          for (const item of visible) {
+            const color = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+            if (item.type === 'text') {
+              drawMultilineText(ctx, item, color);
+            } else if (item.type === 'group' || item.type === 'rect' || item.type === 'button') {
+              ctx.save();
+              ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
+              ctx.rotate((item.rotation || 0) * Math.PI / 180);
+              ctx.translate(-(item.x + item.w / 2), -(item.y + item.h / 2));
+              ctx.globalAlpha = item.style.opacity * (LEVEL_ALPHA[item.style.level] ?? .72);
+              if (item.style.fillAlpha > 0) {
+                ctx.fillStyle = color;
+                ctx.globalAlpha *= item.style.fillAlpha;
+                ctx.fillRect(item.x, item.y, item.w, item.h);
+                ctx.globalAlpha = item.style.opacity * (LEVEL_ALPHA[item.style.level] ?? .72);
+              }
+              if (item.style.borderWidth > 0) {
+                ctx.strokeStyle = color;
+                ctx.lineWidth = item.style.borderWidth;
+                ctx.strokeRect(item.x, item.y, item.w, item.h);
+              }
+              ctx.restore();
+              if (item.type === 'button') drawMultilineText(ctx, { ...item, style: { ...item.style, align: 'center', valign: 'center' } }, color);
+            } else {
+              const source = item.type === 'svg'
+                ? 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgMarkup(item.svgKey, color))
+                : item.imageData;
+              const image = await loadImage(source);
+              ctx.save();
+              ctx.globalAlpha = item.style.opacity * (LEVEL_ALPHA[item.style.level] ?? 1);
+              ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
+              ctx.rotate((item.rotation || 0) * Math.PI / 180);
+              ctx.drawImage(image, -item.w / 2, -item.h / 2, item.w, item.h);
+              ctx.restore();
+            }
+          }
+
+          if (state.globals.showScanlines && state.globals.scanlineOpacity > 0) {
+            ctx.fillStyle = colorWithAlpha(state.globals.phosphor, state.globals.scanlineOpacity);
+            for (let y = 6; y < CANVAS_H; y += 7) ctx.fillRect(0, y, CANVAS_W, 1);
+          }
+          output.toBlob(blob => {
+            if (!blob) throw new Error('PNG生成失败');
+            downloadBlob(blob, 'RX400h-UI-layout-v035-1280x720.png');
+            setStatus('1280×720 PNG已下载', false);
+          }, 'image/png');
+        } catch (error) {
+          setStatus('PNG导出失败：' + error.message, true);
+        }
+      }
+
+      function togglePreview() {
+        const enabled = document.body.classList.toggle('preview-mode');
+        document.getElementById('previewButton').textContent = enabled ? '退出预览' : '干净预览';
+        selectedIds.clear();
+        primarySelectedId = null;
+        renderAll();
+        requestAnimationFrame(fitCanvas);
+      }
+
+      document.getElementById('fitButton').addEventListener('click', fitCanvas);
+      document.querySelectorAll('[data-zoom]').forEach(button => button.addEventListener('click', () => {
+        autoFit = false;
+        setZoom(Number(button.dataset.zoom));
+      }));
+      zoomRange.addEventListener('input', () => { autoFit = false; setZoom(Number(zoomRange.value) / 100); });
+      document.getElementById('undoButton').addEventListener('click', () => restoreHistory(historyIndex - 1));
+      document.getElementById('redoButton').addEventListener('click', () => restoreHistory(historyIndex + 1));
+      document.getElementById('previewButton').addEventListener('click', togglePreview);
+
+      document.getElementById('gridToggle').addEventListener('change', event => {
+        state.globals.showGrid = event.target.checked; commitHistory(); renderCanvasChrome();
+      });
+      document.getElementById('safeToggle').addEventListener('change', event => {
+        state.globals.showSafe = event.target.checked; commitHistory(); renderCanvasChrome();
+      });
+      document.getElementById('scanlineToggle').addEventListener('change', event => {
+        state.globals.showScanlines = event.target.checked; commitHistory(); renderCanvasChrome();
+      });
+      document.getElementById('snapSelect').addEventListener('change', event => {
+        state.globals.snap = Number(event.target.value); commitHistory();
+      });
+      document.getElementById('screenColor').addEventListener('input', event => {
+        state.globals.background = event.target.value; renderCanvasChrome(); scheduleInspectorCommit();
+      });
+      document.getElementById('phosphorColor').addEventListener('input', event => {
+        state.globals.phosphor = event.target.value; renderAll(); scheduleInspectorCommit();
+      });
+      document.getElementById('scanlineOpacity').addEventListener('input', event => {
+        state.globals.scanlineOpacity = Number(event.target.value); renderCanvasChrome(); scheduleInspectorCommit();
+      });
+
+      document.getElementById('addTextButton').addEventListener('click', addText);
+      document.getElementById('addRectButton').addEventListener('click', addRect);
+      document.getElementById('addImageButton').addEventListener('click', () => imageFile.click());
+      imageFile.addEventListener('change', () => handleImageFile(imageFile.files[0]));
+      document.getElementById('duplicateButton').addEventListener('click', duplicateSelected);
+      document.getElementById('deleteButton').addEventListener('click', deleteSelected);
+      document.getElementById('deselectButton').addEventListener('click', () => {
+        selectedIds.clear(); primarySelectedId = null; renderAll();
+      });
+
+      document.getElementById('importButton').addEventListener('click', () => importFile.click());
+      importFile.addEventListener('change', () => { if (importFile.files[0]) importJson(importFile.files[0]); });
+      document.getElementById('exportJsonButton').addEventListener('click', exportJson);
+      document.getElementById('exportSvgButton').addEventListener('click', exportSvg);
+      document.getElementById('exportPngButton').addEventListener('click', exportPng);
+      document.getElementById('resetButton').addEventListener('click', () => {
+        if (!confirm('确定恢复初始布局吗？当前布局仍可先下载JSON备份。')) return;
+        state = makeInitialState();
+        selectedIds.clear();
+        primarySelectedId = null;
+        syncGlobalControls();
+        commitHistory();
+        renderAll();
+        fitCanvas();
+      });
+
+      canvas.addEventListener('pointerdown', event => {
+        if (event.target === canvas || event.target === itemLayer) {
+          selectedIds.clear(); primarySelectedId = null; renderAll();
+        }
+      });
+
+      window.addEventListener('keydown', event => {
+        if (event.isComposing || event.target.matches('input, textarea, select, [contenteditable="true"]')) return;
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+          event.preventDefault();
+          restoreHistory(event.shiftKey ? historyIndex + 1 : historyIndex - 1);
+          return;
+        }
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
+          event.preventDefault(); restoreHistory(historyIndex + 1); return;
+        }
+        if (event.key === 'Escape' && document.body.classList.contains('preview-mode')) {
+          togglePreview(); return;
+        }
+        if ((event.key === 'Delete' || event.key === 'Backspace') && selectedIds.size) {
+          event.preventDefault(); deleteSelected(); return;
+        }
+        const step = event.shiftKey ? 10 : 1;
+        const vectors = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+        if (vectors[event.key] && selectedIds.size) {
+          event.preventDefault(); nudgeSelection(...vectors[event.key]);
+        }
+      });
+
+      window.addEventListener('resize', () => { if (autoFit) fitCanvas(); });
+
+      syncGlobalControls();
+      history = [snapshot()];
+      historyIndex = 0;
+      renderAll();
+      updateUndoButtons();
+      requestAnimationFrame(fitCanvas);
+    })();
+  </script>
+</body>
+</html>

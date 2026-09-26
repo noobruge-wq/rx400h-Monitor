@@ -10,7 +10,7 @@ class SignalStoreTest {
     fun update_incrementsVersionAndMarksValid() {
         var now = 0L
         val store = SignalStore(clock = { now })
-        val result = CommandResult("TEST", emptyList(), "", 0L, TransactionStatus.OK, true)
+        val result = CommandResult("TEST", emptyList(), TransactionStatus.OK, true)
         store.update(store.baseline.rpm, 1000.0, "TEST", result)
         assertEquals(1L, store.baseline.rpm.version)
         assertEquals(SignalStatus.VALID, store.baseline.rpm.status)
@@ -21,7 +21,7 @@ class SignalStoreTest {
     fun refreshStaleStates_marksStaleAfterThreshold() {
         var now = 0L
         val store = SignalStore(clock = { now })
-        val result = CommandResult("TEST", emptyList(), "", 0L, TransactionStatus.OK, true)
+        val result = CommandResult("TEST", emptyList(), TransactionStatus.OK, true)
         store.update(store.baseline.rpm, 1000.0, "TEST", result)
         now = 6000L
         store.refreshStaleStates(now)
@@ -44,9 +44,40 @@ class SignalStoreTest {
     fun markDecodeFailure_setsDecodeErrorWithoutValue() {
         var now = 0L
         val store = SignalStore(clock = { now })
-        val result = CommandResult("TEST", emptyList(), "", 0L, TransactionStatus.UNKNOWN, true)
+        val result = CommandResult("TEST", emptyList(), TransactionStatus.UNKNOWN, true)
         store.markDecodeFailure(listOf(store.baseline.rpm), "TEST", result)
         assertEquals(SignalStatus.DECODE_ERROR, store.baseline.rpm.status)
         assertNull(store.baseline.rpm.value)
+    }
+
+    @Test
+    fun nullOutcomePublishesAQualityChangeEvenWithoutAValue() {
+        val store = SignalStore(clock = { 100L })
+        val noData = CommandResult("TEST", emptyList(), TransactionStatus.NO_DATA, true)
+        store.update(store.baseline.coolantC, null, "TEST", noData)
+        assertEquals(1L, store.baseline.coolantC.version)
+        assertEquals(SignalStatus.NO_DATA, store.baseline.coolantC.status)
+
+        store.update(store.baseline.coolantC, null, "TEST", noData)
+        assertEquals(1L, store.baseline.coolantC.version)
+    }
+
+    @Test
+    fun clearRemovesAllRunStateAndVersions() {
+        val store = SignalStore(clock = { 100L })
+        val ok = CommandResult("TEST", emptyList(), TransactionStatus.OK, true)
+        store.update(store.baseline.rpm, 1000.0, "TEST", ok)
+        store.setDerived(store.hybrid.idleCheckActive, true, "IDLE_CHECK")
+
+        store.clear()
+
+        assertNull(store.baseline.rpm.value)
+        assertNull(store.baseline.rpm.updatedAtElapsedMs)
+        assertNull(store.baseline.rpm.source)
+        assertEquals(SignalStatus.IDLE, store.baseline.rpm.status)
+        assertEquals(0L, store.baseline.rpm.version)
+        assertNull(store.hybrid.idleCheckActive.value)
+        assertEquals(SignalStatus.IDLE, store.hybrid.idleCheckActive.status)
+        assertEquals(0L, store.hybrid.idleCheckActive.version)
     }
 }

@@ -1,40 +1,20 @@
 package com.guanyu.rx400hprobe
 
-/**
- * V0.2.0 fixed request table.
- *
- * Describes the whitelist with target periods and priorities so V0.3.0 can
- * implement deadline/priority scheduling. V0.2.0 deliberately keeps the
- * V0.1.10 polling periods unchanged.
- */
-enum class RequestPriority { FAST, MEDIUM, SLOW, ADAPTER }
-
+/** D064 whitelist. Four core blocks target ~3Hz; slow periods are unchanged. */
 data class ScheduledRequest(
-    val id: String,
-    val header: String?,
-    val command: String,
-    val targetPeriodMs: Long,
-    val priority: RequestPriority,
-    val timeoutMs: Long = 5000L,
-    val minimumGapMs: Long = 120L,
-    val quietWindowMs: Long = 80L,
-    val preDrainMs: Long = 80L
+    val id: String, val header: String?, val command: String,
+    val targetPeriodMs: Long, val phaseMs: Long = 0L, val timeoutMs: Long = 5000L
 )
-
 object RequestTable {
-    const val CORE_CYCLE_MS = 800L
-
-    val requests: List<ScheduledRequest> = listOf(
-        ScheduledRequest("std_core", "7E0", "01040C0D0E10 2", 800L, RequestPriority.FAST),
-        ScheduledRequest("cd_f3", "7E0", "21CDF3 3", 1000L, RequestPriority.FAST),
-        ScheduledRequest("coolant", "7E0", "01050607 1", 3000L, RequestPriority.SLOW),
-        ScheduledRequest("c3", "7E2", "21C3 6", 800L, RequestPriority.FAST, timeoutMs = 6000L),
-        ScheduledRequest("c4", "7E2", "21C4 5", 1500L, RequestPriority.MEDIUM, timeoutMs = 6000L),
-        ScheduledRequest("cf", "7E2", "21CF 4", 5000L, RequestPriority.SLOW, timeoutMs = 6000L),
-        ScheduledRequest("atrv", null, "ATRV", 3000L, RequestPriority.ADAPTER, timeoutMs = 4000L)
+    // Configured target ~2.994Hz; missed releases are discarded, not caught up.
+    const val CORE_PERIOD_MS = 334L
+    val requests = listOf(
+        ScheduledRequest("std_core", "7E0", "01040C0D0E10 2", CORE_PERIOD_MS),
+        ScheduledRequest("cd_f3", "7E0", "21CDF3 3", CORE_PERIOD_MS),
+        ScheduledRequest("coolant", "7E0", "01050607 1", 3000L, 1500L),
+        ScheduledRequest("c3", "7E2", "21C3 6", CORE_PERIOD_MS, timeoutMs = 6000L),
+        ScheduledRequest("c4", "7E2", "21C4 5", CORE_PERIOD_MS, timeoutMs = 6000L),
+        ScheduledRequest("cf", "7E2", "21CF 4", 5000L, 2500L, 6000L),
+        ScheduledRequest("atrv", null, "ATRV", 3000L, 1500L, 4000L)
     )
-
-    fun period(id: String): Long = requests.first { it.id == id }.targetPeriodMs
-
-    fun spec(id: String): ScheduledRequest = requests.first { it.id == id }
 }
